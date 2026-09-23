@@ -111,6 +111,13 @@ def main(argv=None):
                                       "tokens": llm.usage["input"] + llm.usage["output"]})
     h.on_turn = on_turn
 
+    def on_decision(kind, d, detail):
+        # loop-guard (and future in-agent) decisions appear in the manager's shadow view
+        store.decision(d.id, aid, d.question, d.probs, detail.get("action", d.best), d.backend,
+                       query="; ".join(detail.get("signals", [])), gate="jev", reason=f"{kind} guard")
+        store.event(aid, "loop-guard", f"{detail.get('action')}: {'; '.join(detail.get('signals', []))[:300]}")
+    h.on_decision = on_decision
+
     tdir = root / ".rameness" / "transcripts"
     tdir.mkdir(parents=True, exist_ok=True)
     tfile = tdir / f"{aid}.json"

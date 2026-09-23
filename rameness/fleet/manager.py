@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import threading
 import time
@@ -58,6 +59,40 @@ FLEET_DEFAULTS = {
     "gate": {"significance": 0.55, "margin_floor": 0.06, "uncertain_significance": 0.3},
     # per-question override: "auto" (gate decides) | "jev" (never ask) | "director" (always ask); "*" = default
     "decision_policy": {"*": "auto"},
+    # autonomy: restrictive (work + model-originated decisions go to the director via the manager) |
+    #           balanced (comfort gate) | autopilot (JEV decides everything, bounded) |
+    #           godmode (autopilot + open-ended cycles; needs allow_godmode)
+    "autonomy": "balanced",
+    "allow_godmode": False,
+    "godmode": {"max_cycles": None},
+    "max_cycles": 50,                  # cap for a requested cycle count
+    "cycle_max_options": 3,            # improvements implemented per cycle at most
+    "autopilot_extra_cycles": 3,       # beyond a requested count, how many cycles JEV may add on its own
+}
+
+AUTONOMY = ("restrictive", "balanced", "autopilot", "godmode")
+
+# decision classes: infra = mechanics (where/what runs), work = shaping the work, llm = choosing among
+# things a model proposed or asked. restrictive mode sends work + llm decisions to the director.
+QUESTION_CLASS = {
+    "How should the manager handle this request?": "work",
+    "Is this a follow-up for an agent that just finished related work?": "work",
+    "Should one agent do this, or should a lead manage sub-agents for it?": "work",
+    "Is the best approach uncertain enough to try alternatives in parallel?": "work",
+    "Which environment should this agent's tools run in?": "infra",
+    "Which model or agent runtime should run this task?": "infra",
+    "An agent failed. What should the manager do?": "work",
+    "This agent has produced no output for a while. What now?": "infra",
+    "Can the manager answer this agent's question, or must the director decide?": "llm",
+    "Which parallel attempt produced the best result (tests pass, complete, simplest)?": "llm",
+    "Which kind of refinement should the next cycle focus on?": "work",
+    "Which proposed improvements should this cycle implement?": "llm",
+    "Which test findings should this cycle fix?": "llm",
+    "Are these the right kinds of tests, and do they cover the edge cases?": "llm",
+    "The requested cycles are done. Is further work of this kind needed?": "work",
+    "Has this work converged, or is another refinement cycle worth it?": "work",
+    "Should this finished work be merged?": "work",
+    "Which category of work is this task?": "label",
 }
 
 INTAKE = [
@@ -115,6 +150,7 @@ class Fleet:
         self.out = out or (lambda s: print(s, file=sys.stderr))
         self.store = Store(self.state / "fleet.db")
         self.lock = threading.RLock()
+        self._inflight: set[str] = set()
         self.backend = sessions.get(self.cfg["backend"], self.state)
         self.envs: dict[str, envs_mod.Environment] = {"local": envs_mod.local(str(self.cwd))}
         for d in self.cfg["environments"]:
@@ -126,7 +162,26 @@ class Fleet:
             self.probe_envs()
         self.planner = (planner if planner is not None else self._planner()) or None
         self.jev = jev_mod.build(self.base_cfg, self.planner, self.state / "decisions.jsonl")
+        self.store.db.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
         self.manager = self._ensure_manager()
+        from .cycles import Programs
+        self.programs = Programs(self)
+
+    # ------------------------------------------------------------------ autonomy
+
+    @property
+    def autonomy(self) -> str:
+        r = self.store.db.execute("SELECT value FROM settings WHERE key='autonomy'").fetchone()
+        return r["value"] if r else self.cfg["autonomy"]
+
+    def set_autonomy(self, mode: str) -> str:
+        if mode not in AUTONOMY:
+            raise ValueError(f"autonomy must be one of {AUTONOMY}")
+        if mode == "godmode" and not self.cfg["allow_godmode"]:
+            raise ValueError("godmode is disabled: set \"allow_godmode\": true in fleet.json to enable it")
+        self.store.db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('autonomy', ?)", (mode,))
+        self.store.event("manager", "autonomy", mode)
+        return mode
 
     # ------------------------------------------------------------------ inventory
 
@@ -144,6 +199,8 @@ class Fleet:
 
     def _planner(self):
         pref = self.cfg["manager_slot"]
+        if pref == "none":
+            return None                       # no planning model: single-task delegation, lexical JEV
         order = [s for s in self.slots if not s.is_cli and s.available]
         if pref:
             order = [s for s in order if s.id == pref] or order
@@ -171,16 +228,41 @@ class Fleet:
 
     # ------------------------------------------------------------------ decisions
 
+    def _gate(self, question: str, query: str, d, n_options: int, answered_free_text: bool,
+              ask_director: bool = False) -> tuple[bool, float | None, str]:
+        """Who makes this decision? Returns (needs_director, significance, reason)."""
+        pol = self.cfg["decision_policy"]
+        if answered_free_text:
+            return False, None, "director answered in free text"
+        if ask_director and self.autonomy not in ("autopilot", "godmode"):
+            return True, None, "changes the scope you asked for"
+        if question in pol and pol[question] != "auto":
+            return pol[question] == "director", None, f"policy: {pol[question]}"
+        cls = QUESTION_CLASS.get(question, "work")
+        mode = self.autonomy
+        if cls == "label" or n_options < 2:
+            return False, None, "no real choice" if n_options < 2 else "labeling"
+        g = self.cfg["gate"]
+        if mode in ("autopilot", "godmode"):
+            c = self.jev.comfort(question, query, d, g["significance"], g["margin_floor"], g["uncertain_significance"])
+            return False, c.significance, f"{mode}" + (f" (would have asked: {c.reason})" if c.needs_user else "")
+        if mode == "restrictive" and cls in ("work", "llm"):
+            return True, None, "restrictive: the director decides"
+        if pol.get("*", "auto") != "auto":
+            return pol["*"] == "director", None, f"policy: {pol['*']}"
+        c = self.jev.comfort(question, query, d, g["significance"], g["margin_floor"], g["uncertain_significance"])
+        return c.needs_user, c.significance, c.reason
+
     def decide(self, agent: str | None, question: str, query: str, options: list[Option],
                default: str | None = None, context: str = "", defer: bool = True,
-               payload: dict | None = None) -> tuple[str | None, dict]:
+               payload: dict | None = None, ask_director: bool = False) -> tuple[str | None, dict]:
         """Every fleet decision goes through here.
 
         1. If the director already ruled on this exact decision, use that.
         2. JEV scores the options.
-        3. Comfort gate: JEV judges whether the decision is routine enough for it to make,
-           or significant / too uncertain - then it becomes an escalation with JEV's
-           recommendation, and this returns ``None`` until the director answers.
+        3. Gate (depends on autonomy mode and the decision's class): JEV decides, or the decision
+           becomes a director escalation with JEV's recommendation and this returns ``None``
+           until it is answered.
         Every step is recorded for the shadow view.
         """
         ids = [o.id for o in options]
@@ -192,28 +274,41 @@ class Fleet:
             return prior["answer"], prior["payload"].get("probs", {})
         d = self.jev.choose(question, query, options, context)
         chosen = decisive(d, default) if default else d.best
-        pol = self.cfg["decision_policy"]
-        policy = pol.get(question, pol.get("*", "auto"))
-        g = self.cfg["gate"]
-        if prior:                                   # director answered in free text: don't ask twice
-            needs, sig, reason = False, None, "director answered in free text"
-        elif policy == "jev":
-            needs, sig, reason = False, None, "policy: jev decides"
-        elif policy == "director":
-            needs, sig, reason = True, None, "policy: director decides"
-        else:
-            c = self.jev.comfort(question, query, d, g["significance"], g["margin_floor"], g["uncertain_significance"])
-            needs, sig, reason = c.needs_user, c.significance, c.reason
-        gate = "deferred" if needs and defer else ("jev-noted" if needs else "jev")
+        needs, sig, reason = self._gate(question, query, d, len(ids), bool(prior), ask_director)
+        return self._record(agent, question, query, d, chosen, needs and defer, needs, sig, reason, dkey,
+                            [k for k, _ in d.top(len(ids))], payload), d.probs
+
+    def decide_many(self, agent: str | None, question: str, query: str, options: list[Option],
+                    max_k: int = 3, threshold: float = 0.45) -> list[str] | None:
+        """Multi-select decision (e.g. which proposed improvements to implement). ``None`` = waiting."""
+        ids = [o.id for o in options]
+        dkey = f"{agent}|{question}|{hashlib.sha1((query + ','.join(o.text for o in options)).encode()).hexdigest()[:12]}"
+        prior = self.store.escalation_by_key(dkey)
+        if prior and prior["status"] == "open":
+            return None
+        if prior and prior["status"] == "answered":
+            got = [x.strip() for x in prior["answer"].split(",") if x.strip() in ids]
+            if got:
+                return got
+        d = self.jev.activate(question, query, options)
+        chosen = [i for i, p in d.top(max_k) if p >= threshold] or [d.best]
+        needs, sig, reason = self._gate(question, query, d, len(ids), bool(prior))
+        r = self._record(agent, question, query, d, ",".join(chosen), needs, needs, sig, reason, dkey,
+                         [k for k, _ in d.top(len(ids))], {"multi": True})
+        return None if r is None else chosen
+
+    def _record(self, agent, question, query, d, chosen, defer, needs, sig, reason, dkey, ordered, payload):
+        gate = "deferred" if defer else ("jev-noted" if needs or "would have asked" in reason else "jev")
         self.store.decision(d.id, agent, question, d.probs, chosen, d.backend, query, gate, sig, reason)
-        if needs and defer:
-            ordered = [k for k, _ in d.top(len(ids))]
-            self.store.escalate(agent, f"{question}\n\n{query[:900]}\n\nJEV leans '{chosen}' "
-                                       f"({d.probs[chosen]:.0%}) but deferred to you: {reason}.",
+        if defer:
+            a = self.store.agent(agent) if agent else None
+            who = f"for {a['title']}" if a and a["role"] != "manager" else ""
+            self.store.escalate(agent, f"Manager: {question} {who}\n\n{query[:900]}\n\nJEV leans '{chosen}' - "
+                                       f"deferred to you ({reason}).",
                                 ordered, kind="decision", dkey=dkey,
                                 payload={"decision": d.id, "probs": d.probs, "recommended": chosen, **(payload or {})})
-            return None, d.probs
-        return chosen, d.probs
+            return None
+        return chosen
 
     # ------------------------------------------------------------------ CRUD
 
@@ -269,20 +364,21 @@ class Fleet:
             return self.backend
         return sessions.BACKENDS[h["backend"]](self.state)
 
-    def prompt(self, aid: str, text: str) -> str:
+    def prompt(self, aid: str, text: str, sender: str = "director") -> str:
         """Send an instruction to an agent: live injection, TTY input, or reopen a finished agent."""
         with self.lock:
             a = self.get(aid)
             if a["status"] in ("running", "blocked", "starting", "queued", "paused") and a["runtime"] == "rameness":
-                self.store.send(aid, text)
+                self.store.send(aid, text, sender)
                 return "queued for the agent's next turn"
             if a["status"] in ("running", "blocked") and a["handle"]:
                 ok = self.backend_for(a["handle"]).send(a["handle"], text)
                 self.store.event(aid, "message", f"director (tty): {text[:200]}")
                 return "sent to session" if ok else "this session backend can't accept input"
             if a["status"] in ("done", "failed", "retired"):
-                self.store.send(aid, text)
-                self.store.update_agent(aid, meta={**a["meta"], "resume": True})
+                self.store.send(aid, text, sender)
+                self.store.update_agent(aid, meta={**a["meta"], "resume": True, "finalized": False,
+                                                   "integrated": False})
                 self.store.set_status(aid, "queued", "reopened with a follow-up")
                 return "reopened"
             return f"agent is {a['status']}"
@@ -379,7 +475,9 @@ class Fleet:
             self.store.answer(eid, text)
             if e["kind"] == "decision":
                 pl = e["payload"]
-                if text in e["options"]:
+                if pl.get("multi"):
+                    self.store.set_gate(pl.get("decision", ""), "director", text)
+                elif text in e["options"]:
                     from ..improve import Tuner
                     Tuner(self.state).feedback(pl.get("decision", ""), label=text)
                     self.store.set_gate(pl.get("decision", ""), "director", text)
@@ -403,8 +501,17 @@ class Fleet:
 
     # ------------------------------------------------------------------ intake
 
-    def ask(self, text: str, clarified: bool = False) -> dict:
-        """Director request -> JEV intake route -> agents."""
+    def ask(self, text: str, clarified: bool = False, cycles: int | None | str = 0,
+            categories: list[str] | None = None, on: str | None = None) -> dict:
+        """Director request -> JEV intake route -> agents.
+
+        ``cycles``: N > 0 builds a draft then runs N refinement cycles; ``"godmode"`` cycles until JEV
+        judges the work converged (godmode autonomy only)."""
+        if cycles:
+            with self.lock:
+                p = self.programs.create(text, None if cycles == "godmode" else int(cycles), categories,
+                                         draft=on is None, from_agent=None if on in (None, "HEAD") else on)
+                return {"route": "program", "program": p["id"], "agents": [p["lead"]], "probs": {}}
         with self.lock:
             m = self.manager["id"]
             resume = {"resume": "ask", "text": text, "clarified": clarified}
@@ -539,10 +646,11 @@ class Fleet:
         workdir = a["worktree"]
         if not workdir:
             workdir = env.workdir if env.kind != "local" else str(self.cwd)
-            if a["kind"] == "deliver" and worktree.is_repo(env, workdir):
+            base = a["meta"].get("base_branch")
+            if (a["kind"] == "deliver" or base) and worktree.is_repo(env, workdir):
                 parent = self.store.agent(a["parent"]) or {}
                 try:
-                    workdir, branch = worktree.create(env, workdir, a["id"], parent.get("branch"))
+                    workdir, branch = worktree.create(env, workdir, a["id"], base or parent.get("branch"))
                     self.store.update_agent(a["id"], worktree=workdir, branch=branch)
                 except RuntimeError as e:
                     self.store.event(a["id"], "warning", f"no worktree: {e}")
@@ -551,7 +659,8 @@ class Fleet:
             local_cwd = str(self.cwd)
         else:
             s = self.slot(a["slot"])
-            argv = [x.replace("{task}", self._brief(a)) for x in s.argv]
+            brief = self._brief(a)                   # once: it consumes pending follow-ups
+            argv = [x.replace("{task}", brief) for x in s.argv]
             if env.kind != "local":
                 argv = env.interactive_argv(argv, workdir)
                 local_cwd = str(self.cwd)
@@ -566,7 +675,9 @@ class Fleet:
         self.store.set_status(a["id"], "running", f"{a['runtime']} on {a['slot']} @ {env.id} ({h['backend']})")
 
     def _brief(self, a: dict) -> str:
-        return (f"{a['task']}\n\nYou are agent {a['id']} in a rameness team. Work only in the current directory. "
+        follow = self.store.inbox(a["id"])            # CLI agents can't read the inbox: fold messages into the brief
+        extra = "".join(f"\n\nFollow-up from your {m['sender']}: {m['text']}" for m in follow)
+        return (f"{a['task']}{extra}\n\nYou are agent {a['id']} in a rameness team. Work only in the current directory. "
                 "When finished, end with a short report: what changed, how you verified it, anything left open.")
 
     def _start_lead(self, a: dict, env: envs_mod.Environment) -> None:
@@ -580,9 +691,24 @@ class Fleet:
                 self.store.event(a["id"], "warning", f"no worktree: {e}")
         self.store.set_status(a["id"], "running", "lead: planning its team")
         if self.planner:
-            self.decompose(a["id"], a["task"])
+            # model calls never run inside tick(): slow planners must not stall the rest of the fleet
+            self._background(f"plan:{a['id']}", self.decompose, a["id"], a["task"])
         else:
             self.spawn(a["task"], parent=a["id"], kind=a["kind"], title=a["title"], role="associate")
+
+    def _background(self, key: str, fn, *args) -> None:
+        if key in self._inflight:
+            return
+        self._inflight.add(key)
+
+        def run():
+            try:
+                fn(*args)
+            except Exception as e:
+                self.store.event(None, "error", f"{key}: {type(e).__name__}: {e}")
+            finally:
+                self._inflight.discard(key)
+        threading.Thread(target=run, daemon=True, name=key).start()
 
     def _stop_session(self, a: dict) -> None:
         if a.get("handle"):
@@ -610,6 +736,7 @@ class Fleet:
             for g in groups:
                 self._resolve_forks(g)
             self._auto_answer()
+            self.programs.tick()
 
     def _deps_done(self, a: dict) -> bool:
         return all((self.store.agent(d) or {}).get("status") == "done" for d in a["depends"])
@@ -622,6 +749,10 @@ class Fleet:
             parent = self.store.agent(a["parent"]) or {}
             if parent.get("status") == "paused" or not self._deps_done(a):
                 continue
+            if not a["meta"].get("category"):
+                from .cycles import CATEGORY_TAG_Q, taxonomy_options
+                cat, _ = self.decide(a["id"], CATEGORY_TAG_Q, a["task"][:600], taxonomy_options(), defer=False)
+                a = self.store.update_agent(a["id"], meta={**a["meta"], "category": cat})
             if not a["meta"].get("role_decided"):
                 role = self._role(a)
                 if role is None:
@@ -779,9 +910,11 @@ class Fleet:
         """Merge a finished deliver agent's branch into its parent's branch, or ask the director."""
         if a["meta"].get("integrated"):
             return
-        self.store.update_agent(a["id"], meta={**a["meta"], "integrated": True})
+        self.store.update_agent(a["id"], meta={**self.get(a["id"])["meta"], "integrated": True})
         if a["kind"] != "deliver" or not a["branch"]:
             return
+        if a["meta"].get("program"):
+            return                                  # cycles build on each other's branches; merged once at the end
         parent = self.store.agent(a["parent"])
         env = self.envs.get(a["env"] or "local", self.envs["local"])
         if parent and parent["role"] == "lead" and parent["worktree"]:
@@ -792,7 +925,15 @@ class Fleet:
                                     ["keep branch", "discard"], kind="merge")
             return
         stat = worktree.diffstat(env, a["worktree"], "HEAD~1") if a["worktree"] else ""
-        if self.cfg["mode"] == "local" or (self.cfg["mode"] == "review" and self.cfg["autonomous"]):
+        if self.autonomy in ("autopilot", "godmode"):
+            verdict, _ = self.decide(a["id"], "Should this finished work be merged?",
+                                     f"{a['title']} {(a['result'] or '')[-400:]}",
+                                     [Option("merge", "done complete tests pass verified finished works"),
+                                      Option("keep branch", "partial incomplete unverified experimental failing risky")],
+                                     "keep branch")
+            self._apply_merge_answer(a, verdict or "keep branch")
+            self.store.event(a["id"], "merge-decision", f"JEV ({self.autonomy}): {verdict}")
+        elif self.cfg["mode"] == "local" or (self.cfg["mode"] == "review" and self.cfg["autonomous"]):
             self._apply_merge_answer(a, "merge")
         else:
             self.store.escalate(a["id"], f"{a['title']} finished on {a['branch']}.\n{stat}\n\n{(a['result'] or '')[-1500:]}",
@@ -813,6 +954,8 @@ class Fleet:
             self.store.event(a["id"], "discarded", a["branch"] or "")
 
     def _supervise_lead(self, a: dict) -> None:
+        if a["meta"].get("program_lead") or f"plan:{a['id']}" in self._inflight:
+            return                                  # the cycle engine owns program leads / still planning
         kids = self.store.children(a["id"])
         if not kids or any(k["status"] in ACTIVE for k in kids):
             return
@@ -833,23 +976,38 @@ class Fleet:
             if e["kind"] != "agent-question" or e.get("answer") or (e.get("options") and "__triaged" in e["options"]):
                 continue
             a = self.store.agent(e["agent"]) or {}
+            if self.autonomy == "restrictive":
+                # firstmate principle: agents never reach the director directly; the manager relays
+                self.store.db.execute("UPDATE escalations SET options=?, question=? WHERE id=?",
+                                      (json.dumps([*e["options"], "__triaged"]),
+                                       f"Manager relays from {a.get('title', e['agent'])}: {e['question']}", e["id"]))
+                continue
             route, _ = self.decide(e["agent"], "Can the manager answer this agent's question, or must the director decide?",
                                    e["question"], QUESTION, "escalate", defer=False)
+            if self.autonomy in ("autopilot", "godmode"):
+                route = "answer"
             self.store.db.execute("UPDATE escalations SET options=? WHERE id=?",
                                   (json.dumps([*e["options"], "__triaged"]), e["id"]))
-            if route == "answer" and self.planner:
-                siblings = "\n".join(f"- {s['title']}: {(s['result'] or '')[:300]}" for s in
-                                     self.store.children(a.get("parent") or "manager") if s["status"] == "done")
-                try:
-                    r = self.planner.chat("You are the engineering manager answering a team member's question "
-                                          "concisely from the task context. If you cannot know, say so.",
-                                          [{"role": "user", "content": f"Task: {a.get('task', '')}\nFinished team "
-                                            f"work:\n{siblings}\n\nQuestion: {e['question']}"}], [],
-                                          effort="low", max_tokens=2000)
-                    if r.text and "cannot know" not in r.text.lower():
-                        self.store.answer(e["id"], r.text)
-                except Exception as ex:
-                    self.store.event(e["agent"], "warning", f"auto-answer failed: {ex}")
+            if route == "answer" and not self.planner and self.autonomy in ("autopilot", "godmode"):
+                self.store.answer(e["id"], "No one is available to decide this. Use your best judgement, "
+                                           "prefer the reversible option, and state the assumption in your report.")
+            elif route == "answer" and self.planner:
+                self._background(f"answer:{e['id']}", self._answer_with_model, e, a)
+
+    def _answer_with_model(self, e: dict, a: dict) -> None:
+        """Runs in a background thread: the manager's model answers an agent's question from context."""
+        siblings = "\n".join(f"- {s['title']}: {(s['result'] or '')[:300]}" for s in
+                             self.store.children(a.get("parent") or "manager") if s["status"] == "done")
+        try:
+            r = self.planner.chat("You are the engineering manager answering a team member's question "
+                                  "concisely from the task context. If you cannot know, say so.",
+                                  [{"role": "user", "content": f"Task: {a.get('task', '')}\nFinished team "
+                                    f"work:\n{siblings}\n\nQuestion: {e['question']}"}], [],
+                                  effort="low", max_tokens=2000)
+            if r.text and ("cannot know" not in r.text.lower() or self.autonomy in ("autopilot", "godmode")):
+                self.store.answer(e["id"], r.text)
+        except Exception as ex:
+            self.store.event(e["agent"], "warning", f"auto-answer failed: {ex}")
 
     def run_forever(self, interval: float = 2.0, stop: threading.Event | None = None) -> None:
         last_slots = time.time()
@@ -875,6 +1033,10 @@ class Fleet:
                             for e in self.store.escalations()],
             "decisions": self.store.decisions(limit=60),
             "gate": self.cfg["gate"], "decision_policy": self.cfg["decision_policy"],
+            "autonomy": self.autonomy, "allow_godmode": self.cfg["allow_godmode"],
+            "programs": self.programs.all(),
+            "taxonomy": [{k: c[k] for k in ("id", "group", "label")} for c in __import__(
+                "rameness.fleet.cycles", fromlist=["TAXONOMY"]).TAXONOMY],
             "events": self.store.events(limit=120),
             "config": {k: self.cfg[k] for k in ("backend", "mode", "autonomous", "privacy", "max_active", "max_depth")},
             "backend": self.backend.name,

@@ -341,7 +341,8 @@ class Jev:
         sig = sd.probs["significant"]
         if sig >= sig_threshold:
             return Comfort(sig, conf, margin, True, "significant")
-        if margin < margin_floor and sig >= uncertain_sig:
+        # a dead 50/50 on significance means "no evidence either way", not "risky": don't bother the user
+        if margin < margin_floor and sig >= uncertain_sig and abs(sig - 0.5) > 0.02:
             return Comfort(sig, conf, margin, True, "uncertain")
         return Comfort(sig, conf, margin, False, "routine" if margin >= margin_floor else "low-stakes guess")
 

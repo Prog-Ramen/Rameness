@@ -206,7 +206,8 @@ def cmd_fleet(a):
     f = _fleet(probe=act in ("envs", "slots"))
     args = a.args
     if act == "ask":
-        r = f.ask(" ".join(args))
+        cycles = a.cycles if a.cycles == "godmode" else int(a.cycles or 0)
+        r = f.ask(" ".join(args), cycles=cycles, categories=a.focus.split(",") if a.focus else None, on=a.on)
         print(json.dumps(r, indent=1, default=str))
         if r["route"] == "awaiting-director":
             print("JEV deferred this decision to you: see `rameness fleet needs`.", file=sys.stderr)
@@ -274,6 +275,30 @@ def cmd_fleet(a):
             if not a.follow:
                 break
             _t.sleep(1)
+    elif act == "mode":
+        if args:
+            print(f"autonomy: {f.set_autonomy(args[0])}")
+        else:
+            print(f"autonomy: {f.autonomy}  (restrictive | balanced | autopilot | godmode)")
+    elif act == "programs":
+        if args and args[0] == "stop":
+            f.programs.stop(args[1])
+            print(f"stopping {args[1]} after the current cycle")
+            return
+        for p in f.programs.all():
+            total = p["total"] if p["total"] is not None else "∞"
+            print(f"{p['id']}  {p['status']:8s} {p['done']}/{total}  phase={p['phase']:13s} {p['goal'][:60]}")
+            for h in p["history"]:
+                extra = f" findings={h['findings']} coverage={h.get('coverage')}" if h.get("mode") == "test" else ""
+                print(f"    #{h['n']} {h['category']:22s} chosen={[o['title'][:30] for o in h['chosen']]}{extra}")
+    elif act == "categories":
+        from .fleet.cycles import TAXONOMY
+        group = None
+        for c in TAXONOMY:
+            if c["group"] != group:
+                group = c["group"]
+                print(f"\n{group}  (use --focus {group.lower().replace('-', '_')} for the whole group)")
+            print(f"  {c['id']:24s} {c['label']}")
     elif act == "standup":
         print(f.standup())
     elif act == "tick":
@@ -307,7 +332,7 @@ def main(argv=None):
     p = sub.add_parser("fleet", help="manager + team of agents (UI: `rameness fleet up`)")
     p.add_argument("action", choices=["up", "ask", "tree", "ls", "show", "spawn", "prompt", "reassign", "pause",
                                       "resume", "retire", "rm", "fork", "attach", "logs", "slots", "envs", "needs",
-                                      "answer", "shadow", "standup", "tick"])
+                                      "answer", "shadow", "standup", "tick", "mode", "programs", "categories"])
     p.add_argument("args", nargs="*")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int)
@@ -322,6 +347,9 @@ def main(argv=None):
     p.add_argument("--drop-branch", action="store_true")
     p.add_argument("-f", "--follow", action="store_true", help="shadow: keep following")
     p.add_argument("--minutes", type=float, default=60, help="shadow: history window")
+    p.add_argument("--cycles", help="ask: number of refinement/testing cycles after the draft, or 'godmode'")
+    p.add_argument("--focus", help="ask: comma-separated categories or groups (see `fleet categories`), e.g. testing,ui")
+    p.add_argument("--on", help="ask: cycle on existing work instead of drafting: HEAD or an agent id")
     p.set_defaults(fn=cmd_fleet)
     p = sub.add_parser("up", help="shortcut for `fleet up --open`")
     p.set_defaults(fn=lambda a: cmd_fleet(argparse.Namespace(action="up", host="127.0.0.1", port=None, open=True)))

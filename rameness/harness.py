@@ -21,6 +21,7 @@ from . import config as config_mod
 from . import jev as jev_mod
 from . import llm as llm_mod
 from .context import ArtifactStore, ContextManager, estimate_tokens
+from .loopguard import LoopGuard, degenerate
 from .learning import Learner, RunStore, register_sop
 from .org import Org
 from .router import Plan, Router
@@ -89,6 +90,8 @@ class Harness:
         self.messages: list[dict] = []           # persists across run() calls for chat sessions
         self.inbox = None                        # optional callable -> list[str] of messages to inject
         self.on_turn = None                      # optional callable(turn, response) for progress reporting
+        self.on_decision = None                  # optional callable(kind, decision, detail) - fleet shadow hook
+        self.loop_guard_enabled = self.cfg.get("loop_guard", True)
 
     def _confirm(self, question: str, probs: dict, recommended: str, reason: str) -> str | None:
         """Comfort-gate prompt in the terminal (only in ask mode with a TTY)."""
@@ -188,6 +191,8 @@ class Harness:
         self.messages.append({"role": "user", "content": task})
         steps: list[dict] = []
         text, success = "", False
+        guard = LoopGuard(self.jev) if self.loop_guard_enabled else None
+        stopped = ""
         for turn in range(self.cfg["max_turns"]):
             for note in (self.inbox() if self.inbox else []):
                 self.messages.append({"role": "user", "content": note})
@@ -200,21 +205,56 @@ class Harness:
             if r.text:
                 text = r.text
             if not r.tool_calls:
+                if guard and (degenerate(r.text) or r.stop_reason == "max_tokens"):
+                    guard.observe(r, [])
+                    verdict = guard.check(turn, task)
+                    if verdict and verdict[0] in ("reorient", "reset"):
+                        action, sig, d = verdict
+                        self.out(f"[rameness] loop guard: {action} ({'; '.join(sig) or 'truncated reply'})")
+                        if self.on_decision:
+                            self.on_decision("loop", d, {"action": action, "signals": sig})
+                        self.messages[-1]["content"] = " ".join(r.text.split()[:200]) + " [truncated: degenerate]"
+                        self.messages[-1].pop("raw", None)
+                        if action == "reorient":
+                            self.messages.append({"role": "user", "content": LoopGuard.reorientation(task, sig, steps)})
+                        else:
+                            self.messages = LoopGuard.reset_messages(task, sig, steps)
+                        continue
                 success = r.stop_reason in ("end_turn", "stop_sequence", "")
                 break
+            results = []
             for call in r.tool_calls:
                 self.out(f"  -> {call.name} {json.dumps(call.input)[:160]}")
                 out, err = self._call(call.name, call.input, active)
+                results.append((out, err))
                 steps.append({"tool": call.name, "input": call.input, "ok": not err, "out": out[:200]})
                 self.messages.append({"role": "tool", "tool_call_id": call.id, "name": call.name,
                                       "content": self.ctx.ingest(call.name, out), "is_error": err})
+            if guard:
+                guard.observe(r, results)
+                verdict = guard.check(turn, task)
+                if verdict:
+                    action, sig, d = verdict
+                    self.out(f"[rameness] loop guard: {action} ({'; '.join(sig)})")
+                    if self.on_decision:
+                        self.on_decision("loop", d, {"action": action, "signals": sig})
+                    if action == "reorient":
+                        self.messages.append({"role": "user", "content": LoopGuard.reorientation(task, sig, steps)})
+                    elif action == "reset":
+                        self.messages = LoopGuard.reset_messages(task, sig, steps)
+                    elif action == "stop":
+                        stopped = "; ".join(sig)
+                        break
             # checkpoint: only pay for a JEV relevance pass when the budget is actually under pressure
             if self.ctx.needs_compaction(system, self.messages):
                 self.messages = self.ctx.compact(system, self.messages, task)
                 self.out(f"[rameness] compacted context -> ~{estimate_tokens(self.messages, system)} tokens")
         else:
             text += "\n[rameness] stopped: max_turns reached"
-        return Result("agent", text, plan, steps, metrics={"success": success, "turns": turn + 1,
+        if stopped:
+            text = f"{text}\n[rameness] stopped by the loop guard: {stopped}".strip()
+        return Result("agent", text, plan, steps, metrics={"success": success and not stopped, "turns": turn + 1,
+                                                           "loop_interventions": guard.interventions if guard else [],
                                                            "sops_exposed": sorted(s.id for s in active.values())})
 
     def _call(self, name: str, args: dict, active: dict[str, SOP]) -> tuple[str, bool]:
