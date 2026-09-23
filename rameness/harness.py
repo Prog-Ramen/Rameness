@@ -84,7 +84,7 @@ class Harness:
                                   cc["offload_chars"], cc["keep_recent_turns"])
         lc = self.cfg["learning"]
         self.learner = Learner(self.lib, self.executor, self.jev, RunStore(self.state / "runs"), llm,
-                               lc["min_repeats"], lc["sop_threshold"], lc["auto_generate"])
+                               lc["min_repeats"], lc["sop_threshold"], lc["auto_generate"], org=self.org)
         self.router = Router(self.lib, self.jev, self.org, self.cfg, self.cwd, llm, confirm=self._confirm)
         self.toolbox = Toolbox(Path(workdir) if workdir else self.cwd, self.approver, env)
         self.messages: list[dict] = []           # persists across run() calls for chat sessions
@@ -287,7 +287,8 @@ class Harness:
             if not self.approver("sop_save", f"{args.get('id')}: {args.get('description')}"):
                 return "DENIED", True
             try:
-                sop, failures = register_sop(self.lib, self.executor, args, {"via": "sop_save"})
+                sop, failures = register_sop(self.lib, self.executor, args, {"via": "sop_save"},
+                                             jev=self.jev, org=self.org)
             except Exception as e:
                 return f"ERROR: {e}", True
             active[sop.tool_name] = sop

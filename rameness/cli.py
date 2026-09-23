@@ -141,6 +141,37 @@ def cmd_sop(a):
             sys.exit("only private SOPs can be removed; uninstall the package instead")
         shutil.rmtree(s.path)
         print(f"removed {s.id}")
+    elif a.action == "classify":
+        ids = [a.arg] if a.arg else sorted(i for i, x in lib.sops.items() if x.scope == "private")
+        for i in ids:
+            r = pub.classify(h.jev, lib.get(i), h.org)
+            print(f"{r['visibility']:9s} {i:32s} general={r['probs']['general']:.2f}  {r['reason']}")
+    elif a.action == "propose":
+        from .registry import Registry, RegistryError
+        try:
+            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal)
+        except RegistryError as e:
+            sys.exit(f"not proposed: {e}")
+        print(f"proposed {r['id']} to the private staging repo ({r['where']})\n  branch {r['branch']}\n  review: {r['pr']}")
+    elif a.action == "proposals":
+        from .registry import Registry
+        for p in Registry(h.cfg, h.home, h.org, h.jev).proposals():
+            print(f"{p['id']:32s} {p['branch']:44s} {p['pr'] or ''}")
+    elif a.action == "release":
+        from .registry import Registry, RegistryError
+        try:
+            r = Registry(h.cfg, h.home, h.org, h.jev).release()
+        except RegistryError as e:
+            sys.exit(f"not released: {e}")
+        print(json.dumps(r, indent=1))
+    elif a.action == "scrub-tree":
+        findings = pub.scrub_tree(Path(a.arg or "."), h.org)
+        for f in findings:
+            print(f"BLOCKED {f}", file=sys.stderr)
+        sys.exit(1 if findings else 0)
+    elif a.action == "registry-init":
+        from .registry import init_staging
+        print(f"staging registry scaffolded at {init_staging(Path(a.arg))} - push it to a PRIVATE repo")
     elif a.action == "publish":
         s = lib.get(a.arg)
         if not a.to:
@@ -355,13 +386,16 @@ def main(argv=None):
     p.set_defaults(fn=lambda a: cmd_fleet(argparse.Namespace(action="up", host="127.0.0.1", port=None, open=True)))
     p = sub.add_parser("sop", help="manage the SOP library")
     p.add_argument("action", choices=["tree", "list", "show", "search", "run", "test", "promote", "remove",
-                                      "publish", "install", "index", "remote"])
+                                      "publish", "install", "index", "remote", "classify", "propose", "proposals",
+                                      "release", "scrub-tree", "registry-init"])
     p.add_argument("arg", nargs="?")
     p.add_argument("--args", help="JSON arguments for 'run'")
     p.add_argument("--to", help="package directory for 'publish'")
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--override-personal", action="store_true",
+                   help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)
     a = ap.parse_args(argv)
     try:

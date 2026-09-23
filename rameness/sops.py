@@ -57,6 +57,8 @@ class SOP:
     scope: str = "public"              # public | private
     version: str = "1.0.0"
     origin: dict = field(default_factory=dict)
+    visibility: str = "private"        # private | shareable (JEV-classified; only shareable can be proposed)
+    classified: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path, sop_id: str, scope: str) -> "SOP":

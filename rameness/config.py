@@ -40,7 +40,13 @@ DEFAULTS: dict = {
         "sop_threshold": 0.6,
         "auto_generate": True,
     },
-    "registry": {"remote_index": None},
+    "registry": {
+        "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # where reviewed SOPs are released
+        "staging": None,                  # a PRIVATE repo where proposals are reviewed (e.g. Prog-Ramen/RamenSOPs-staging)
+        "release": "pr",                  # pr | direct
+        "staging_assume_private": False,  # for non-GitHub hosts whose visibility can't be checked
+        "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/sops/index.json",
+    },
 }
 
 PROVIDER_PRESETS = {
