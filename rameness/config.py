@@ -46,6 +46,9 @@ DEFAULTS: dict = {
         "release": "pr",                  # pr | direct
         "staging_assume_private": False,  # for non-GitHub hosts whose visibility can't be checked
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/sops/index.json",
+        "auto_pull": "gated",             # gated (JEV + comfort gate + permission guard) | ask (always ask) | off
+        "coverage_margin": 0.15,          # consult the remote registry when the best local SOP scores below
+                                          # activate_threshold + this margin
     },
 }
 

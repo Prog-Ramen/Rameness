@@ -50,6 +50,7 @@ class Plan:
     direct_args: dict | None = None
     questions: list[Requirement] = field(default_factory=list)
     gate: str = "jev"               # jev | director (the user decided) | jev-noted (would have asked, no user present)
+    pulls: list[dict] = field(default_factory=list)   # remote-registry pull decisions made for this task
 
     def describe(self) -> str:
         lines = [f"route:  {self.route}  {fmt(self.route_probs)}  [decided by: {self.gate}]",
@@ -62,6 +63,9 @@ class Plan:
         if self.activation.deferred:
             lines.append("deferred (missing information):")
             lines += [f"  {n.id}: needs {', '.join(r.name for r in rs)}" for n, _, rs in self.activation.deferred]
+        if self.pulls:
+            lines.append("remote registry:")
+            lines += [f"  {x['result']:8s} {x['p']:.2f}  {x['id']}  ({x['reason']})" for x in self.pulls]
         if self.direct_sop:
             lines.append(f"direct execution: {self.direct_sop.id}({self.direct_args})")
         return "\n".join(lines)
@@ -105,10 +109,57 @@ def heuristic_args(sop: SOP, task: str, cwd: Path, defaults: dict) -> dict:
 
 
 class Router:
-    def __init__(self, lib: Library, jev: Jev, org: Org, cfg: dict, cwd: Path, llm=None, confirm=None):
+    def __init__(self, lib: Library, jev: Jev, org: Org, cfg: dict, cwd: Path, llm=None, confirm=None,
+                 remote=None, validator=None):
         self.lib, self.jev, self.org, self.cfg, self.cwd, self.llm = lib, jev, org, cfg, cwd, llm
         # confirm(question, probs, recommended, reason) -> chosen option; None when no user is present
         self.confirm = confirm
+        self.remote = remote                 # remote.RemoteRegistry | None
+        self.validator = validator           # sop_id -> list of test failures
+        self.on_decision = None              # (kind, decision, detail) -> None, for the fleet shadow view
+
+    def _pull_remote(self, task: str, ctx: str, defaults: dict) -> list[dict]:
+        """Coverage gap: let JEV pick SOPs from the remote registry, gated and verified."""
+        from .remote import PULL_Q, pull_options
+        jc, rc = self.cfg["jev"], self.cfg.get("registry") or {}
+        allow = set(self.cfg["permissions"]["sop_allow"])
+        out = []
+        cands = self.remote.candidates(self.jev, task, ctx, defaults, set(self.lib.sops),
+                                       jc["activate_threshold"], jc["explore_threshold"], jc["beam"])
+        for sop, p in cands:
+            q = f"{task[:400]} :: {sop.id} {sop.description}"
+            d = self.jev.choose(PULL_Q, q, pull_options(sop, p))
+            rec = {"id": sop.id, "p": p, "result": "skipped", "reason": f"JEV: {d.best}"}
+            if d.best == "pull":
+                extra = sorted(set(sop.permissions) - allow)
+                c = self.jev.comfort(PULL_Q, q, d)
+                if extra or c.needs_user or rc.get("auto_pull") == "ask":
+                    why = f"needs {', '.join(extra)}" if extra else c.reason
+                    ans = self.confirm(f"{PULL_Q} {sop.id} - {sop.description}", d.probs, "pull", why) \
+                        if self.confirm else None
+                    if ans != "pull":
+                        rec["reason"] = f"{why}; no user approval"
+                        out.append(rec)
+                        continue
+                    rec["reason"] = f"user approved ({why})"
+                else:
+                    rec["reason"] = "JEV: pull (routine, within allowed permissions)"
+                try:
+                    self.remote.fetch(sop.id)
+                    self.lib.add_root(self.remote.install_root)
+                    failures = self.validator(sop.id) if self.validator else []
+                except Exception as e:
+                    failures = [f"{type(e).__name__}: {e}"]
+                if failures:
+                    self.remote.remove(sop.id)
+                    self.lib.reload()
+                    rec.update(result="rejected", reason="; ".join(failures)[:200])
+                else:
+                    rec["result"] = "pulled"
+            out.append(rec)
+            if self.on_decision:
+                self.on_decision("pull", d, {"action": rec["result"], "signals": [rec["reason"]]})
+        return out
 
     def resolve_args(self, sop: SOP, task: str, resolved: dict) -> dict | None:
         defaults = {**self.org.defaults, **resolved}
@@ -138,7 +189,16 @@ class Router:
                        jc["activate_threshold"], jc["explore_threshold"], jc["beam"], jc["max_sops"])
         rd = self.jev.choose("How should this task be executed?", task, ROUTES)
         ed = self.jev.choose("How much reasoning does this task need?", task, EFFORT)
-        plan = Plan(task, decisive(rd, "agent"), decisive(ed, "medium"), act, rd.probs, ed.probs)
+        pulls = []
+        rc = self.cfg.get("registry") or {}
+        best = act.selected[0][1] if act.selected else 0.0
+        if (self.remote and rc.get("auto_pull", "gated") != "off" and rd.probs.get("answer", 0) < 0.6
+                and best < jc["activate_threshold"] + rc.get("coverage_margin", 0.15)):
+            pulls = self._pull_remote(task_x, org_ctx, {**self.org.defaults, **resolved})
+            if any(x["result"] == "pulled" for x in pulls):
+                act = activate(self.lib, self.jev, task_x, org_ctx, {**self.org.defaults, **resolved},
+                               jc["activate_threshold"], jc["explore_threshold"], jc["beam"], jc["max_sops"])
+        plan = Plan(task, decisive(rd, "agent"), decisive(ed, "medium"), act, rd.probs, ed.probs, pulls=pulls)
         c = self.jev.comfort("How should this task be executed?", task, rd)
         if c.needs_user:
             if self.confirm:

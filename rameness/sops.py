@@ -148,6 +148,14 @@ class Library:
         roots += [(home / "sops", "private"), (cwd / ".rameness" / "sops", "private")]
         return cls(roots, cwd / ".rameness" / "sop_stats.json")
 
+    def add_root(self, path: Path, scope: str = "public") -> None:
+        """Add a package root below the private roots (so private SOPs still override it)."""
+        if any(r == path for r, _ in self.roots):
+            return
+        first_private = next((i for i, (_, sc) in enumerate(self.roots) if sc == "private"), len(self.roots))
+        self.roots.insert(first_private, (path, scope))
+        self.reload()
+
     @property
     def private_root(self) -> Path:
         return self.roots[-1][0]

@@ -271,15 +271,33 @@ private library ──propose──► PRIVATE staging repo ──review + merge
   whole tree, so a manual `git push` of a secret is blocked too.
 * **Release.** After a staging PR is merged, `rameness sop release` re-scans the merged SOPs and
   opens a release PR on the public repo (or pushes directly with `"release": "direct"`), with a
-  metadata-only `index.json` for discovery. `rameness sop registry-init <dir>` scaffolds a staging
+  sharded, metadata-only index for discovery (see below). `rameness sop registry-init <dir>` scaffolds a staging
   repo with a gitleaks CI workflow.
-  `rameness sop seed [url]` populates an empty public registry from already-public packages
-  (README and scan workflow on `main`, SOPs on a `seed/…` review branch).
 
 ```json
 "registry": {"staging": "git@github.com:Prog-Ramen/RamenSOPs-staging.git",
              "public": "https://github.com/Prog-Ramen/RamenSOPs.git", "release": "pr"}
 ```
+
+### Pulling SOPs from the registry: only what a task needs
+
+Nothing is mirrored. The registry index is **sharded per category**: `sops/index.json` lists only
+the top-level categories, and every category has its own `_index.json` listing only its children.
+When a task comes in:
+
+1. **Local first.** The remote registry is consulted only when no local SOP clearly covers the task
+   (best local activation < `activate_threshold` + `registry.coverage_margin`).
+2. **Lazy traversal with the same activation criteria.** JEV scores the root categories in one call.
+   Rejected branches are never downloaded; a branch whose `requires` aren't met is deferred without
+   being opened; only explored categories have their `_index.json` fetched, and so on down the tree.
+3. **Pull decision per candidate.** JEV makes the decision, then the comfort gate applies.
+   Permissions outside `permissions.sop_allow` need your yes; with no user present the SOP is skipped.
+4. **Verified install.** Only the chosen SOP's files are downloaded, each checked against the SHA-256
+   in its listing, into `~/.rameness/public/<registry>/sops`. Its tests must pass, otherwise it is
+   removed again.
+
+`registry.auto_pull`: `gated` (default) | `ask` (always ask) | `off`. `rameness sop pull <id>` pulls
+one SOP by walking only its ancestors' listings. Every pull decision appears in the shadow view.
 
 The organization profile `org.json` is also private. It holds facts, `defaults` that resolve SOP-tree
 requirements, a glossary, and the `private_terms` the scrubber enforces (see `examples/acme`).
@@ -325,6 +343,7 @@ rameness/
   tools.py          bash/read/write/edit/grep, environment-aware
   publish.py        scrubber, secret scanning, personal-vs-general classification, local publish, index
   registry.py       private staging → public release flow, visibility checks, pre-push hooks
+  remote.py         lazy, activation-driven pulls of individual SOPs from a sharded registry index
   fleet/
     manager.py      the manager: JEV decisions, comfort gate, autonomy modes, CRUD, scheduling, supervision, merging
     cycles.py       cycle programs (refine / test), the work taxonomy
