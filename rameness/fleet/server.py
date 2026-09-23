@@ -44,7 +44,14 @@ class Api:
                 return {"ok": True}
         if method == "POST":
             if path == "/api/ask":
-                return f.ask(body["text"])
+                cycles = body.get("cycles") or 0
+                return f.ask(body["text"], cycles=cycles if cycles == "godmode" else int(cycles),
+                             categories=body.get("categories") or None, on=body.get("on") or None)
+            if path == "/api/autonomy":
+                return {"autonomy": f.set_autonomy(body["mode"])}
+            if m := re.fullmatch(r"/api/programs/([\w-]+)/stop", path):
+                f.programs.stop(m.group(1))
+                return {"ok": True}
             if path == "/api/agents":
                 return f._public(f.spawn(body["task"], parent=body.get("parent") or "manager",
                                          role=body.get("role", "associate"), kind=body.get("kind", "deliver"),

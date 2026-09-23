@@ -142,6 +142,25 @@ input.in:focus,textarea.in:focus{border-color:var(--accent)}
 .stat{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .stat .v{font-size:20px;font-weight:620;letter-spacing:-.02em}
 .stat .k{font-size:12px;color:var(--muted)}
+.auto{display:flex;flex-direction:column;align-items:center;gap:6px;margin:18px auto 0}
+.auto .seg button{padding:6px 14px;font-size:13px}
+.auto .seg button.on.m-restrictive{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.auto .seg button.on.m-autopilot{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.auto .seg button.on.m-godmode{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.auto .seg button:disabled{opacity:.4;cursor:not-allowed}
+.auto .hint{font-size:12.5px;color:var(--muted)}
+.opts{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin:10px auto 0;font-size:13px;color:var(--muted)}
+.opts input[type=number]{width:62px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:860px;margin:10px auto 0}
+.chips .g{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);width:100%;text-align:center;margin-top:6px}
+.cchip{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:3px 10px;font-size:12.5px;cursor:pointer}
+.cchip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.progs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:16px}
+.prog .bar{height:6px;background:var(--line);border-radius:9px;overflow:hidden;margin:8px 0}
+.prog .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#b06be0)}
+.cyc{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.cyc span{font-size:11.5px;border:1px solid var(--line);border-radius:8px;padding:1px 7px}
+.cyc span.t{border-color:color-mix(in srgb,var(--ok) 50%,var(--line))}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -164,7 +183,23 @@ input.in:focus,textarea.in:focus{border-color:var(--accent)}
       <textarea id="ask" rows="1" placeholder="e.g. Add rate limiting to the API and benchmark two approaches"></textarea>
       <button class="btn primary" id="askBtn">Send</button>
     </div>
+    <div class="opts">
+      <label>cycles <input class="in" type="number" id="cycles" min="0" max="50" value="0"></label>
+      <label id="godWrap" hidden><input type="checkbox" id="godCycles"> ∞ until JEV says done</label>
+      <label><input type="checkbox" id="onHead"> on current work (skip the draft)</label>
+      <button class="cchip" id="focusBtn">focus: auto</button>
+    </div>
+    <div class="chips" id="chips" hidden></div>
     <div class="intake" id="intake"></div>
+    <div class="auto">
+      <span class="seg" id="autoSeg">
+        <button data-m="restrictive" class="m-restrictive">Restrictive</button>
+        <button data-m="balanced" class="m-balanced">Balanced</button>
+        <button data-m="autopilot" class="m-autopilot">Autopilot</button>
+        <button data-m="godmode" class="m-godmode">Godmode</button>
+      </span>
+      <span class="hint" id="autoHint"></span>
+    </div>
   </section>
 
   <nav class="tabs">
@@ -175,6 +210,7 @@ input.in:focus,textarea.in:focus{border-color:var(--accent)}
   </nav>
 
   <section id="team">
+    <div class="progs" id="progs"></div>
     <div class="grid">
       <div class="panel">
         <div class="ph"><h3>Organization</h3>
@@ -299,8 +335,13 @@ function renderTree(){
   });
   s+="</svg>";
   const cv=$("#canvas");
+  // wide teams: shrink to fit (down to 65%), then scroll; keep the manager in view
+  const avail=cv.clientWidth||W, scale=Math.max(0.65, Math.min(1, avail/W));
+  s=s.replace(`width="${W}" height="${H}"`, `width="${W*scale}" height="${H*scale}"`);
   cv.innerHTML = state.tree.children.length ? s :
     s + `<div class="empty">No team yet. Describe the work above and the manager will staff it.</div>`;
+  if(!renderTree.centered && W*scale>avail){ const root=L.nodes.find(n=>n.depth===0);
+    cv.scrollLeft=Math.max(0,(root.x+NW/2+pad)*scale-avail/2); renderTree.centered=true; }
   cv.querySelectorAll(".node").forEach(g=>{ g.onclick=()=>openAgent(g.dataset.id); g.onkeydown=e=>{if(e.key==="Enter")openAgent(g.dataset.id)}; });
 }
 
@@ -323,7 +364,7 @@ function renderCapacity(){
   $("#slots").innerHTML = state.slots.map(s=>`<div class="card">
     <div class="top"><span class="dot" style="background:${s.available?"var(--ok)":"var(--bad)"}"></span>
       <span class="name" title="${esc(s.id)}">${esc(s.id)}</span><span class="chip" style="margin-left:auto">${esc(s.kind)}</span></div>
-    <div class="muted small">${esc(s.model||"")} ${s.local?"· local":"· remote"} ${s.status?"· "+esc(s.status):""}</div>
+    <div class="muted small">${esc(s.model||"")} ${s.kind==="cli"?"· CLI agent":s.local?"· local":"· remote"} ${s.status?"· "+esc(s.status):""}</div>
     <div class="cap" title="${s.busy}/${s.capacity} busy">${Array.from({length:Math.min(s.capacity,16)},(_,i)=>`<i class="${i<s.busy?"on":""}"></i>`).join("")}</div>
     <div class="muted small" style="margin-top:6px">${esc(s.traits||"")}</div></div>`).join("")
     || `<div class="empty">No models found. Start a llama-server / ollama, set an API key, or add slots in .rameness/fleet.json.</div>`;
@@ -414,9 +455,15 @@ function openNeeds(){
   $("#dBody").innerHTML = state.escalations.map(e=>`<div class="esc"><div class="row small muted"><span class="chip">${esc(e.kind)}</span>${esc(e.agent||"")} · ${ago(e.t)}</div>
     <div class="qq sec">${esc(e.question)}</div>
     ${e.kind==="decision"&&e.payload&&e.payload.probs?`<div class="sec">${probs(e.payload.probs,e.payload.recommended)}</div>`:""}
-    <div class="row sec">${e.options.filter(o=>!o.startsWith("<")).map(o=>`<button class="btn small ${e.payload&&e.payload.recommended===o?"primary":""}" data-ans="${e.id}" data-v="${esc(o)}">${esc(o)}${e.payload&&e.payload.recommended===o?" · JEV's pick":""}</button>`).join("")}</div>
+    ${e.payload&&e.payload.multi?`<div class="sec">${e.options.map(o=>`<label class="row small"><input type="checkbox" data-multi="${e.id}" value="${esc(o)}" ${(e.payload.recommended||"").split(",").includes(o)?"checked":""}> ${esc(o)}</label>`).join("")}
+      <button class="btn small primary" data-multisend="${e.id}" style="margin-top:6px">Approve selection</button></div>`:""}
+    <div class="row sec" ${e.payload&&e.payload.multi?"hidden":""}>${e.options.filter(o=>!o.startsWith("<")).map(o=>`<button class="btn small ${e.payload&&e.payload.recommended===o?"primary":""}" data-ans="${e.id}" data-v="${esc(o)}">${esc(o)}${e.payload&&e.payload.recommended===o?" · JEV's pick":""}</button>`).join("")}</div>
     <div class="row" style="margin-top:8px"><input class="in" id="ans-${e.id}" placeholder="Or answer in your words…" style="flex:1"><button class="btn small primary" data-ans="${e.id}">Answer</button></div></div>`).join("")
     || `<div class="empty">Nothing needs you right now. ✨</div>`;
+  document.querySelectorAll("[data-multisend]").forEach(b=>b.onclick=async()=>{
+    const v=[...document.querySelectorAll(`[data-multi="${b.dataset.multisend}"]:checked`)].map(x=>x.value).join(",");
+    if(!v) return toast("Pick at least one");
+    await api(`/api/escalations/${b.dataset.multisend}`,{answer:v}); toast("Answered"); await refresh(); openNeeds();});
   document.querySelectorAll("[data-ans]").forEach(b=>b.onclick=async()=>{
     const v=b.dataset.v ?? $(`#ans-${b.dataset.ans}`).value; if(!v) return;
     await api(`/api/escalations/${b.dataset.ans}`,{answer:v}); toast("Answered"); await refresh(); openNeeds();});
@@ -478,10 +525,47 @@ $("#shadowStrip").onclick=()=>document.querySelector('[data-tab="shadow"]').clic
 document.querySelectorAll("#shFilter button").forEach(b=>b.onclick=()=>{ shFilter=b.dataset.f;
   document.querySelectorAll("#shFilter button").forEach(x=>x.classList.toggle("on",x===b)); renderShadow(); });
 
+// ---------------------------------------------------------------- autonomy, cycles, programs
+const AUTO_HINT = {
+  restrictive: "You make every work decision; agents never reach you directly - the manager relays everything.",
+  balanced: "JEV decides routine calls and asks you when a decision is significant or it is unsure.",
+  autopilot: "JEV decides everything itself - within limits: requested cycles, capacity, budgets.",
+  godmode: "Autopilot with open-ended cycles: JEV decides what to do next and when the work is done."};
+let focus = new Set();
+function renderAuto(){
+  const m=state.autonomy;
+  document.querySelectorAll("#autoSeg button").forEach(b=>{ b.classList.toggle("on",b.dataset.m===m);
+    if(b.dataset.m==="godmode"){ b.disabled=!state.allow_godmode; b.title=state.allow_godmode?"":"Enable with \"allow_godmode\": true in fleet.json"; }});
+  $("#autoHint").textContent=AUTO_HINT[m]||""; $("#godWrap").hidden = m!=="godmode";
+}
+document.querySelectorAll("#autoSeg button").forEach(b=>b.onclick=()=>api("/api/autonomy",{mode:b.dataset.m}).then(()=>{toast(`Autonomy: ${b.dataset.m}`);refresh();}));
+$("#focusBtn").onclick=()=>{ const c=$("#chips"); c.hidden=!c.hidden; if(!c.hidden) renderChips(); };
+function renderChips(){
+  let g=null, h="";
+  state.taxonomy.forEach(c=>{ if(c.group!==g){ g=c.group; const gid=g.toLowerCase().replace("-","_");
+      h+=`<div class="g">${esc(g)} <button class="cchip ${focus.has(gid)?"on":""}" data-c="${gid}">all</button></div>`; }
+    h+=`<button class="cchip ${focus.has(c.id)?"on":""}" data-c="${c.id}">${esc(c.label)}</button>`; });
+  $("#chips").innerHTML=h;
+  $("#chips").querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ const k=b.dataset.c; focus.has(k)?focus.delete(k):focus.add(k);
+    $("#focusBtn").textContent = focus.size?`focus: ${[...focus].join(", ")}`:"focus: auto"; renderChips(); });
+}
+function renderPrograms(){
+  const lab=Object.fromEntries(state.taxonomy.map(c=>[c.id,c.label]));
+  $("#progs").innerHTML = state.programs.filter(p=>p.status==="running"||p.status==="stopping"||Date.now()/1000-p.updated<3600).map(p=>{
+    const tot=p.total==null?"∞":p.total, pct=p.total?Math.min(100,p.done/p.total*100):Math.min(95,p.done*12);
+    const cur = p.state && p.state.category ? `${p.phase.replace("-wait","")} · ${lab[p.state.category]||p.state.category}` : p.phase;
+    return `<div class="panel prog pb"><div class="row"><b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.goal)}</b>
+      <span class="chip">${p.done}/${tot}</span>${p.status==="running"?`<button class="btn small ghost" data-stop="${p.id}">Stop</button>`:`<span class="muted small">${esc(p.status)}</span>`}</div>
+      <div class="bar"><i style="width:${pct}%"></i></div><div class="muted small">${esc(cur)}</div>
+      <div class="cyc">${p.history.map(h=>`<span class="${h.mode==="test"?"t":""}" title="${esc((h.chosen||[]).map(o=>o.title).join("; "))}">#${h.n} ${esc(lab[h.category]||h.category)}${
+        h.mode==="test"?` · ${Object.entries(h.findings||{}).map(([k,v])=>v+" "+k).join(", ")||"clean"}${h.coverage==="gaps"?" · gaps":""}`:` · ${(h.chosen||[]).length} done`}</span>`).join("")}</div></div>`;}).join("");
+  document.querySelectorAll("[data-stop]").forEach(b=>b.onclick=()=>api(`/api/programs/${b.dataset.stop}/stop`,{}).then(()=>{toast("Stops after this cycle");refresh();}));
+}
+
 // ---------------------------------------------------------------- wiring
 async function refresh(){
   try { state = await api("/api/state"); } catch(e){ return; }
-  renderHeader(); renderTree(); renderFeed(); renderCapacity();
+  renderHeader(); renderAuto(); renderPrograms(); renderTree(); renderFeed(); renderCapacity();
   if(!$("#decisions").hidden) renderDecisions();
 }
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
@@ -493,7 +577,9 @@ document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
 async function send(){
   const text=$("#ask").value.trim(); if(!text) return;
   $("#askBtn").disabled=true;
-  try{ const r=await api("/api/ask",{text}); $("#ask").value="";
+  const cycles = $("#godCycles").checked && state.autonomy==="godmode" ? "godmode" : +$("#cycles").value||0;
+  try{ const r=await api("/api/ask",{text, cycles, categories:[...focus], on:$("#onHead").checked?"HEAD":null}); $("#ask").value="";
+    if(r.route==="program"){ $("#intake").innerHTML=`<span>Started a ${cycles==="godmode"?"godmode":cycles+"-cycle"} program - JEV picks each cycle's focus${focus.size?" within your focus":""}.</span>`; refresh(); return; }
     $("#intake").innerHTML = `<span>JEV routed this as <b>${esc(r.route)}</b></span>` + Object.entries(r.probs||{}).sort((a,b)=>b[1]-a[1])
       .map(([k,v])=>`<span class="opt">${esc(k)}<span class="bar"><i style="width:${v*100}%"></i></span>${(v*100).toFixed(0)}%</span>`).join("");
     refresh(); } finally { $("#askBtn").disabled=false; }
@@ -508,7 +594,13 @@ $("#probeBtn").onclick=()=>api("/api/envs/probe",{}).then(()=>{toast("Probed");r
 $("#calBtn").onclick=()=>api("/api/jev/calibrate",{}).then(r=>toast(`Calibrated ${Object.keys(r.weights).length} weights`));
 $("#propBtn").onclick=()=>{ toast("Asking the model…"); api("/api/jev/propose",{}).then(r=>{toast(`${r.proposals.length} proposal(s)`); renderDecisions();}); };
 $("#expBtn").onclick=()=>api("/api/jev/export",{}).then(r=>toast(`${r.rows} rows → ${r.path}`));
-refresh(); pollShadow(); setInterval(pollShadow, 1000); setInterval(()=>{ refresh(); if(drawerMode==="agent" && selected) openAgent(selected); }, 2500);
+// deep links: #capacity #shadow #improve #needs #settings
+async function route(){ const h=location.hash.slice(1); if(!h) return;
+  const tab = h==="improve" ? "decisions" : h;
+  const t=document.querySelector(`[data-tab="${tab}"]`); if(t) t.click();
+  if(h==="needs") openNeeds(); if(h==="settings") openSettings(); }
+window.addEventListener("hashchange", route);
+refresh().then(route); pollShadow(); setInterval(pollShadow, 1000); setInterval(()=>{ refresh(); if(drawerMode==="agent" && selected) openAgent(selected); }, 2500);
 </script>
 </body>
 </html>

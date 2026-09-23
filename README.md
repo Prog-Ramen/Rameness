@@ -87,6 +87,52 @@ so the manager, the UI and every worker can restart without losing the team.
 into their lead's branch; top-level work is merged per `mode`: `review` (you approve), `local`,
 or `review` + `autonomous`.
 
+### Autonomy modes
+
+| Mode | Who decides |
+|---|---|
+| **Restrictive** | You make every *work* decision (intake, roles, forks, cycle focus, which proposals or findings to act on, merges). Agents never reach you directly: the manager relays their questions (firstmate style). Mechanical choices (model, environment) still go through the comfort gate. |
+| **Balanced** (default) | JEV decides; the comfort gate hands you significant or uncertain decisions. |
+| **Autopilot** | JEV decides everything, within limits: requested cycle counts (plus at most `autopilot_extra_cycles`), capacity, depth. The shadow view marks decisions it *would* have asked about. |
+| **Godmode** | Autopilot plus open-ended cycles: JEV picks the next kind of cycle and decides when the work has converged. Off unless `"allow_godmode": true`; optional `godmode.max_cycles` cap. |
+
+Switch in the UI or with `rameness fleet mode <mode>`.
+
+### Cycles: refinement and testing
+
+```bash
+rameness fleet ask "build a habit tracker" --cycles 8                    # draft, then 8 cycles; JEV picks each focus
+rameness fleet ask "the habit tracker" --cycles 6 --focus testing --on HEAD   # 6 testing cycles on existing work
+rameness fleet ask "the app" --cycles 4 --focus ui,ux,accessibility
+rameness fleet mode godmode && rameness fleet ask "the app" --cycles godmode
+rameness fleet categories        # the taxonomy (ids and groups)
+rameness fleet programs          # progress, per-cycle focus, choices, findings
+```
+
+The taxonomy (36 kinds in 7 groups: Discovery, Build, Quality, Testing, Interface, Non-functional,
+Delivery) is also what JEV uses to categorize any task. There are two cycle shapes:
+
+- **Refine**: a research agent proposes options as JSON, JEV selects (multi-select, gated), and an
+  improvement agent implements them on top of the previous cycle's branch.
+- **Test** (unit, simulated user testing with personas, interface, accessibility, API contract,
+  exploratory/edge-case, regression, performance, security, acceptance, compatibility): the model
+  writes and runs the tests and reports findings by severity. JEV judges whether they are *the right
+  kind of tests and cover edge cases* (if not, it sends the tester back once with the gaps), picks
+  which findings to fix, and a fixer agent fixes them and adds regression tests.
+
+Cycles chain on each other's branches and the result is merged once at the end. When the
+requested count is done, JEV decides whether more of that work is needed: autopilot may extend
+within its cap, and balanced or restrictive mode brings JEV's recommendation to you.
+
+### The loop guard
+
+Small and heavily quantized models get stuck: they repeat the same tool call, oscillate between two
+actions, repeat an error, restate themselves, or produce degenerate text. Every turn the harness
+computes these signals without any model call, and when one fires JEV chooses `continue`,
+`reorient` (restate the goal, what was tried, what not to repeat), `reset` (fresh context with
+distilled notes), or `stop` (fail the run so the manager can retry, e.g. on a stronger model).
+Interventions escalate if the loop persists, and they appear in the shadow view.
+
 ### The comfort gate
 
 Every fleet decision runs through `Fleet.decide`:
@@ -244,11 +290,13 @@ rameness/
   learning.py       trace mining → SOP generation → validation
   context.py        artifact store, recall, JEV-ranked eviction
   improve.py        feedback, calibration, model-proposed cue tuning, training export
+  loopguard.py      loop / degeneration detection and JEV-chosen recovery
   llm.py            Anthropic SDK + OpenAI-compatible (llama-server, ollama, vLLM, DeepSeek) with prompted tools
   tools.py          bash/read/write/edit/grep, environment-aware
   publish.py        scrubbed publishing, registry index, install
   fleet/
-    manager.py      the manager: JEV decisions, comfort gate, CRUD, scheduling, supervision, merging
+    manager.py      the manager: JEV decisions, comfort gate, autonomy modes, CRUD, scheduling, supervision, merging
+    cycles.py       cycle programs (refine / test), the work taxonomy
     worker.py       rameness-runtime agent process (ask_manager, inbox, transcripts for resume/fork)
     slots.py        model / runtime discovery and capacity
     envs.py         local / ssh / container / exec environments and capability probes
@@ -263,7 +311,8 @@ install.sh          one-environment installer
 ## Status
 
 Tested end to end here with tmux, screen and subprocess sessions, the exec-prefix environment
-path, CLI-agent and rameness runtimes, and a local Ollama model. The herdr backend follows herdr's
+path, CLI-agent and rameness runtimes (including a real `claude -p` tester run), a local Ollama
+model, and the UI in headless Chrome. The herdr backend follows herdr's
 documented socket API but has not been run against a live herdr server yet; ssh and
 container environments share the tested exec path but have not been run against a real host.
 The server binds to 127.0.0.1 and has no authentication.
