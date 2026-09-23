@@ -1,0 +1,7 @@
+{
+  "id": "reporting.monthly_acquisition",
+  "kind": "skill",
+  "description": "Build the monthly customer acquisition report: new customers per channel and region for the previous completed month.",
+  "keywords": ["monthly", "acquisition", "report", "customer", "new", "channel"],
+  "instructions": "Period defaults to the previous completed calendar month. Count new customers by channel and region, compare with the month before, and render a markdown table plus a 3-line summary."
+}
