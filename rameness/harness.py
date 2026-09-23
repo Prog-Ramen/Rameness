@@ -150,7 +150,8 @@ class Harness:
         res.metrics.update({"seconds": round(time.time() - t0, 2), "jev_calls": self.jev.calls - j0,
                             "llm_calls": u1["calls"] - u0["calls"], "input_tokens": u1["input"] - u0["input"],
                             "output_tokens": u1["output"] - u0["output"],
-                            "jev_escalations": getattr(self.jev.backend, "escalations", 0)})
+                            "jev_escalations": getattr(self.jev.backend, "escalations", 0),
+                            "jev_fallbacks": len(getattr(self.jev.backend, "failures", []))})
         return res
 
     # ------------------------------------------------------------------ routes

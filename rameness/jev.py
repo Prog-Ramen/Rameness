@@ -147,9 +147,10 @@ class LLMJev(Backend):
     SYSTEM = ("You are JEV, a decision model inside an agent harness. You output calibrated "
               "probabilities only, as JSON. Never explain.")
 
-    def __init__(self, llm, timeout: float = 20.0):
+    def __init__(self, llm, timeout: float = 20.0, max_tokens: int = 4000):
         self.llm = llm
         self.timeout = timeout           # a decision that takes longer than this falls back to the cheap pass
+        self.max_tokens = max_tokens
 
     def _ask(self, mode, question, query, options, context):
         opts = "\n".join(f"- {o.id}: {o.text[:300]}" for o in options)
@@ -159,7 +160,8 @@ class LLMJev(Backend):
                   + (f"Context:\n{context[:3000]}\n" if context else "")
                   + f"Options:\n{opts}\n{rule}\n"
                   'Reply with JSON only: {"probs": {"<option id>": <probability>, ...}}')
-        data = self.llm.complete_json(self.SYSTEM, prompt, max_tokens=600, timeout=self.timeout)
+        # generous budget: reasoning models spend tokens thinking before they emit the JSON
+        data = self.llm.complete_json(self.SYSTEM, prompt, max_tokens=self.max_tokens, timeout=self.timeout)
         probs = data.get("probs", data) if isinstance(data, dict) else {}
         return [float(probs.get(o.id, 0.0)) for o in options]
 
@@ -214,6 +216,7 @@ class CascadeJev(Backend):
     def __init__(self, cheap: Backend, strong: Backend | None, band=(0.3, 0.7)):
         self.cheap, self.strong, self.band = cheap, strong, band
         self.escalations = 0
+        self.failures: list[str] = []    # escalations that fell back to the cheap pass (surfaced in metrics)
 
     def _unsure(self, probs):
         lo, hi = self.band
@@ -226,7 +229,8 @@ class CascadeJev(Backend):
         idx = [i for i, x in enumerate(p) if self.band[0] <= x <= self.band[1]]
         try:
             sub = self.strong.activate(question, query, [options[i] for i in idx], context)
-        except Exception:
+        except Exception as e:
+            self.failures.append(f"{type(e).__name__}: {str(e)[:120]}")
             return p
         self.escalations += 1
         for i, v in zip(idx, sub):
@@ -240,7 +244,8 @@ class CascadeJev(Backend):
         try:
             self.escalations += 1
             return self.strong.choose(question, query, options, context)
-        except Exception:
+        except Exception as e:
+            self.failures.append(f"{type(e).__name__}: {str(e)[:120]}")
             return p
 
 
