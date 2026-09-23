@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from . import __version__
@@ -99,6 +102,55 @@ def cmd_init(a):
     print(f"initialised {d}")
 
 
+def _intake_receive(a, h) -> None:
+    """Relay side (GitHub workflow): forward one encrypted issue to the private intake, then scrub it."""
+    from .relay import RelayError, receive
+    gh = lambda *args, **kw: subprocess.run(["gh", *args], capture_output=True, text=True, **kw)
+    issue = a.arg
+    v = gh("issue", "view", issue, "--repo", a.repo, "--json", "body,author")
+    if v.returncode:
+        sys.exit(v.stderr)
+    data = json.loads(v.stdout)
+    key = os.environ.get("RAMENESS_INTAKE_PRIVATE_KEY", "").encode()
+    if not key:
+        sys.exit("RAMENESS_INTAKE_PRIVATE_KEY is not set")
+    intake_repo = re.sub(r"^https://github.com/|\.git$", "", a.intake)
+
+    def open_pr(branch, base, title, body):
+        r = gh("pr", "create", "--repo", intake_repo, "--head", branch, "--base", base, "--title", title,
+               "--body-file", "-", input=body)
+        return r.stdout.strip() or None
+    try:
+        out = receive(data["body"], data["author"]["login"], f"{a.repo}#{issue}", key, a.intake,
+                      Path(tempfile.mkdtemp()), h.org, open_pr)
+        msg = "Received - your SOP is now under private review by Prog-Ramen. Thank you!"
+        print(f"forwarded {out['id']} -> {out['pr'] or out['branch']}")
+    except (RelayError, Exception) as e:
+        msg = "This submission could not be accepted (it failed validation or the private-data scan). " \
+              "Run `rameness sop classify` and the scans locally, then submit again."
+        print(f"rejected: {type(e).__name__}: {e}", file=sys.stderr)
+    gh("issue", "edit", issue, "--repo", a.repo, "--body", "_Submission contents removed after relay._")
+    gh("issue", "comment", issue, "--repo", a.repo, "--body", msg)
+    gh("issue", "close", issue, "--repo", a.repo)
+    gh("issue", "lock", issue, "--repo", a.repo)
+
+
+def _sign_off_prompt(sop, cls, files) -> bool:
+    """Ambiguous SOPs only: show exactly what would be submitted and why JEV is unsure."""
+    if not sys.stdin.isatty():
+        return False
+    print(f"\nJEV is not certain {sop.id} is free of personal or organization-specific use:\n  {cls['reason']}")
+    if cls.get("uncertain"):
+        print(f"  details it could not call: {', '.join(cls['uncertain'])}")
+    print("files that would be submitted for private review:")
+    for f in files:
+        print(f"  {f}")
+        if f.endswith((".py", ".sh", ".md")):
+            for line in (sop.path / f).read_text(errors="replace").splitlines()[:40]:
+                print(f"    | {line}")
+    return input("Sign off that this contains nothing personal or organization-specific? [y/N] ").strip().lower() == "y"
+
+
 def cmd_sop(a):
     h = _harness(a, need_llm=False)
     lib = h.lib
@@ -145,15 +197,35 @@ def cmd_sop(a):
         ids = [a.arg] if a.arg else sorted(i for i, x in lib.sops.items() if x.scope == "private")
         for i in ids:
             r = pub.classify(h.jev, lib.get(i), h.org)
-            tag = "unclassified" if r["unclassified"] else r["visibility"]
+            tag = r["visibility"]
             print(f"{tag:12s} {i:32s} {r['reason']}" + (f"  specific: {r['specific']}" if r["specific"] else ""))
     elif a.action == "propose":
         from .registry import Registry, RegistryError
         try:
-            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal)
+            r = Registry(h.cfg, h.home, h.org, h.jev).propose(
+                lib.get(a.arg), override_personal=a.override_personal,
+                sign_off=True if a.sign_off else _sign_off_prompt)
         except RegistryError as e:
             sys.exit(f"not proposed: {e}")
         print(f"proposed {r['id']} to the private staging repo ({r['where']})\n  branch {r['branch']}\n  review: {r['pr']}")
+    elif a.action == "submit":
+        from .registry import Registry, RegistryError
+        try:
+            r = Registry(h.cfg, h.home, h.org, h.jev).submit(
+                lib.get(a.arg), override_personal=a.override_personal,
+                sign_off=True if a.sign_off else _sign_off_prompt)
+        except RegistryError as e:
+            sys.exit(f"not submitted: {e}")
+        print(f"submitted {r['id']} through the encrypted relay: {r['issue']}\n"
+              "Only ciphertext is public; Prog-Ramen reviewers will see it in the private intake repo.")
+    elif a.action == "intake-receive":
+        _intake_receive(a, h)
+    elif a.action == "relay-init":
+        from .relay import init_relay
+        r = init_relay(Path(a.arg or "."))
+        print(f"relay workflow and public key added under {a.arg or '.'}/.github\n"
+              f"Add {r['private_key']} as the INTAKE_PRIVATE_KEY secret of the public repo, then delete the file.\n"
+              "Also add INTAKE_RELAY_TOKEN (contents + pull requests write on the intake repo, issues write here).")
     elif a.action == "proposals":
         from .registry import Registry
         for p in Registry(h.cfg, h.home, h.org, h.jev).proposals():
@@ -406,6 +478,10 @@ def main(argv=None):
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--repo", help="intake-receive: the public repo (owner/name) holding the issue")
+    p.add_argument("--intake", help="intake-receive: the private intake repo URL")
+    p.add_argument("--sign-off", action="store_true",
+                   help="propose: confirm an ambiguous SOP without the interactive review")
     p.add_argument("--override-personal", action="store_true",
                    help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)

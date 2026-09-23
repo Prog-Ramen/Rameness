@@ -33,8 +33,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
+import uuid
 import urllib.request
 from pathlib import Path
 
@@ -117,6 +119,8 @@ class Registry:
         self.public = rc.get("public")
         self.release_mode = rc.get("release", "pr")
         self.assume_private = bool(rc.get("staging_assume_private"))
+        self.relay_repo = rc.get("relay_repo") or "Prog-Ramen/RamenSOPs"
+        self.relay_key = rc.get("relay_key")
         self.home = home / "registry"
         self.org, self.jev = org, jev
         self.ledger = self.home / "proposals.json"
@@ -175,9 +179,9 @@ class Registry:
 
     # ---- propose (private library -> private staging PR)
 
-    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True) -> dict:
-        if not self.staging:
-            raise RegistryError("no staging repo configured (registry.staging) - it must be a PRIVATE repo")
+    def check(self, sop: SOP, override_personal: bool = False, reclassify: bool = True,
+              sign_off=None) -> tuple[dict, bool]:
+        """Everything that must hold before an SOP leaves the machine. Returns (classification, signed_off)."""
         if sop.scope != "private":
             raise RegistryError(f"{sop.id} is already public")
         if sop.status != "validated":
@@ -189,10 +193,29 @@ class Registry:
             raise RegistryError("secrets found - never proposable:\n  " + "\n  ".join(secrets))
         if findings:
             raise RegistryError("private data found - remove it first:\n  " + "\n  ".join(findings))
-        if cls["visibility"] != "shareable" and not override_personal:
-            what = "could not be classified" if cls.get("unclassified") else "was classified as not shareable"
-            raise RegistryError(f"{sop.id} {what} ({cls['reason']}); it stays private. If you are sure it is "
-                                "general, pass --override-personal: it still goes only to the private intake review.")
+        signed = False
+        if cls["visibility"] == "ambiguous":
+            files = sorted(str(f.relative_to(sop.path)) for f in sop.path.rglob("*") if f.is_file()
+                           and "__pycache__" not in f.parts)
+            ok = sign_off(sop, cls, files) if callable(sign_off) else bool(sign_off)
+            if not ok:
+                raise RegistryError(f"{sop.id} is ambiguous ({cls['reason']}) and needs your sign-off: review the "
+                                    "files and JEV's evidence, then confirm (or pass --sign-off).")
+            signed = True
+        elif cls["visibility"] != "shareable" and not override_personal:
+            raise RegistryError(f"{sop.id} was classified as not shareable ({cls['reason']}); it stays private. "
+                                "If you are sure it is general, pass --override-personal: it still goes only to "
+                                "the private intake review.")
+        return cls, signed
+
+    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True,
+                sign_off=None) -> dict:
+        """For Prog-Ramen members (write access to the private intake repo). ``sign_off``: for
+        ambiguous SOPs, a callable(sop, classification, files) -> bool that shows the contributor
+        exactly what would be submitted and JEV's evidence (or True for a prior explicit sign-off)."""
+        if not self.staging:
+            raise RegistryError("no intake repo configured (registry.staging) - it must be a PRIVATE repo")
+        cls, signed = self.check(sop, override_personal, reclassify, sign_off)
         ok, how = visibility(self.staging, self.assume_private)
         if not ok:
             raise RegistryError(f"refusing to push: staging repo is not verifiably private ({how})")
@@ -212,10 +235,12 @@ class Registry:
         body = (f"## Proposed SOP `{sop.id}`\n\n{sop.description}\n\n"
                 f"**Contributor:** {who}  \n**Permissions:** {', '.join(sop.permissions) or 'none'}  \n"
                 f"**Tests:** {len(sop.tests)} (passing)\n\n"
-                f"### JEV classification\n- Verdict: **{'unclassified' if cls.get('unclassified') else cls['visibility']}**"
-                f"{' (overridden by the contributor)' if override_personal and cls['visibility'] != 'shareable' else ''}\n"
+                f"### JEV classification\n- Verdict: **{cls['visibility']}**"
+                f"{' - contributor signed off after reviewing the files and evidence' if signed else ''}"
+                f"{' (overridden by the contributor)' if override_personal and cls['visibility'] == 'private' else ''}\n"
                 f"- Reason: {cls['reason']}\n- Probabilities: {probs or 'n/a'}\n"
-                f"- Organization-specific details JEV found: {', '.join(cls.get('specific') or []) or 'none'}\n\n"
+                f"- Organization-specific details JEV found: {', '.join(cls.get('specific') or []) or 'none'}\n"
+                f"- Details JEV was unsure about: {', '.join(cls.get('uncertain') or []) or 'none'}\n\n"
                 "### Scans\nrameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
                 (" + trufflehog" if shutil.which("trufflehog") else "") + ": clean.\n\n"
                 "### Reviewer checklist\n- [ ] Nothing here identifies an organization, customer, person or internal system\n"
@@ -226,7 +251,52 @@ class Registry:
         pr = self._gh_pr(self.staging, branch, self._base, f"SOP: {sop.id}", body)
         entry = {"id": sop.id, "branch": branch, "t": time.time(), "staging": self.staging, "where": how,
                  "pr": pr or self._compare_url(self.staging, branch, self._base), "classification": cls["visibility"],
-                 "overridden": cls["visibility"] != "shareable"}
+                 "signed_off": signed, "overridden": cls["visibility"] == "private"}
+        self._record(entry)
+        return entry
+
+    # ---- submit (anyone: encrypted relay through a public issue)
+
+    def submit(self, sop: SOP, override_personal: bool = False, sign_off=None, create_issue=None) -> dict:
+        """For contributors without access to the intake repo: seal the SOP with the intake's public
+        key and open an issue on the public repo containing only ciphertext."""
+        from . import relay
+        import urllib.request
+        cls, signed = self.check(sop, override_personal, True, sign_off)
+        src = self.relay_key
+        if not src:
+            raise RegistryError("no relay key configured (registry.relay_key)")
+        try:
+            if re.match(r"(https?|file)://", src):
+                with urllib.request.urlopen(src, timeout=15) as r:
+                    pem = r.read()
+            else:
+                pem = Path(src).expanduser().read_bytes()
+        except Exception as e:
+            raise RegistryError(f"cannot load the intake public key from {src}: {e}")
+        tmp = Path(tempfile.mkdtemp(prefix="rameness-submit-"))
+        try:
+            sanitized_copy(sop, tmp / "sop")
+            meta = {"id": sop.id, "description": sop.description, "signed_off": signed,
+                    "classification": {k: cls.get(k) for k in ("visibility", "reason", "specific", "uncertain")}}
+            body = relay.seal(pem, relay.pack(tmp / "sop", meta))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        title = f"SOP submission {uuid.uuid4().hex[:8]}"            # reveals nothing about the SOP
+        if create_issue:
+            url = create_issue(self.relay_repo, title, body)
+        elif shutil.which("gh"):
+            p = subprocess.run(["gh", "issue", "create", "--repo", self.relay_repo, "--title", title, "--body-file", "-"],
+                               input=body, capture_output=True, text=True)
+            if p.returncode:
+                raise RegistryError(f"could not open the submission issue: {p.stderr.strip()}")
+            url = p.stdout.strip()
+        else:
+            out = self.home / f"{title.replace(' ', '-')}.txt"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(body)
+            url = f"(no gh) open an issue on {self.relay_repo} titled '{title}' with the contents of {out}"
+        entry = {"id": sop.id, "via": "relay", "issue": url, "t": time.time(), "signed_off": signed}
         self._record(entry)
         return entry
 

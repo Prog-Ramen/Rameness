@@ -266,11 +266,15 @@ private library ──propose──► Prog-Ramen/RamenSOPs-intake (PRIVATE) ─
    proper nouns). JEV decides which of them are specific to one organization.
 3. **JEV's verdict.** With those findings in view, JEV chooses `shareable`, `generalize` (a useful
    technique that hard-codes one organization's constants: stays private and lists what to turn
-   into parameters), or `private`. Only a confident `shareable` with no organization-specific
-   details counts.
+   into parameters), or `private`.
 4. **Only a model-backed JEV decides.** This call always goes to the strong backend (your served
-   JEV or an LLM). With only the keyword scorer available, the SOP is `unclassified` and a person
-   decides.
+   JEV or an LLM), never the keyword scorer alone.
+
+| Outcome | When | What happens |
+|---|---|---|
+| `shareable` | JEV is highly confident (≥ 0.85) it is general and flagged nothing | proposed with no sign-off |
+| `ambiguous` | JEV is not highly certain it isn't a personal use case: lower confidence, details it couldn't call either way, or no model-backed JEV | you see the exact files and JEV's evidence and **sign off**; the PR records it |
+| `private` | JEV is confident it is one organization's use case, or it hard-codes organization-specific details | blocked; `--override-personal` still only sends it to private review |
 
 `rameness sop classify` shows the verdict and the details JEV flagged. `evals/shareability.py` is a
 labelled set of general, company-specific and subtle business-rule SOPs, used to measure leaks
@@ -289,6 +293,16 @@ labelled set of general, company-specific and subtle business-rule SOPs, used to
   PR whose body shows JEV's verdict, the specific details it weighed, its probabilities, and a
   reviewer checklist. Secret findings can never be overridden. Every clone rameness manages has a
   pre-push hook that re-scans the tree.
+* **Outside contributors: encrypted relay.** People outside Prog-Ramen can't push to a private
+  repo, and giving them access would show them every other submission. `rameness sop submit <id>`
+  runs the same checks, then seals a sanitized copy with the intake's public key
+  (RSA-OAEP-SHA256 + AES-256-GCM). It opens an issue on RamenSOPs whose title is `SOP submission <random>`
+  and whose body is only ciphertext. The `intake-relay` workflow, which holds the private key as a
+  secret, unseals and safely unpacks it without executing anything, re-scans it, and opens the PR
+  in the private intake repo credited to the submitter. It then wipes the issue body and closes and
+  locks the issue. The public never sees what was submitted. Set it up with
+  `rameness sop relay-init <public-repo-checkout>` (adds the workflow and public key; you store the
+  private key and a relay token as secrets).
 * On merge, the intake repo's `release-to-public` workflow re-scans the merged SOPs and opens a
   release PR on RamenSOPs (`rameness sop release` does the same by hand).
 * `rameness sop registry-init <dir>` scaffolds the intake repo: README, CODEOWNERS
@@ -364,7 +378,8 @@ rameness/
   llm.py            Anthropic SDK + OpenAI-compatible (llama-server, ollama, vLLM, DeepSeek) with prompted tools
   tools.py          bash/read/write/edit/grep, environment-aware
   publish.py        scrubber, secret scanning, personal-vs-general classification, local publish, index
-  registry.py       private staging → public release flow, visibility checks, pre-push hooks
+  registry.py       private intake → public release flow, visibility checks, pre-push hooks, sign-off
+  relay.py          encrypted submission relay for contributors without intake access
   remote.py         lazy, activation-driven pulls of individual SOPs from a sharded registry index
   fleet/
     manager.py      the manager: JEV decisions, comfort gate, autonomy modes, CRUD, scheduling, supervision, merging

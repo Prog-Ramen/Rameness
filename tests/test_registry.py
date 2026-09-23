@@ -82,16 +82,39 @@ class RegistryTest(unittest.TestCase):
         self.assertIn("18%", r["specific"])
         self.assertIn("generalize", r["reason"])
 
-    def test_keyword_only_jev_cannot_mark_shareable(self):
+    def test_keyword_only_jev_needs_sign_off(self):
         gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
                        GENERIC, ["text", "convert", "format", "utility", "generic"])
         r = publish.classify(Jev(LexicalJev()), gen, self.org)
-        self.assertTrue(r["unclassified"])
-        self.assertEqual(r["visibility"], "private")
+        self.assertEqual((r["visibility"], r["unclassified"]), ("ambiguous", True))
         reg = self.reg()
         reg.jev = Jev(LexicalJev())
-        with self.assertRaisesRegex(RegistryError, "could not be classified"):
+        with self.assertRaisesRegex(RegistryError, "needs your sign-off"):
             reg.propose(gen)
+        shown = {}
+        out = reg.propose(gen, sign_off=lambda sop, cls, files: shown.update(files=files) or True)
+        self.assertTrue(out["signed_off"])
+        self.assertIn("run.py", shown["files"])                     # the contributor saw what goes out
+        body = sh(self.tmp, "--git-dir", str(self.staging), "log", "-1", "--format=%s", out["branch"]).stdout
+        self.assertIn("text.upper", body)
+
+    def test_confident_verdicts_skip_sign_off(self):
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        asked = []
+        out = self.reg().propose(gen, sign_off=lambda *a: asked.append(1) or True)
+        self.assertEqual(asked, [])                                  # shareable with high certainty: no prompt
+        self.assertFalse(out["signed_off"])
+
+    def test_lukewarm_shareable_is_ambiguous(self):
+        class Lukewarm(Judge):
+            def choose(self, question, query, options, context=""):
+                return [0.7, 0.2, 0.1] if question == SHARE_Q else super().choose(question, query, options, context)
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        r = publish.classify(Jev(CascadeJev(LexicalJev(), Lukewarm())), gen, self.org)
+        self.assertEqual(r["visibility"], "ambiguous")
+        self.assertIn("shareable only 70%", r["reason"])
 
     def test_propose_goes_only_to_staging_sanitized(self):
         gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
