@@ -42,7 +42,8 @@ DEFAULTS: dict = {
     },
     "registry": {
         "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # where reviewed SOPs are released
-        "staging": None,                  # a PRIVATE repo where proposals are reviewed (e.g. Prog-Ramen/RamenSOPs-staging)
+        # PRIVATE org-owned intake repo: proposals are reviewed there by Prog-Ramen members only
+        "staging": "git@github.com:Prog-Ramen/RamenSOPs-intake.git",
         "release": "pr",                  # pr | direct
         "staging_assume_private": False,  # for non-GitHub hosts whose visibility can't be checked
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/sops/index.json",
