@@ -45,6 +45,9 @@ DEFAULTS: dict = {
         # PRIVATE org-owned intake repo: proposals are reviewed there by Prog-Ramen members only
         "staging": "git@github.com:Prog-Ramen/RamenSOPs-intake.git",
         "release": "pr",                  # pr | direct
+        # encrypted relay for contributors without intake access (rameness sop submit)
+        "relay_repo": "Prog-Ramen/RamenSOPs",
+        "relay_key": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/.github/intake_public_key.pem",
         "staging_assume_private": False,  # for non-GitHub hosts whose visibility can't be checked
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/sops/index.json",
         "auto_pull": "gated",             # gated (JEV + comfort gate + permission guard) | ask (always ask) | off

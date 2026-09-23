@@ -55,17 +55,21 @@ def run(jev: Jev, only: list[str] | None = None) -> dict:
         (d / "sop.json").write_text(json.dumps({"id": sid, "description": desc, "keywords": kw, "status": "validated"}))
         (d / "run.py").write_text(script)
         r = classify(jev, Library([(tmp, "private")]).get(sid), Org(), save=False)
-        verdict = "unclassified" if r["unclassified"] else r["visibility"]
-        flag = "LEAK" if (not general and verdict == "shareable") else "over" if (general and verdict != "shareable") else "ok"
+        verdict = r["visibility"]
+        flag = ("LEAK" if not general and verdict == "shareable" else
+                "ask" if verdict == "ambiguous" else
+                "over" if general and verdict == "private" else "ok")
         rows.append({"id": sid, "general": general, "verdict": verdict, "flag": flag, "reason": r["reason"],
                      "specific": r["specific"]})
         print(f"{flag:5s} {'general ' if general else 'specific'} -> {verdict:12s} {sid:22s} {r['reason'][:90]}", flush=True)
     leaks = sum(r["flag"] == "LEAK" for r in rows)
     over = sum(r["flag"] == "over" for r in rows)
+    asked = sum(r["flag"] == "ask" for r in rows)
     n_spec = sum(not r["general"] for r in rows)
     n_gen = sum(r["general"] for r in rows)
-    print(f"\nleaks (specific marked shareable): {leaks}/{n_spec}    general not shared: {over}/{n_gen}")
-    return {"rows": rows, "leaks": leaks, "over": over}
+    print(f"\nleaks (specific marked shareable): {leaks}/{n_spec}    general blocked: {over}/{n_gen}    "
+          f"sign-offs asked: {asked}/{len(rows)}")
+    return {"rows": rows, "leaks": leaks, "over": over, "asked": asked}
 
 
 def main(argv=None):

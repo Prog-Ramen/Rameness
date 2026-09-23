@@ -155,7 +155,7 @@ def strong_jev(jev: Jev) -> Jev | None:
     return None
 
 
-def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
+def classify(jev: Jev, sop: SOP, org: Org, save: bool = True, confident: float = 0.85) -> dict:
     """Shareable (may be proposed) or private. JEV decides; code only gathers evidence.
 
     1. The scrubber (secrets, private hosts/IPs, emails, home paths, your private_terms) makes an
@@ -163,44 +163,60 @@ def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
     2. Candidate details (numbers with units, UPPER_CASE constants, plan/tier/account codes,
        #channels, repo paths, proper nouns...) are extracted, and JEV decides which of them are
        specific to one organization.
-    3. JEV decides shareable / generalize / private with those findings in view. Only a confident
-       "shareable" with no organization-specific details counts; "generalize" stays private and
-       lists what to parameterize.
-    Only a strong JEV (served model or LLM) may call something shareable. With just the keyword
-    pass available, the SOP is marked unclassified and a person decides.
+    3. JEV decides shareable / generalize / private with those findings in view.
+
+    Outcomes:
+      shareable - JEV is highly confident (>= ``confident``) it is general and flagged nothing
+      ambiguous - JEV is not highly certain it isn't a personal use case (lower confidence,
+                  details it couldn't call either way, or no model-backed JEV): the contributor
+                  signs off after seeing the files and JEV's evidence
+      private   - JEV is confident it is one organization's use case, or it hard-codes
+                  organization-specific details (then the reason lists what to parameterize)
+    Only a strong JEV (served model or LLM) may call something shareable.
     """
     findings = scrub(sop, org)
     body = "".join(f.read_text(errors="replace")[:1500] for f in sorted(sop.path.glob("*"))
                    if f.is_file() and f.suffix in (".py", ".sh", ".md"))
-    result: dict = {"visibility": "private", "specific": [], "unclassified": False, "probs": {}, "decision": None,
-                    "findings": len(findings)}
+    result: dict = {"visibility": "private", "specific": [], "uncertain": [], "unclassified": False, "probs": {},
+                    "decision": None, "findings": len(findings)}
     decider = strong_jev(jev)
     if findings:
         result["reason"] = f"scrubber: {findings[0]}" + (f" (+{len(findings) - 1} more)" if len(findings) > 1 else "")
     elif decider is None:
-        result.update(unclassified=True, reason="no model-backed JEV available: a person must decide")
+        result.update(visibility="ambiguous", unclassified=True,
+                      reason="no model-backed JEV available: needs your sign-off")
     else:
         details = extract_details(sop)
         if details:
             d1 = decider.activate(SPECIFIC_Q, f"{sop.id}: {sop.description}",
                                   [Option(f"d{i}", f"{x['text']}  (in {x['where']}: {x['context']})")
                                    for i, x in enumerate(details)])
-            result["specific"] = [details[int(k[1:])]["text"] for k, p in d1.top(len(details)) if p >= 0.5]
+            ranked = [(details[int(k[1:])]["text"], p) for k, p in d1.top(len(details))]
+            result["specific"] = [t for t, p in ranked if p >= 0.7]
+            result["uncertain"] = [t for t, p in ranked if 0.3 <= p < 0.7]
         q = (f"{sop.id}: {sop.description}\ncode:\n{body[:1800]}\norganization-specific details found: "
              f"{', '.join(result['specific']) or 'none'}")
         d2 = decider.choose(SHARE_Q, q, SHARE_OPTIONS)
         result.update(probs=d2.probs, decision=d2.id)
-        if d2.best == "shareable" and d2.probs["shareable"] >= 0.6 and not result["specific"]:
-            result.update(visibility="shareable", reason="JEV: general")
-        elif d2.best == "private":
-            result["reason"] = "JEV: one organization's use case"
-        else:
+        ps = d2.probs
+        if result["specific"] or (d2.best == "generalize" and ps["generalize"] >= 0.6):
             result["reason"] = ("JEV: generalize first - make these parameters: " + ", ".join(result["specific"])
-                                if result["specific"] else "JEV: not clearly general")
+                                if result["specific"] else "JEV: generalize first")
+        elif d2.best == "private" and ps["private"] >= 0.6:
+            result["reason"] = "JEV: one organization's use case"
+        elif d2.best == "shareable" and ps["shareable"] >= confident and not result["uncertain"]:
+            result.update(visibility="shareable", reason=f"JEV: general ({ps['shareable']:.0%})")
+        else:
+            doubts = [f"shareable only {ps['shareable']:.0%}"] if ps["shareable"] < confident else []
+            if result["uncertain"]:
+                doubts.append("unsure about " + ", ".join(result["uncertain"]))
+            if d2.best != "shareable":
+                doubts.append(f"leans {d2.best}")
+            result.update(visibility="ambiguous", reason="JEV is not certain: " + "; ".join(doubts))
     if save and sop.scope == "private":
         data = json.loads((sop.path / "sop.json").read_text())
         data["visibility"] = result["visibility"]
-        data["classified"] = {k: result[k] for k in ("reason", "probs", "specific", "unclassified")}
+        data["classified"] = {k: result[k] for k in ("reason", "probs", "specific", "uncertain", "unclassified")}
         (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
     return result
 
