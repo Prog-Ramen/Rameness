@@ -1,0 +1,8 @@
+{
+  "id": "data.csv_summary",
+  "description": "Summarise a CSV file: row count, columns, and min/max/mean for numeric columns.",
+  "keywords": ["csv", "summary", "statistics", "columns", "rows", "spreadsheet", "describe"],
+  "inputs": {"type": "object", "properties": {"file": {"type": "string"}, "delimiter": {"type": "string"}}, "required": ["file"]},
+  "outputs": {"rows": "integer", "columns": "array", "numeric": "object"},
+  "permissions": ["fs:read"]
+}

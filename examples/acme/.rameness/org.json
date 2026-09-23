@@ -1,0 +1,7 @@
+{
+  "name": "Acme (example)",
+  "facts": ["Customer records live in the analytics Postgres read replica (DSN in $ACME_ANALYTICS_DSN)."],
+  "defaults": {"report_type": "monthly_acquisition", "period": "previous_month"},
+  "glossary": {"customer report": "the monthly customer acquisition report"},
+  "private_terms": ["analytics.acme.internal", "ACME_ANALYTICS_DSN"]
+}

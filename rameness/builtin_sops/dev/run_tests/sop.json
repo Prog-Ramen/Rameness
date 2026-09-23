@@ -1,0 +1,8 @@
+{
+  "id": "dev.run_tests",
+  "description": "Detect the project's test runner (pytest, unittest, npm, cargo, go) and run it; returns pass/fail and the output tail.",
+  "keywords": ["test", "tests", "pytest", "unittest", "npm test", "cargo test", "go test", "run"],
+  "inputs": {"type": "object", "properties": {"root": {"type": "string"}, "args": {"type": "string"}}},
+  "outputs": {"runner": "string", "passed": "boolean", "output": "string"},
+  "permissions": ["exec"]
+}

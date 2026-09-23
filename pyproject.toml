@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rameness"
+version = "0.1.0"
+description = "Adaptive agent harness driven by a JEV decision model: SOP learning, routing, context management"
+requires-python = ">=3.10"
+dependencies = ["anthropic>=1.0", "openai>=1.40"]
+
+[project.scripts]
+rameness = "rameness.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rameness*"]
+
+[tool.setuptools.package-data]
+rameness = ["builtin_sops/**/*", "fleet/ui/*"]

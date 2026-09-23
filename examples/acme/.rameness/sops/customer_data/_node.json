@@ -1,0 +1,6 @@
+{
+  "description": "Retrieve customer records from an authorized data source",
+  "keywords": ["customer", "customers", "clients", "accounts", "records", "retrieve"],
+  "requires": [{"name": "data_source", "hints": ["postgres", "salesforce", "hubspot", "csv"],
+                "question": "Which data source holds the customer data (postgres, salesforce, csv...)?"}]
+}
