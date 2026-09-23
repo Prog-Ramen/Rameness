@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>rameness</title>
+<style>
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --ink:#1b1c1f; --muted:#6b6f76; --faint:#9aa0a8; --line:#e7e6e2;
+  --accent:#5b5bd6; --accent-soft:#ececfb; --ok:#2f9e6b; --warn:#c98a12; --bad:#d4493f; --idle:#a3a7ae;
+  --shadow:0 1px 2px rgba(20,20,30,.04),0 8px 24px rgba(20,20,30,.06); --r:14px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111214; --panel:#191a1d; --ink:#ececee; --muted:#9a9ea6; --faint:#6c7078; --line:#2a2c30;
+  --accent:#8b8bf5; --accent-soft:#25264a; --ok:#4cc38a; --warn:#e3a92f; --bad:#f06a60; --idle:#6f737b;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#111214; --panel:#191a1d; --ink:#ececee; --muted:#9a9ea6; --faint:#6c7078; --line:#2a2c30;
+  --accent:#8b8bf5; --accent-soft:#25264a; --ok:#4cc38a; --warn:#e3a92f; --bad:#f06a60; --idle:#6f737b;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25); color-scheme:dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1320px;margin:0 auto;padding:0 20px 40px}
+header{display:flex;align-items:center;gap:14px;padding:18px 0 6px}
+.brand{font-weight:650;font-size:17px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.brand i{width:22px;height:22px;border-radius:7px;background:conic-gradient(from 200deg,var(--accent),#b06be0,var(--accent));display:inline-block}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.pill{font-size:12px;color:var(--muted);border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:3px 10px;white-space:nowrap}
+.pill b{color:var(--ink);font-weight:550}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:7px 12px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{background:transparent}
+.btn.small{padding:4px 9px;font-size:12.5px;border-radius:8px}
+.btn.danger{color:var(--bad)}
+.needs{position:relative}
+.needs .n{position:absolute;top:-6px;right:-6px;background:var(--warn);color:#fff;font-size:11px;border-radius:99px;padding:0 6px;line-height:18px}
+.hero{padding:34px 0 10px;text-align:center}
+.hero h1{margin:0 0 16px;font-size:clamp(22px,3.2vw,30px);font-weight:600;letter-spacing:-.02em}
+.hero h1 span{color:var(--muted);font-weight:450}
+.cmd{display:flex;gap:8px;max-width:780px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:8px;box-shadow:var(--shadow)}
+.cmd textarea{flex:1;border:0;outline:0;background:transparent;resize:none;padding:8px 10px;min-height:44px;max-height:160px}
+.intake{min-height:28px;margin:12px auto 0;max-width:780px;color:var(--muted);font-size:13px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+.intake .opt{display:inline-flex;align-items:center;gap:6px}
+.intake .bar{width:46px;height:5px;border-radius:9px;background:var(--line);overflow:hidden}
+.intake .bar i{display:block;height:100%;background:var(--accent)}
+.tabs{display:flex;gap:4px;margin:18px 0 14px;border-bottom:1px solid var(--line)}
+.tab{border:0;background:none;padding:10px 14px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);border-color:var(--accent)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.panel h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.ph{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ph .sp{margin-left:auto;display:flex;gap:6px}
+.pb{padding:14px 16px}
+.canvas{overflow:auto;min-height:420px;max-height:70vh}
+svg text{font-family:inherit}
+.node rect.card{fill:var(--panel);stroke:var(--line);stroke-width:1}
+.node.sel rect.card{stroke:var(--accent);stroke-width:2}
+.node{cursor:pointer}
+.node:hover rect.card{stroke:var(--faint)}
+.node .t{font-size:12.5px;font-weight:560;fill:var(--ink)}
+.node .s{font-size:11px;fill:var(--muted)}
+.edge{fill:none;stroke:var(--line);stroke-width:1.6}
+.dep{fill:none;stroke:var(--faint);stroke-width:1.2;stroke-dasharray:4 4}
+.forke{fill:none;stroke:var(--accent);stroke-width:1.2;stroke-dasharray:1 4;stroke-linecap:round}
+@keyframes pulse{0%{r:5}50%{r:8;opacity:.35}100%{r:5}}
+.pulse{animation:pulse 1.8s ease-in-out infinite}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:9px;margin-right:5px;vertical-align:1px}
+.kv{display:grid;grid-template-columns:92px 1fr;gap:6px 10px;font-size:13px}
+.kv div:nth-child(odd){color:var(--muted)}
+.chip{display:inline-block;font-size:11.5px;border-radius:99px;padding:1px 8px;background:var(--accent-soft);color:var(--accent);font-weight:550}
+.st{font-size:11.5px;border-radius:99px;padding:1px 8px;font-weight:550;border:1px solid currentColor}
+pre{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0 0}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sec{margin-top:16px} .sec>.lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.prob{display:grid;grid-template-columns:120px 1fr 44px;gap:8px;align-items:center;font-size:12.5px;margin:3px 0}
+.prob .b{height:6px;background:var(--line);border-radius:9px;overflow:hidden}
+.prob .b i{display:block;height:100%;background:var(--faint)}
+.prob.win .b i{background:var(--accent)} .prob.win span:first-child{font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel)}
+.card .top{display:flex;align-items:center;gap:8px}
+.card .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cap{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+.cap i{width:14px;height:14px;border-radius:5px;background:var(--line)}
+.cap i.on{background:var(--accent)}
+.gpu{margin-top:8px;font-size:12px}
+.gpu .b{height:5px;background:var(--line);border-radius:9px;overflow:hidden;margin-top:3px}
+.gpu .b i{display:block;height:100%;background:var(--ok)}
+.dec{padding:12px 0;border-bottom:1px solid var(--line)}
+.dec:last-child{border:0}
+.dec .q{font-weight:560;font-size:13px}
+.dec .query{color:var(--muted);font-size:12.5px;margin:2px 0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer{position:fixed;inset:0 0 0 auto;width:min(460px,100vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .2s;z-index:10;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.drawer.open{transform:none}
+.drawer .body{overflow:auto;padding:16px 18px;flex:1}
+.esc{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.esc .qq{white-space:pre-wrap;font-size:13px;max-height:180px;overflow:auto}
+input.in,select.in,textarea.in{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:6px 9px;outline:0;min-width:0}
+input.in:focus,textarea.in:focus{border-color:var(--accent)}
+.feed{font-size:12.5px;max-height:300px;overflow:auto}
+.feed div{padding:4px 0;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+.feed .ty{color:var(--faint);min-width:74px}
+.empty{color:var(--muted);text-align:center;padding:50px 10px}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:20}
+.toast.on{opacity:1}
+.shadow{display:flex;align-items:center;gap:10px;margin:6px 0 0;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:13px;cursor:pointer;min-height:38px;overflow:hidden}
+.shadow .eye{width:9px;height:9px;border-radius:9px;background:var(--accent);flex:none;box-shadow:0 0 0 0 var(--accent);animation:blink 2.4s infinite}
+@keyframes blink{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 60%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.shadow .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.shadow .txt b{font-weight:600}
+.gate{font-size:11px;border-radius:99px;padding:1px 8px;font-weight:600;white-space:nowrap}
+.gate.jev{background:var(--accent-soft);color:var(--accent)}
+.gate.deferred{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.gate.director{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.gate.noted{background:var(--line);color:var(--muted)}
+.tl{position:relative;padding-left:22px}
+.tl:before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--line);border-radius:2px}
+.ev{position:relative;padding:10px 0 14px}
+.ev:before{content:"";position:absolute;left:-19px;top:15px;width:10px;height:10px;border-radius:9px;background:var(--panel);border:2px solid var(--accent)}
+.ev.deferred:before{border-color:var(--warn)} .ev.director:before{border-color:var(--ok)}
+.ev.fresh{animation:fadein .6s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.ev .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.ev .q{font-weight:560;margin:3px 0 1px}
+.ev .query{font-size:12.5px;color:var(--muted);margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sig{display:inline-flex;align-items:center;gap:5px}
+.sig .b{width:40px;height:5px;background:var(--line);border-radius:9px;overflow:hidden}
+.sig .b i{display:block;height:100%;background:var(--warn)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:4px 10px;font-size:12.5px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--accent-soft);color:var(--accent)}
+.node.think rect.card{stroke:var(--accent);stroke-width:2;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 55%,transparent))}
+.stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat .v{font-size:20px;font-weight:620;letter-spacing:-.02em}
+.stat .k{font-size:12px;color:var(--muted)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><i></i>rameness</div>
+    <div class="pills" id="pills"></div>
+    <button class="btn needs" id="needsBtn" title="Decisions waiting for you">Needs you<span class="n" id="needsN" hidden>0</span></button>
+    <button class="btn ghost" id="settingsBtn" title="Settings">⚙</button>
+  </header>
+
+  <div class="shadow" id="shadowStrip" title="JEV shadow - follow every decision">
+    <span class="eye"></span><span class="txt" id="shadowTxt">JEV shadow is watching. Decisions will appear here as they happen.</span>
+    <span class="gate jev" id="shadowGate" hidden></span></div>
+
+  <section class="hero">
+    <h1>What should the team do? <span>JEV decides who, where and how.</span></h1>
+    <div class="cmd">
+      <textarea id="ask" rows="1" placeholder="e.g. Add rate limiting to the API and benchmark two approaches"></textarea>
+      <button class="btn primary" id="askBtn">Send</button>
+    </div>
+    <div class="intake" id="intake"></div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab on" data-tab="team">Team</button>
+    <button class="tab" data-tab="capacity">Capacity</button>
+    <button class="tab" data-tab="shadow">Shadow</button>
+    <button class="tab" data-tab="decisions">Improve</button>
+  </nav>
+
+  <section id="team">
+    <div class="grid">
+      <div class="panel">
+        <div class="ph"><h3>Organization</h3>
+          <div class="legend sp" id="legend"></div></div>
+        <div class="canvas" id="canvas"></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><h3>Activity</h3></div>
+        <div class="pb feed" id="feed"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="capacity" hidden>
+    <div class="panel"><div class="ph"><h3>Models &amp; agent runtimes</h3>
+      <div class="sp"><button class="btn small" id="scanBtn">Rescan ports</button></div></div>
+      <div class="pb cards" id="slots"></div></div>
+    <div class="panel sec"><div class="ph"><h3>Environments</h3>
+      <div class="sp"><button class="btn small" id="probeBtn">Probe</button></div></div>
+      <div class="pb cards" id="envs"></div></div>
+  </section>
+
+  <section id="shadow" hidden>
+    <div class="grid">
+      <div class="panel"><div class="ph"><h3>JEV shadow</h3>
+        <div class="sp"><span class="seg" id="shFilter"><button class="on" data-f="all">All</button><button data-f="deferred">Deferred to you</button><button data-f="director">You decided</button><button data-f="jev">JEV alone</button></span>
+          <label class="small muted row" style="gap:6px"><input type="checkbox" id="follow" checked> follow</label></div></div>
+        <div class="pb"><div class="tl" id="timeline"></div></div></div>
+      <div>
+        <div class="panel"><div class="ph"><h3>At a glance</h3></div><div class="pb">
+          <div class="stats3" id="shStats"></div>
+          <p class="muted small" style="margin-bottom:0">Before acting, JEV asks itself whether each decision is routine enough to make alone,
+            or significant or uncertain enough to hand to you. Deferred decisions wait in <b>Needs you</b> with JEV's recommendation.</p></div></div>
+        <div class="panel sec"><div class="ph"><h3>Comfort gate</h3></div><div class="pb" id="gateCfg"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions" hidden>
+    <div class="grid">
+      <div class="panel"><div class="ph"><h3>Recent decisions</h3><span class="muted small sp">mark right, or pick what should have won</span></div>
+        <div class="pb" id="decs"></div></div>
+      <div>
+        <div class="panel"><div class="ph"><h3>Improve JEV</h3></div>
+          <div class="pb">
+            <p class="muted small" style="margin-top:0">Feedback and agent outcomes become training signal. Calibrate re-weights options
+              deterministically; a model can propose better option cues for you to review.</p>
+            <div class="row">
+              <button class="btn small" id="calBtn">Calibrate</button>
+              <button class="btn small" id="propBtn">Ask a model to improve</button>
+              <button class="btn small ghost" id="expBtn">Export training set</button>
+            </div>
+            <div id="props"></div>
+          </div></div>
+        <div class="panel sec"><div class="ph"><h3>By question</h3></div><div class="pb" id="qstats"></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<aside class="drawer" id="drawer"><div class="ph"><h3 id="dTitle">Agent</h3>
+  <div class="sp"><button class="btn small ghost" id="dClose">✕</button></div></div>
+  <div class="body" id="dBody"></div></aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const STATUS = {running:"var(--accent)", starting:"var(--accent)", blocked:"var(--warn)", done:"var(--ok)",
+  failed:"var(--bad)", queued:"var(--idle)", paused:"var(--idle)", retired:"var(--faint)"};
+let state = null, selected = null, drawerMode = null;
+
+async function api(path, body, method) {
+  const r = await fetch(path, {method: method || (body ? "POST" : "GET"),
+    headers: {"Content-Type": "application/json"}, body: body ? JSON.stringify(body) : undefined});
+  const j = await r.json();
+  if (!r.ok) { toast(j.error || "request failed"); throw new Error(j.error); }
+  return j;
+}
+function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("on"); clearTimeout(toast.h); toast.h=setTimeout(()=>el.classList.remove("on"),2600); }
+function ago(t){ const s=Date.now()/1000-t; return s<60?`${s|0}s`:s<3600?`${s/60|0}m`:`${s/3600|0}h`; }
+
+// ---------------------------------------------------------------- org chart
+const NW=210, NH=62, GX=22, GY=64;
+function layout(root){
+  let x=0; const nodes=[], edges=[];
+  (function walk(n, depth){
+    n.depth=depth;
+    if(!n.children.length){ n.x=x; x+=NW+GX; }
+    else { n.children.forEach(c=>{walk(c,depth+1); edges.push([n,c]);});
+      n.x=(n.children[0].x+n.children[n.children.length-1].x)/2; }
+    n.y=depth*(NH+GY); nodes.push(n);
+  })(root,0);
+  return {nodes, edges, w:Math.max(x,NW), h:(Math.max(...nodes.map(n=>n.depth))+1)*(NH+GY)};
+}
+function renderTree(){
+  const L=layout(structuredClone(state.tree)); const byId={}; L.nodes.forEach(n=>byId[n.id]=n);
+  const pad=20, W=L.w+pad*2, H=L.h+pad;
+  const curve=(a,b)=>{const x1=a.x+NW/2+pad,y1=a.y+NH+pad/2,x2=b.x+NW/2+pad,y2=b.y+pad/2,m=(y1+y2)/2;
+    return `M${x1},${y1} C${x1},${m} ${x2},${m} ${x2},${y2}`;};
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="agent organization chart">`;
+  L.edges.forEach(([a,b])=>s+=`<path class="edge" d="${curve(a,b)}"/>`);
+  L.nodes.forEach(n=>{ (n.depends||[]).forEach(d=>{ const o=byId[d]; if(o){
+      const x1=o.x+NW+pad, y1=o.y+NH/2+pad/2, x2=n.x+pad, y2=n.y+NH/2+pad/2;
+      s+=`<path class="dep" d="M${x1},${y1} C${x1+20},${y1} ${x2-20},${y2} ${x2},${y2}"/>`;}});
+    if(n.forked_from && byId[n.forked_from]){ const o=byId[n.forked_from];
+      s+=`<path class="forke" d="M${o.x+NW/2+pad},${o.y+NH+pad/2} Q${(o.x+n.x)/2+NW/2+pad},${n.y+pad/2-24} ${n.x+NW/2+pad},${n.y+pad/2}"/>`;}});
+  L.nodes.forEach(n=>{
+    const c=STATUS[n.status]||"var(--idle)", x=n.x+pad, y=n.y+pad/2;
+    const role = n.role==="manager"?"Manager":n.role==="lead"?"Lead":"Associate";
+    const where = n.role==="manager" ? (state.planner||"no planner") : [n.slot, n.env].filter(Boolean).join(" @ ") || n.status;
+    const think = $("#follow").checked && thinking[n.id] && Date.now()-thinking[n.id] < 4000;
+    s+=`<g class="node ${selected===n.id?"sel":""} ${think?"think":""}" data-id="${esc(n.id)}" tabindex="0">
+      <rect class="card" x="${x}" y="${y}" width="${NW}" height="${NH}" rx="12"/>
+      <rect x="${x}" y="${y+12}" width="3" height="${NH-24}" rx="2" fill="${c}"/>
+      ${["running","starting"].includes(n.status)?`<circle class="pulse" cx="${x+NW-16}" cy="${y+16}" r="5" fill="${c}"/>`:""}
+      <circle cx="${x+NW-16}" cy="${y+16}" r="4" fill="${c}"/>
+      <text class="s" x="${x+14}" y="${y+20}">${esc(role)} · ${esc(n.id)}</text>
+      <text class="t" x="${x+14}" y="${y+38}">${esc(n.title.length>27?n.title.slice(0,26)+"…":n.title)}</text>
+      <text class="s" x="${x+14}" y="${y+53}">${esc(where.length>32?where.slice(0,31)+"…":where)}</text></g>`;
+  });
+  s+="</svg>";
+  const cv=$("#canvas");
+  cv.innerHTML = state.tree.children.length ? s :
+    s + `<div class="empty">No team yet. Describe the work above and the manager will staff it.</div>`;
+  cv.querySelectorAll(".node").forEach(g=>{ g.onclick=()=>openAgent(g.dataset.id); g.onkeydown=e=>{if(e.key==="Enter")openAgent(g.dataset.id)}; });
+}
+
+// ---------------------------------------------------------------- panes
+function renderHeader(){
+  const c=state.config;
+  $("#pills").innerHTML = [["sessions",state.backend],["JEV",state.jev],["planner",state.planner||"none"],
+    ["mode",c.mode+(c.autonomous?" · autonomous":"")],["privacy",c.privacy]]
+    .map(([k,v])=>`<span class="pill">${k} <b>${esc(v)}</b></span>`).join("");
+  const n=state.escalations.length; $("#needsN").textContent=n; $("#needsN").hidden=!n;
+  $("#legend").innerHTML = ["running","blocked","queued","done","failed"].map(s=>`<span><i class="dot" style="background:${STATUS[s]}"></i>${s}</span>`).join("")
+    + `<span><svg width="22" height="6"><path class="dep" d="M0,3 L22,3"/></svg> depends</span><span><svg width="22" height="6"><path class="forke" d="M0,3 L22,3"/></svg> fork</span>`;
+}
+function renderFeed(){
+  $("#feed").innerHTML = state.events.slice(-60).reverse().map(e=>
+    `<div><span class="ty">${esc(e.type)}</span><span><b>${esc(e.agent||"")}</b> ${esc(e.message)} <span class="muted">· ${ago(e.t)}</span></span></div>`).join("")
+    || `<div class="muted">Quiet so far.</div>`;
+}
+function renderCapacity(){
+  $("#slots").innerHTML = state.slots.map(s=>`<div class="card">
+    <div class="top"><span class="dot" style="background:${s.available?"var(--ok)":"var(--bad)"}"></span>
+      <span class="name" title="${esc(s.id)}">${esc(s.id)}</span><span class="chip" style="margin-left:auto">${esc(s.kind)}</span></div>
+    <div class="muted small">${esc(s.model||"")} ${s.local?"· local":"· remote"} ${s.status?"· "+esc(s.status):""}</div>
+    <div class="cap" title="${s.busy}/${s.capacity} busy">${Array.from({length:Math.min(s.capacity,16)},(_,i)=>`<i class="${i<s.busy?"on":""}"></i>`).join("")}</div>
+    <div class="muted small" style="margin-top:6px">${esc(s.traits||"")}</div></div>`).join("")
+    || `<div class="empty">No models found. Start a llama-server / ollama, set an API key, or add slots in .rameness/fleet.json.</div>`;
+  $("#envs").innerHTML = state.envs.map(e=>{ const i=e.info||{};
+    const gpus=(i.gpus||[]).map(g=>`<div class="gpu">${esc(g.name)} · ${g.mem_gb} GB<div class="b"><i style="width:${Math.min(100,(g.used_gb/g.mem_gb)*100||0)}%"></i></div></div>`).join("");
+    return `<div class="card"><div class="top"><span class="dot" style="background:${i.reachable===false?"var(--bad)":"var(--ok)"}"></span>
+      <span class="name">${esc(e.id)}</span><span class="chip" style="margin-left:auto">${esc(e.kind)}</span></div>
+      <div class="muted small">${esc(e.host||e.workdir)}</div>
+      <div class="small" style="margin-top:6px">${i.cpus??"?"} CPUs · ${i.mem_gb??"?"} GB RAM ${i.load?`· load ${esc(i.load)}`:""}</div>
+      ${gpus||`<div class="muted small" style="margin-top:6px">${i.reachable===false?esc(i.error||"unreachable"):"no GPU"}</div>`}
+      <div class="cap" title="${e.busy}/${e.max_agents} agents">${Array.from({length:e.max_agents},(_,k)=>`<i class="${k<e.busy?"on":""}"></i>`).join("")}</div></div>`;}).join("");
+}
+function probs(p, chosen){
+  return Object.entries(p).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+    `<div class="prob ${k===chosen?"win":""}"><span title="${esc(k)}">${esc(k.length>18?k.slice(0,17)+"…":k)}</span><div class="b"><i style="width:${(v*100).toFixed(0)}%"></i></div><span class="muted">${(v*100).toFixed(0)}%</span></div>`).join("");
+}
+async function renderDecisions(){
+  const jv = await api("/api/jev");
+  $("#decs").innerHTML = state.decisions.slice(0,40).map(d=>`<div class="dec">
+    <div class="q">${esc(d.question)}</div>
+    <div class="query"><span class="gate ${gateCls(d.gate)}">${esc(GATE_LABEL[d.gate]||d.gate||"")}</span> ${esc(d.agent||"")}${d.outcome?` · <b>${esc(d.outcome)}</b>`:""}</div>
+    ${probs(d.probs, d.chosen)}
+    <div class="row" style="margin-top:6px">
+      <button class="btn small" data-fb="${esc(d.id)}" data-ok="1">✓ Right call</button>
+      <select class="in small" data-fbl="${esc(d.id)}"><option value="">Should have been…</option>
+        ${Object.keys(d.probs).filter(k=>k!==d.chosen).map(k=>`<option>${esc(k)}</option>`).join("")}</select>
+    </div></div>`).join("") || `<div class="empty">Decisions appear here as the manager works.</div>`;
+  $("#qstats").innerHTML = jv.stats.map(q=>`<div class="dec"><div class="q">${esc(q.question)}</div>
+    <div class="muted small">${q.n} decisions · ${q.labeled} reviewed${q.accuracy!=null?` · <b>${(q.accuracy*100).toFixed(0)}%</b> agreed`:""}
+    ${q.ok+q.fail?` · outcomes ${q.ok}✓ ${q.fail}✗`:""}</div></div>`).join("") || `<div class="muted small">No data yet.</div>`;
+  const pend = jv.proposals.filter(p=>p.status==="pending");
+  $("#props").innerHTML = pend.map(p=>`<div class="esc sec"><div class="q small"><b>${esc(p.question)}</b></div>
+    <div class="muted small">${esc(p.rationale)}</div>
+    ${Object.entries(p.cues).map(([k,v])=>`<div class="small"><span class="chip">${esc(k)}</span> + ${esc(v)}</div>`).join("")}
+    <div class="row" style="margin-top:8px"><button class="btn small primary" data-prop="${p.id}" data-apply="1">Apply</button>
+      <button class="btn small ghost" data-prop="${p.id}">Reject</button></div></div>`).join("");
+  document.querySelectorAll("[data-fb]").forEach(b=>b.onclick=async()=>{await api("/api/jev/feedback",{decision:b.dataset.fb,correct:true}); toast("Thanks - recorded"); refresh();});
+  document.querySelectorAll("[data-fbl]").forEach(s=>s.onchange=async()=>{ if(!s.value) return;
+    await api("/api/jev/feedback",{decision:s.dataset.fbl,label:s.value}); toast(`Recorded: should be ${s.value}`); refresh();});
+  document.querySelectorAll("[data-prop]").forEach(b=>b.onclick=async()=>{await api(`/api/jev/proposals/${b.dataset.prop}`,{apply:!!b.dataset.apply}); toast(b.dataset.apply?"Applied":"Rejected"); renderDecisions();});
+}
+
+// ---------------------------------------------------------------- drawer
+async function openAgent(id){
+  selected=id; drawerMode="agent"; const a = await api(`/api/agents/${id}`);
+  $("#dTitle").textContent = a.title; const c=STATUS[a.status]||"var(--idle)";
+  const opt = (arr,cur)=>arr.map(x=>`<option ${x===cur?"selected":""}>${esc(x)}</option>`).join("");
+  const why = a.decisions.map(d=>`<div class="sec"><div class="small"><b>${esc(d.question)}</b></div>${probs(d.probs,d.chosen)}</div>`).join("");
+  $("#dBody").innerHTML = `
+    <div class="row"><span class="st" style="color:${c}">${esc(a.status)}</span><span class="chip">${esc(a.role)}</span><span class="chip">${esc(a.kind)}</span>
+      <span class="muted small">${esc(a.id)}</span></div>
+    <div class="kv sec"><div>runtime</div><div>${esc(a.runtime||"-")}</div><div>model</div><div>${esc(a.slot||"-")}</div>
+      <div>environment</div><div>${esc(a.env||"-")}</div><div>branch</div><div>${esc(a.branch||"-")}</div>
+      ${a.meta.turns?`<div>progress</div><div>${a.meta.turns} turns · ${a.meta.tokens||0} tokens</div>`:""}
+      ${a.attach?`<div>attach</div><div><code class="small">${esc(a.attach)}</code></div>`:""}</div>
+    <div class="sec"><div class="lbl">Task</div><div class="small" style="white-space:pre-wrap">${esc(a.task)}</div></div>
+    ${a.id!=="manager"?`<div class="sec"><div class="lbl">Direct</div>
+      <div class="row"><input class="in" id="msg" placeholder="Message this agent…" style="flex:1"><button class="btn small primary" id="msgBtn">Send</button></div>
+      <div class="row" style="margin-top:8px">
+        <select class="in small" id="rsSlot"><option value="">model…</option>${opt(state.slots.map(s=>s.id),a.slot)}</select>
+        <select class="in small" id="rsEnv"><option value="">env…</option>${opt(state.envs.map(e=>e.id),a.env)}</select>
+        <button class="btn small" id="rsBtn">Reassign</button></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" id="forkBtn">Fork</button>
+        <button class="btn small" id="pauseBtn">${a.status==="paused"?"Resume":"Pause"}</button>
+        <button class="btn small danger" id="retireBtn">Retire</button>
+        <button class="btn small ghost danger" id="delBtn">Delete</button></div></div>`:
+      `<div class="sec"><div class="lbl">Spawn directly</div><div class="row"><input class="in" id="spawnTask" placeholder="Task for a new associate…" style="flex:1"><button class="btn small" id="spawnBtn">Spawn</button></div></div>`}
+    ${why?`<div class="sec"><div class="lbl">Why JEV decided</div>${why}</div>`:""}
+    ${a.result?`<div class="sec"><div class="lbl">Report</div><pre>${esc(a.result)}</pre></div>`:""}
+    ${a.log?`<div class="sec"><div class="lbl">Session output</div><pre id="log">${esc(a.log)}</pre></div>`:""}`;
+  $("#drawer").classList.add("open");
+  const lg=$("#log"); if(lg) lg.scrollTop=lg.scrollHeight;
+  const act=(p,b)=>api(`/api/agents/${id}/${p}`,b||{}).then(r=>{toast(r.result||p+" ok"); refresh(); openAgent(id);});
+  if(a.id==="manager"){ $("#spawnBtn").onclick=()=>api("/api/agents",{task:$("#spawnTask").value}).then(()=>{toast("queued");refresh();}); }
+  else {
+    $("#msgBtn").onclick=()=>act("prompt",{text:$("#msg").value});
+    $("#rsBtn").onclick=()=>act("reassign",{slot:$("#rsSlot").value,env:$("#rsEnv").value});
+    $("#forkBtn").onclick=()=>act("fork",{});
+    $("#pauseBtn").onclick=()=>act(a.status==="paused"?"resume":"pause");
+    $("#retireBtn").onclick=()=>act("retire");
+    $("#delBtn").onclick=()=>api(`/api/agents/${id}`,null,"DELETE").then(()=>{closeDrawer();refresh();});
+  }
+  renderTree();
+}
+function openNeeds(){
+  drawerMode="needs"; $("#dTitle").textContent="Needs you";
+  $("#dBody").innerHTML = state.escalations.map(e=>`<div class="esc"><div class="row small muted"><span class="chip">${esc(e.kind)}</span>${esc(e.agent||"")} · ${ago(e.t)}</div>
+    <div class="qq sec">${esc(e.question)}</div>
+    ${e.kind==="decision"&&e.payload&&e.payload.probs?`<div class="sec">${probs(e.payload.probs,e.payload.recommended)}</div>`:""}
+    <div class="row sec">${e.options.filter(o=>!o.startsWith("<")).map(o=>`<button class="btn small ${e.payload&&e.payload.recommended===o?"primary":""}" data-ans="${e.id}" data-v="${esc(o)}">${esc(o)}${e.payload&&e.payload.recommended===o?" · JEV's pick":""}</button>`).join("")}</div>
+    <div class="row" style="margin-top:8px"><input class="in" id="ans-${e.id}" placeholder="Or answer in your words…" style="flex:1"><button class="btn small primary" data-ans="${e.id}">Answer</button></div></div>`).join("")
+    || `<div class="empty">Nothing needs you right now. ✨</div>`;
+  document.querySelectorAll("[data-ans]").forEach(b=>b.onclick=async()=>{
+    const v=b.dataset.v ?? $(`#ans-${b.dataset.ans}`).value; if(!v) return;
+    await api(`/api/escalations/${b.dataset.ans}`,{answer:v}); toast("Answered"); await refresh(); openNeeds();});
+  $("#drawer").classList.add("open");
+}
+function openSettings(){
+  drawerMode="settings"; $("#dTitle").textContent="Settings"; const c=state.config;
+  $("#dBody").innerHTML = `<div class="kv">
+    <div>merge mode</div><div><select class="in" id="sMode">${["review","local","pr"].map(m=>`<option ${m===c.mode?"selected":""}>${m}</option>`).join("")}</select></div>
+    <div>autonomous</div><div><input type="checkbox" id="sAuto" ${c.autonomous?"checked":""}> merge without asking</div>
+    <div>privacy</div><div><select class="in" id="sPriv">${["any","local-only"].map(m=>`<option ${m===c.privacy?"selected":""}>${m}</option>`).join("")}</select></div>
+    <div>max active</div><div><input class="in" type="number" min="1" max="64" id="sMax" value="${c.max_active}" style="width:80px"></div></div>
+    <p class="muted small sec">Runtime changes last until restart; persist them in <code>.rameness/fleet.json</code>.</p>
+    <button class="btn primary" id="sSave">Save</button>`;
+  $("#sSave").onclick=()=>api("/api/config",{mode:$("#sMode").value,autonomous:$("#sAuto").checked,privacy:$("#sPriv").value,max_active:+$("#sMax").value}).then(()=>{toast("Saved");refresh();});
+  $("#drawer").classList.add("open");
+}
+function closeDrawer(){ $("#drawer").classList.remove("open"); selected=null; drawerMode=null; if(state) renderTree(); }
+
+// ---------------------------------------------------------------- shadow
+let shadow=[], shadowSince=0, shFilter="all", thinking={};
+const GATE_LABEL={jev:"JEV decided", deferred:"deferred to you", director:"you decided", "jev-noted":"JEV (noted)"};
+const gateCls=g=>g==="deferred"?"deferred":g==="director"?"director":g==="jev-noted"?"noted":"jev";
+async function pollShadow(){
+  let r; try{ r=await api(`/api/shadow?since=${shadowSince}`);}catch(e){return;}
+  if(!r.decisions.length) return;
+  shadowSince=r.decisions[r.decisions.length-1].t;
+  const fresh=new Set(r.decisions.map(d=>d.id));
+  shadow=[...shadow.filter(d=>!fresh.has(d.id)), ...r.decisions].slice(-400);
+  const last=r.decisions[r.decisions.length-1];
+  $("#shadowTxt").innerHTML=`<b>JEV</b> · ${esc(last.question)} → <b>${esc(last.chosen)}</b> ${((last.probs[last.chosen]||0)*100).toFixed(0)}%`
+    + (last.agent?` <span class="muted">· ${esc(last.agent)}</span>`:"");
+  const g=$("#shadowGate"); g.hidden=false; g.className="gate "+gateCls(last.gate); g.textContent=GATE_LABEL[last.gate]||last.gate;
+  const now=Date.now();
+  r.decisions.forEach(d=>{ if(d.agent) thinking[d.agent]=now; });
+  if($("#follow").checked && state){ renderTree(); }
+  renderShadow(fresh);
+}
+function renderShadow(fresh){
+  if($("#shadow").hidden) return;
+  const list=shadow.filter(d=>shFilter==="all"||gateCls(d.gate)===(shFilter==="jev"?"jev":shFilter)).slice().reverse().slice(0,120);
+  $("#timeline").innerHTML = list.map(d=>`<div class="ev ${gateCls(d.gate)} ${fresh&&fresh.has(d.id)?"fresh":""}">
+    <div class="meta"><span>${new Date(d.t*1000).toLocaleTimeString()}</span>${d.agent?`<span class="chip">${esc(d.agent)}</span>`:""}
+      <span class="gate ${gateCls(d.gate)}">${esc(GATE_LABEL[d.gate]||d.gate||"")}</span>
+      ${d.significance!=null?`<span class="sig" title="significance">significance<span class="b"><i style="width:${d.significance*100}%"></i></span></span>`:""}
+      ${d.reason?`<span>${esc(d.reason)}</span>`:""}<span>${esc(d.backend||"")}</span></div>
+    <div class="q">${esc(d.question)}</div>${d.query?`<div class="query">${esc(d.query)}</div>`:""}
+    ${probs(d.probs,d.chosen)}</div>`).join("") || `<div class="muted">No decisions yet. Send the team some work and watch JEV think.</div>`;
+  const n=shadow.length, def=shadow.filter(d=>d.gate==="deferred"||d.gate==="director").length, you=shadow.filter(d=>d.gate==="director").length;
+  $("#shStats").innerHTML=[[n,"decisions"],[n?((1-def/n)*100).toFixed(0)+"%":"–","made by JEV alone"],[you,"made by you"]]
+    .map(([v,k])=>`<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+  if(state){ const g=state.gate; $("#gateCfg").innerHTML=`<div class="kv small">
+    <div>defer if</div><div>significance ≥ <b>${g.significance}</b></div>
+    <div>or if</div><div>margin &lt; <b>${g.margin_floor}</b> and significance ≥ <b>${g.uncertain_significance}</b></div>
+    <div>policies</div><div>${Object.entries(state.decision_policy).map(([k,v])=>`<div>${esc(k)} → <b>${esc(v)}</b></div>`).join("")}</div></div>
+    <p class="muted small" style="margin-bottom:0">Tune in <code>.rameness/fleet.json</code> (<code>gate</code>, <code>decision_policy</code>).</p>`; }
+}
+$("#shadowStrip").onclick=()=>document.querySelector('[data-tab="shadow"]').click();
+document.querySelectorAll("#shFilter button").forEach(b=>b.onclick=()=>{ shFilter=b.dataset.f;
+  document.querySelectorAll("#shFilter button").forEach(x=>x.classList.toggle("on",x===b)); renderShadow(); });
+
+// ---------------------------------------------------------------- wiring
+async function refresh(){
+  try { state = await api("/api/state"); } catch(e){ return; }
+  renderHeader(); renderTree(); renderFeed(); renderCapacity();
+  if(!$("#decisions").hidden) renderDecisions();
+}
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===t));
+  ["team","capacity","shadow","decisions"].forEach(id=>$("#"+id).hidden = id!==t.dataset.tab);
+  if(t.dataset.tab==="decisions") renderDecisions();
+  if(t.dataset.tab==="shadow") renderShadow();
+});
+async function send(){
+  const text=$("#ask").value.trim(); if(!text) return;
+  $("#askBtn").disabled=true;
+  try{ const r=await api("/api/ask",{text}); $("#ask").value="";
+    $("#intake").innerHTML = `<span>JEV routed this as <b>${esc(r.route)}</b></span>` + Object.entries(r.probs||{}).sort((a,b)=>b[1]-a[1])
+      .map(([k,v])=>`<span class="opt">${esc(k)}<span class="bar"><i style="width:${v*100}%"></i></span>${(v*100).toFixed(0)}%</span>`).join("");
+    refresh(); } finally { $("#askBtn").disabled=false; }
+}
+$("#askBtn").onclick=send;
+$("#ask").onkeydown=e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); } };
+$("#ask").oninput=e=>{ e.target.style.height="auto"; e.target.style.height=Math.min(160,e.target.scrollHeight)+"px"; };
+$("#needsBtn").onclick=openNeeds; $("#settingsBtn").onclick=openSettings; $("#dClose").onclick=closeDrawer;
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeDrawer(); });
+$("#scanBtn").onclick=()=>api("/api/slots/scan",{}).then(()=>{toast("Rescanned");refresh();});
+$("#probeBtn").onclick=()=>api("/api/envs/probe",{}).then(()=>{toast("Probed");refresh();});
+$("#calBtn").onclick=()=>api("/api/jev/calibrate",{}).then(r=>toast(`Calibrated ${Object.keys(r.weights).length} weights`));
+$("#propBtn").onclick=()=>{ toast("Asking the model…"); api("/api/jev/propose",{}).then(r=>{toast(`${r.proposals.length} proposal(s)`); renderDecisions();}); };
+$("#expBtn").onclick=()=>api("/api/jev/export",{}).then(r=>toast(`${r.rows} rows → ${r.path}`));
+refresh(); pollShadow(); setInterval(pollShadow, 1000); setInterval(()=>{ refresh(); if(drawerMode==="agent" && selected) openAgent(selected); }, 2500);
+</script>
+</body>
+</html>

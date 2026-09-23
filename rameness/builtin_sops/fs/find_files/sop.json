@@ -1,0 +1,9 @@
+{
+  "id": "fs.find_files",
+  "description": "Find files matching a glob pattern under a directory, skipping VCS and dependency folders.",
+  "keywords": ["find", "files", "glob", "list", "search", "locate"],
+  "inputs": {"type": "object", "properties": {"pattern": {"type": "string"}, "root": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["pattern"]},
+  "outputs": {"files": "array of paths", "truncated": "boolean"},
+  "permissions": ["fs:read"],
+  "tests": [{"input": {"pattern": "*.nonexistent-ext"}, "expect": {"files": [], "truncated": false}}]
+}
