@@ -1,0 +1,15 @@
+{
+  "id": "data.json_extract",
+  "description": "Extract fields by dotted path (e.g. items.*.name) from JSON text or a JSON file.",
+  "keywords": ["json", "extract", "field", "path", "select", "pluck", "jq"],
+  "inputs": {"type": "object", "properties": {
+    "paths": {"type": "array", "items": {"type": "string"}, "description": "dotted paths; * maps over lists"},
+    "file": {"type": "string"}, "text": {"type": "string"}, "data": {"description": "already-parsed JSON"}},
+    "required": ["paths"]},
+  "outputs": {"values": "object mapping path -> value"},
+  "permissions": ["fs:read"],
+  "tests": [
+    {"input": {"paths": ["a.b", "xs.*.n"], "text": "{\"a\": {\"b\": 1}, \"xs\": [{\"n\": 2}, {\"n\": 3}]}"},
+     "expect_keys": ["values"]}
+  ]
+}

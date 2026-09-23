@@ -1,0 +1,11 @@
+{
+  "id": "http.post",
+  "description": "Send an HTTP POST with a JSON or form body and return status and parsed response.",
+  "keywords": ["post", "submit", "send", "create", "webhook", "api"],
+  "inputs": {"type": "object", "properties": {
+    "url": {"type": "string"}, "json": {"type": "object"}, "form": {"type": "object"}, "headers": {"type": "object"}},
+    "required": ["url"]},
+  "outputs": {"status": "integer", "json": "any", "body": "string"},
+  "permissions": ["network", "side-effect"],
+  "tests": [{"input": {"url": "ftp://x"}, "expect_error": true}]
+}

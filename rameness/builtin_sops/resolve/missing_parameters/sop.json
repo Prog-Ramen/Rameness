@@ -1,0 +1,7 @@
+{
+  "id": "resolve.missing_parameters",
+  "kind": "skill",
+  "description": "Procedure for resolving underspecified tasks: check context, then cheap read-only discovery, then ask.",
+  "keywords": ["missing", "unclear", "ambiguous", "clarify", "parameters", "which"],
+  "instructions": "When a task is missing a parameter that changes which procedure applies:\n1. Look in the provided organization context and project files first; use an established default if one exists and state that you used it.\n2. If a read-only discovery step can settle it (list configured sources, inspect a schema, read a config file), do that.\n3. Only if it is still ambiguous and the choice matters, ask the user one concise question naming the options you found.\nNever guess for actions with side effects or access to sensitive data."
+}

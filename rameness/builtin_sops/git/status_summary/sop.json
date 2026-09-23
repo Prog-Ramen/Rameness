@@ -1,0 +1,8 @@
+{
+  "id": "git.status_summary",
+  "description": "Summarise a git working tree: branch, ahead/behind, staged, modified and untracked files.",
+  "keywords": ["git", "status", "changes", "modified", "branch", "uncommitted"],
+  "inputs": {"type": "object", "properties": {"repo": {"type": "string"}}},
+  "outputs": {"branch": "string", "staged": "array", "modified": "array", "untracked": "array"},
+  "permissions": ["fs:read", "exec"]
+}

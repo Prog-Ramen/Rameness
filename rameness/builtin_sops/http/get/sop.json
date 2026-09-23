@@ -1,0 +1,12 @@
+{
+  "id": "http.get",
+  "description": "Fetch a URL with HTTP GET and return status, content type and body (parsed JSON when possible).",
+  "keywords": ["fetch", "download", "get", "url", "api", "retrieve", "curl"],
+  "inputs": {"type": "object", "properties": {
+    "url": {"type": "string"}, "headers": {"type": "object"}, "params": {"type": "object"},
+    "max_chars": {"type": "integer", "description": "truncate body (default 20000)"}},
+    "required": ["url"]},
+  "outputs": {"status": "integer", "content_type": "string", "json": "any", "body": "string"},
+  "permissions": ["network"],
+  "tests": [{"input": {"url": "not a url"}, "expect_error": true}]
+}

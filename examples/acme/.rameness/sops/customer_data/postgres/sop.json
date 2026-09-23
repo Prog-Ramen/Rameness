@@ -1,0 +1,7 @@
+{
+  "id": "customer_data.postgres",
+  "kind": "skill",
+  "description": "Retrieve customer records from the analytics Postgres replica (read-only).",
+  "keywords": ["postgres", "sql", "customer", "retrieve", "query"],
+  "instructions": "Connect with psql \"$ACME_ANALYTICS_DSN\" (read-only replica). Customers are in analytics.customers (id, created_at, channel, region). Never write; never select email/phone unless the user asks and is authorized."
+}
