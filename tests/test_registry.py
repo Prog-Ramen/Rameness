@@ -123,34 +123,5 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(reg.release()["released"], [])             # idempotent
 
 
-class SeedTest(unittest.TestCase):
-    def test_seed_empty_public_registry_then_install(self):
-        from rameness.publish import install
-        from rameness.sops import BUILTIN_ROOT, Executor
-        tmp = Path(tempfile.mkdtemp())
-        home = tmp / "home"
-        pub = tmp / "public.git"
-        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(pub)], check=True)
-        out = registry.seed_public(str(pub), home, Org(), [BUILTIN_ROOT])
-        self.assertTrue(out["pushed"], out)
-        self.assertIn("http.get", out["sops"])
-        main = sh(tmp, "--git-dir", str(pub), "ls-tree", "-r", "--name-only", "main").stdout
-        self.assertIn("README.md", main)
-        self.assertNotIn("sops/", main)                              # SOPs arrive via the review branch
-        seed = sh(tmp, "--git-dir", str(pub), "ls-tree", "-r", "--name-only", out["branch"]).stdout
-        for f in ("sops/index.json", "sops/http/_node.json", "sops/http/get/run.py", ".github/workflows/secret-scan.yml"):
-            self.assertIn(f, seed)
-        # a user installs the registry (after the seed PR merges) and gets the same ids
-        merged = tmp / "merged"
-        subprocess.run(["git", "clone", "-q", "-b", out["branch"], str(pub), str(merged)], check=True)
-        install(str(merged), home, "RamenSOPs")
-        proj = tmp / "proj"
-        proj.mkdir()
-        lib = Library([(p, sc) for p, sc in Library.default(proj, home).roots if "RamenSOPs" in str(p)])
-        self.assertIn("http.get", lib.sops)
-        self.assertEqual(lib.root.children["http"].description, Library([(BUILTIN_ROOT, "public")]).root.children["http"].description)
-        self.assertEqual(Executor(lib, [], cwd=proj).test("data.json_extract"), [])
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -85,7 +85,15 @@ class Harness:
         lc = self.cfg["learning"]
         self.learner = Learner(self.lib, self.executor, self.jev, RunStore(self.state / "runs"), llm,
                                lc["min_repeats"], lc["sop_threshold"], lc["auto_generate"], org=self.org)
-        self.router = Router(self.lib, self.jev, self.org, self.cfg, self.cwd, llm, confirm=self._confirm)
+        rc = self.cfg.get("registry") or {}
+        remote = None
+        if rc.get("remote_index") and rc.get("auto_pull", "gated") != "off":
+            from .remote import RemoteRegistry
+            remote = RemoteRegistry(rc["remote_index"], self.home)
+        self.router = Router(self.lib, self.jev, self.org, self.cfg, self.cwd, llm, confirm=self._confirm,
+                             remote=remote, validator=lambda sid: self.executor.test(sid) if self.lib.get(sid).tests
+                             else ["no tests: pulled SOPs must ship tests"])
+        self.router.on_decision = lambda *a: self.on_decision(*a) if self.on_decision else None
         self.toolbox = Toolbox(Path(workdir) if workdir else self.cwd, self.approver, env)
         self.messages: list[dict] = []           # persists across run() calls for chat sessions
         self.inbox = None                        # optional callable -> list[str] of messages to inject

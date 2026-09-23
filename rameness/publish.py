@@ -154,26 +154,45 @@ def publish(sop: SOP, dest_pkg: Path, org: Org, force: bool = False) -> Path:
 
 
 def build_index(pkg_root: Path) -> Path:
+    """Sharded, metadata-only index for lazy traversal.
+
+    ``index.json`` lists only the top-level entries; every category directory gets an
+    ``_index.json`` listing only its own children. A client fetches the listing of a category
+    only when JEV decides to explore it, and downloads code only for the SOPs it selects
+    (each file carries a SHA-256 so it can be verified before it runs).
+    """
+    import hashlib
     lib = Library([(pkg_root, "public")])
-    entries = [{"id": s.id, "description": s.description, "keywords": s.keywords, "kind": s.kind,
-                "permissions": s.permissions, "version": s.version, "inputs": s.inputs,
-                "path": str(s.path.relative_to(pkg_root))} for s in lib.sops.values()]
+
+    def entry(n) -> dict:
+        if n.sop:
+            s = n.sop
+            files = [{"path": str(f.relative_to(pkg_root)), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+                     for f in sorted(s.path.rglob("*")) if f.is_file() and "__pycache__" not in f.parts]
+            return {"type": "sop", "id": s.id, "description": s.description, "keywords": s.keywords, "kind": s.kind,
+                    "permissions": s.permissions, "version": s.version, "inputs": s.inputs, "status": s.status,
+                    "path": str(s.path.relative_to(pkg_root)), "files": files}
+        return {"type": "node", "id": n.id, "description": n.description, "keywords": n.keywords,
+                "requires": [{"name": r.name, "hints": r.hints, "question": r.question} for r in n.requires],
+                "children": sorted(n.children)}
+
+    for n in lib.root.walk():
+        if n.id and not n.sop:
+            d = pkg_root.joinpath(*n.id.split("."))
+            (d / "_index.json").write_text(json.dumps(
+                {"format": 3, "id": n.id, "entries": [entry(c) for _, c in sorted(n.children.items())]}, indent=1))
     p = pkg_root / "index.json"
-    p.write_text(json.dumps({"format": 1, "sops": entries}, indent=1))
+    p.write_text(json.dumps({"format": 3, "id": "", "entries": [entry(c) for _, c in sorted(lib.root.children.items())]},
+                            indent=1))
     return p
 
 
 def search_index(jev: Jev, index_src: str, query: str, k: int = 10) -> list[tuple[dict, float]]:
-    if re.match(r"https?://", index_src):
-        with urllib.request.urlopen(index_src, timeout=15) as r:
-            idx = json.loads(r.read())
-    else:
-        idx = json.loads(Path(index_src).read_text())
-    entries = idx["sops"]
-    d = jev.activate("Which registry procedures match this need?", query,
-                     [Option(e["id"], f"{e['id']} {e['description']} {' '.join(e.get('keywords', []))}") for e in entries])
-    by_id = {e["id"]: e for e in entries}
-    return [(by_id[i], p) for i, p in d.top(k) if p > 0.1]
+    """Search a registry by lazy traversal: only the branches JEV explores are fetched."""
+    from .remote import RemoteRegistry
+    reg = RemoteRegistry(index_src, Path.home() / ".rameness", ttl=0)
+    hits = reg.traverse(jev, query, "", {}, set(), activate_th=0.1, explore_th=0.15, beam=6, max_sops=k)
+    return [(reg.entries[s.id], p) for s, p in hits]
 
 
 def install(src: str, home: Path, name: str | None = None) -> Path:
