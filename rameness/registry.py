@@ -238,6 +238,12 @@ class Registry:
                     shutil.rmtree(target)
                 shutil.copytree(sj.parent, target)
                 changed.append(".".join(rel.parts))
+        for nj in sorted(src.rglob("_node.json")):       # category metadata travels with its SOPs
+            target = dest / nj.relative_to(src)
+            if not target.exists() or target.read_bytes() != nj.read_bytes():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(nj, target)
+                changed.append(".".join(nj.parent.relative_to(src).parts) + "/")
         if not changed:
             return {"released": [], "note": "public registry already up to date"}
         build_index(dest)
@@ -259,6 +265,41 @@ class Registry:
         return {"released": changed, "branch": branch, "pr": pr}
 
 
+PUBLIC_README = """# RamenSOPs
+
+The public registry of general-purpose **SOPs** (standard operating procedures) for
+[Rameness](https://github.com/Prog-Ramen/Rameness): the JEV-driven agent harness.
+
+An SOP is a tested, parameterised procedure an agent can run instead of re-deriving the same
+steps. Rameness learns SOPs from repeated work, keeps them private by default, and only
+general ones - reviewed privately, scanned for secrets - are released here.
+
+## Layout
+
+```
+sops/
+  index.json                 metadata-only index (discovery never downloads code)
+  <category>/_node.json      category description, keywords, requirements
+  <category>/<name>/sop.json interface: description, inputs (JSON schema), permissions, tests
+  <category>/<name>/run.py   implementation: JSON args on stdin -> JSON result on stdout
+```
+
+## Use
+
+```bash
+rameness sop install https://github.com/Prog-Ramen/RamenSOPs
+rameness sop remote "fetch json from an api"      # searches sops/index.json
+rameness sop test                                  # runs every SOP's embedded tests
+```
+
+## Contribute
+
+SOPs are not proposed here directly: a PR to a public repo is public as soon as it is pushed.
+Rameness proposes SOPs to a private staging registry for review (`rameness sop propose`), then
+`rameness sop release` re-scans merged SOPs and opens a release PR here. Every SOP must be
+general (no organization-specific endpoints, names or data), contain no secrets, and pass its tests.
+"""
+
 STAGING_README = """# SOP staging registry (PRIVATE)
 
 Keep this repository **private**. SOPs proposed with `rameness sop propose` land here as pull
@@ -277,6 +318,73 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
 """
+
+
+def seed_public(url: str, home: Path, org: Org, sources: list[Path], push: bool = True) -> dict:
+    """First population of an (empty) public registry from already-public SOP packages.
+
+    ``main`` gets the README and a secret-scan workflow; the SOPs go on a ``seed/...`` branch for
+    a review PR. Same guards as a release: sanitized copies, full-tree scan, pre-push hook.
+    """
+    d = home / "registry" / "public-seed"
+    if d.exists():
+        shutil.rmtree(d)
+    d.parent.mkdir(parents=True, exist_ok=True)
+    p = subprocess.run(["git", "clone", "-q", url, str(d)], capture_output=True, text=True)
+    if p.returncode:
+        raise RegistryError(f"clone {url}: {p.stderr.strip()}")
+    install_hook(d)
+    empty = not git(d, "branch", "-r", check=False).strip()
+    base = "main"
+    if empty:
+        git(d, "checkout", "-q", "--orphan", base, check=False)
+        (d / "README.md").write_text(PUBLIC_README)
+        wf = d / ".github" / "workflows"
+        wf.mkdir(parents=True, exist_ok=True)
+        (wf / "secret-scan.yml").write_text(SCAN_WORKFLOW)
+        git(d, "add", "-A")
+        git(d, "commit", "-q", "-m", "Registry scaffold: README and secret-scan workflow")
+    else:
+        base = git(d, "rev-parse", "--abbrev-ref", "origin/HEAD", check=False).removeprefix("origin/") or "main"
+    branch = f"seed/{time.strftime('%Y%m%d-%H%M%S')}"
+    git(d, "checkout", "-q", "-b", branch)
+    dest = d / "sops"
+    added = []
+    for src in sources:
+        for item in sorted(src.rglob("*")):
+            if not item.is_file() or "__pycache__" in item.parts or item.suffix == ".pyc":
+                continue
+            target = dest / item.relative_to(src)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if item.name == "sop.json":
+                data = json.loads(item.read_text())
+                for k in ("origin", "classified", "visibility", "stats"):
+                    data.pop(k, None)
+                data["scope"] = "public"
+                target.write_text(json.dumps(data, indent=2) + "\n")
+                added.append(data.get("id") or ".".join(item.parent.relative_to(src).parts))
+            else:
+                shutil.copy(item, target)
+    build_index(dest)
+    findings = scrub_tree(d, org)
+    if findings:
+        raise RegistryError("seed content failed the scan; nothing pushed:\n  " + "\n  ".join(findings))
+    git(d, "add", "-A")
+    git(d, "commit", "-q", "-m", f"Seed {len(added)} general-purpose SOPs from the Rameness starter package")
+    out = {"path": str(d), "base": base, "branch": branch, "sops": added, "pushed": False}
+    if push:
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        r1 = subprocess.run(["git", "push", "-q", "origin", base], cwd=d, capture_output=True, text=True, env=env) \
+            if empty else None
+        r2 = subprocess.run(["git", "push", "-q", "-u", "origin", branch], cwd=d, capture_output=True, text=True, env=env)
+        if (r1 is None or r1.returncode == 0) and r2.returncode == 0:
+            out["pushed"] = True
+        else:
+            out["push_error"] = ((r1.stderr if r1 and r1.returncode else "") + r2.stderr).strip()[-300:]
+    m = GH_URL.search(url)
+    if m:
+        out["pr"] = f"https://github.com/{m.group(1)}/{m.group(2)}/compare/{base}...{branch}?expand=1"
+    return out
 
 
 def init_staging(dest: Path) -> Path:
