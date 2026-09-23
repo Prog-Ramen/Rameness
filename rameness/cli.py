@@ -145,7 +145,8 @@ def cmd_sop(a):
         ids = [a.arg] if a.arg else sorted(i for i, x in lib.sops.items() if x.scope == "private")
         for i in ids:
             r = pub.classify(h.jev, lib.get(i), h.org)
-            print(f"{r['visibility']:9s} {i:32s} general={r['probs']['general']:.2f}  {r['reason']}")
+            tag = "unclassified" if r["unclassified"] else r["visibility"]
+            print(f"{tag:12s} {i:32s} {r['reason']}" + (f"  specific: {r['specific']}" if r["specific"] else ""))
     elif a.action == "propose":
         from .registry import Registry, RegistryError
         try:
