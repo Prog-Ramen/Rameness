@@ -1,2 +1,2 @@
 # Jevness
-Jev-based decisioning harness and orchestrator for LLMs
+Jev-based decisioning orchestrator harness for LLMs
