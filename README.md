@@ -273,6 +273,8 @@ private library ──propose──► PRIVATE staging repo ──review + merge
   opens a release PR on the public repo (or pushes directly with `"release": "direct"`), with a
   metadata-only `index.json` for discovery. `rameness sop registry-init <dir>` scaffolds a staging
   repo with a gitleaks CI workflow.
+  `rameness sop seed [url]` populates an empty public registry from already-public packages
+  (README and scan workflow on `main`, SOPs on a `seed/…` review branch).
 
 ```json
 "registry": {"staging": "git@github.com:Prog-Ramen/RamenSOPs-staging.git",

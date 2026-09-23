@@ -143,7 +143,8 @@ class Library:
         roots: list[tuple[Path, str]] = [(BUILTIN_ROOT, "public")]
         pub = home / "public"
         if pub.exists():
-            roots += [(p, "public") for p in sorted(pub.iterdir()) if p.is_dir()]
+            # registry repos (e.g. RamenSOPs) keep their SOPs under sops/
+            roots += [((p / "sops") if (p / "sops").is_dir() else p, "public") for p in sorted(pub.iterdir()) if p.is_dir()]
         roots += [(home / "sops", "private"), (cwd / ".rameness" / "sops", "private")]
         return cls(roots, cwd / ".rameness" / "sop_stats.json")
 

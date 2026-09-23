@@ -169,6 +169,20 @@ def cmd_sop(a):
         for f in findings:
             print(f"BLOCKED {f}", file=sys.stderr)
         sys.exit(1 if findings else 0)
+    elif a.action == "seed":
+        from .registry import RegistryError, seed_public
+        from .sops import BUILTIN_ROOT
+        url = a.arg or (h.cfg.get("registry") or {}).get("public")
+        try:
+            r = seed_public(url, h.home, h.org, [BUILTIN_ROOT], push=not a.no_push)
+        except RegistryError as e:
+            sys.exit(f"not seeded: {e}")
+        print(f"seeded {len(r['sops'])} SOPs on {r['branch']} (base {r['base']}) in {r['path']}")
+        if r["pushed"]:
+            print(f"pushed; open the review PR: {r.get('pr')}")
+        else:
+            print(f"not pushed ({r.get('push_error', 'push disabled')}).\n  push with: git -C {r['path']} push origin "
+                  f"{r['base']} {r['branch']}\n  then open: {r.get('pr')}")
     elif a.action == "registry-init":
         from .registry import init_staging
         print(f"staging registry scaffolded at {init_staging(Path(a.arg))} - push it to a PRIVATE repo")
@@ -387,13 +401,14 @@ def main(argv=None):
     p = sub.add_parser("sop", help="manage the SOP library")
     p.add_argument("action", choices=["tree", "list", "show", "search", "run", "test", "promote", "remove",
                                       "publish", "install", "index", "remote", "classify", "propose", "proposals",
-                                      "release", "scrub-tree", "registry-init"])
+                                      "release", "scrub-tree", "registry-init", "seed"])
     p.add_argument("arg", nargs="?")
     p.add_argument("--args", help="JSON arguments for 'run'")
     p.add_argument("--to", help="package directory for 'publish'")
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--no-push", action="store_true", help="seed: prepare locally without pushing")
     p.add_argument("--override-personal", action="store_true",
                    help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)
