@@ -245,16 +245,44 @@ After each task the trace is stored in `.rameness/runs/`. The learner:
 6. registers it privately: `validated` if its tests pass, otherwise `candidate`
    (`rameness sop promote <id>` after review).
 
-## Private vs public
+## Private vs public SOPs
 
-* `org.json` (private) holds facts, `defaults` that resolve tree requirements, a glossary
-  ("customer report" means …), and `private_terms`. See `examples/acme`.
-* `rameness sop publish <id> --to <pkg>` scrubs for secrets, keys, emails, private IPs/hosts,
-  home paths and your `private_terms`, then strips origin metadata and requires explicit
-  confirmation. Nothing is published automatically.
-* `rameness sop index <pkg>` writes a metadata-only `index.json`; `rameness sop remote <query>
-  --index <url>` searches it without downloading code; `rameness sop install <git-url|dir>`
-  installs a package.
+Every learned or agent-saved SOP starts in the **private** project library (`.rameness/sops`) and
+stays there unless you act. What leaves the machine, and how:
+
+```
+private library ──propose──► PRIVATE staging repo ──review + merge──► release ──► public RamenSOPs
+  JEV: personal vs general     verified not public before each push     re-scanned    github.com/Prog-Ramen/RamenSOPs
+  scrubber + secret scanners   pre-push hook re-scans every push
+```
+
+* **Personal vs general.** When an SOP is registered, the scrubber runs first. Any secret, email,
+  private host or IP, home path, or `private_terms` match makes it `private`. Otherwise JEV decides
+  personal vs general, and it has to be clearly confident (≥ 0.65, margin ≥ 0.15) to mark an SOP
+  `shareable`; anything uncertain stays private. `rameness sop classify` shows or redoes this.
+* **Hidden until merged.** A PR to a public GitHub repo is public as soon as its branch is pushed,
+  and forks of public repos are public too. So proposals go to a separate **private staging repo**.
+  `rameness sop propose <id>` pushes a sanitized copy (origin, stats and classification stripped) on
+  a `sop/<id>-…` branch there and opens the review PR (`gh`, if installed). It refuses unless the
+  staging repo is verifiably not public (checked through `gh`, the GitHub API, or as a local path).
+* **Secrets never leave.** Scrubber findings block a proposal, and secret-class findings (keys,
+  tokens, private keys, JWTs, credentials in URLs) cannot be overridden. gitleaks and trufflehog
+  also run when installed. Every clone rameness manages gets a **pre-push hook** that re-scans the
+  whole tree, so a manual `git push` of a secret is blocked too.
+* **Release.** After a staging PR is merged, `rameness sop release` re-scans the merged SOPs and
+  opens a release PR on the public repo (or pushes directly with `"release": "direct"`), with a
+  metadata-only `index.json` for discovery. `rameness sop registry-init <dir>` scaffolds a staging
+  repo with a gitleaks CI workflow.
+
+```json
+"registry": {"staging": "git@github.com:Prog-Ramen/RamenSOPs-staging.git",
+             "public": "https://github.com/Prog-Ramen/RamenSOPs.git", "release": "pr"}
+```
+
+The organization profile `org.json` is also private. It holds facts, `defaults` that resolve SOP-tree
+requirements, a glossary, and the `private_terms` the scrubber enforces (see `examples/acme`).
+`rameness sop search` / `sop remote <query>` / `sop install <git-url|dir>` discover and install
+public packages; the builtin starter package ships in `rameness/builtin_sops`.
 
 ## Usage
 
@@ -293,7 +321,8 @@ rameness/
   loopguard.py      loop / degeneration detection and JEV-chosen recovery
   llm.py            Anthropic SDK + OpenAI-compatible (llama-server, ollama, vLLM, DeepSeek) with prompted tools
   tools.py          bash/read/write/edit/grep, environment-aware
-  publish.py        scrubbed publishing, registry index, install
+  publish.py        scrubber, secret scanning, personal-vs-general classification, local publish, index
+  registry.py       private staging → public release flow, visibility checks, pre-push hooks
   fleet/
     manager.py      the manager: JEV decisions, comfort gate, autonomy modes, CRUD, scheduling, supervision, merging
     cycles.py       cycle programs (refine / test), the work taxonomy

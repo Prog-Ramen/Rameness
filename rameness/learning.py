@@ -133,7 +133,7 @@ Output JSON only."""
 
 
 def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = None,
-                 root: Path | None = None) -> tuple[SOP, list[str]]:
+                 root: Path | None = None, jev: Jev | None = None, org=None) -> tuple[SOP, list[str]]:
     """Write an SOP to the private library, compile + test it, set its status."""
     sop_id = re.sub(r"[^a-z0-9_.]", "_", spec["id"].lower()).strip("._")
     if "." not in sop_id:
@@ -165,13 +165,20 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
     sop.status = "validated" if not failures else "candidate"
     sop.save()
     lib.reload()
+    if jev is not None:
+        # JEV decides personal vs general right away; anything uncertain stays private
+        from .org import Org
+        from .publish import classify
+        classify(jev, lib.get(sop_id), org or Org())
+        lib.reload()
     return lib.get(sop_id), failures
 
 
 class Learner:
     def __init__(self, lib: Library, ex: Executor, jev: Jev, runs: RunStore, llm=None,
-                 min_repeats: int = 2, threshold: float = 0.6, auto_generate: bool = True):
+                 min_repeats: int = 2, threshold: float = 0.6, auto_generate: bool = True, org=None):
         self.lib, self.ex, self.jev, self.runs, self.llm = lib, ex, jev, runs, llm
+        self.org = org
         self.min_repeats = min_repeats
         self.threshold = threshold
         self.auto_generate = auto_generate
@@ -271,11 +278,13 @@ class Learner:
                 created.append({"candidate": c.name, "score": round(c.score, 2), "skipped": "no generator available"})
                 continue
             try:
-                sop, failures = register_sop(self.lib, self.ex, spec, {"task": task[:200], "score": c.score})
+                sop, failures = register_sop(self.lib, self.ex, spec, {"task": task[:200], "score": c.score},
+                                             jev=self.jev, org=self.org)
             except Exception as e:
                 created.append({"candidate": c.name, "error": str(e)})
                 continue
-            created.append({"sop": sop.id, "status": sop.status, "score": round(c.score, 2), "failures": failures})
+            created.append({"sop": sop.id, "status": sop.status, "visibility": sop.visibility,
+                            "score": round(c.score, 2), "failures": failures})
             if len(created) >= 3:
                 break
         return created
