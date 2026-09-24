@@ -121,7 +121,7 @@ class Harness:
 
     def run(self, task: str, resolved: dict | None = None, allow_direct: bool = True) -> Result:
         t0 = time.time()
-        u0 = dict(self.llm.usage) if self.llm else {"input": 0, "output": 0, "calls": 0}
+        u0 = dict(self.llm.usage) if self.llm else {"input": 0, "output": 0, "calls": 0, "aux_calls": 0}
         j0 = self.jev.calls
         plan = self.router.plan(task, resolved, allow_direct=allow_direct and self.cfg.get("allow_direct", True))
         self.out(f"[rameness] route={plan.route} effort={plan.effort} sops="
@@ -148,9 +148,13 @@ class Harness:
                 self.out(f"[rameness] learned: {res.learned}")
         u1 = self.llm.usage if self.llm else u0
         res.metrics.update({"seconds": round(time.time() - t0, 2), "jev_calls": self.jev.calls - j0,
-                            "llm_calls": u1["calls"] - u0["calls"], "input_tokens": u1["input"] - u0["input"],
+                            # main = reasoning-model calls; aux = JEV / planner / argument extraction
+                            "llm_calls": (u1["calls"] - u1["aux_calls"]) - (u0["calls"] - u0["aux_calls"]),
+                            "aux_calls": u1["aux_calls"] - u0["aux_calls"],
+                            "input_tokens": u1["input"] - u0["input"],
                             "output_tokens": u1["output"] - u0["output"],
-                            "jev_escalations": getattr(self.jev.backend, "escalations", 0)})
+                            "jev_escalations": getattr(self.jev.backend, "escalations", 0),
+                            "jev_fallbacks": len(getattr(self.jev.backend, "failures", []))})
         return res
 
     # ------------------------------------------------------------------ routes

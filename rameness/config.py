@@ -42,8 +42,12 @@ DEFAULTS: dict = {
     },
     "registry": {
         "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # where reviewed SOPs are released
-        "staging": None,                  # a PRIVATE repo where proposals are reviewed (e.g. Prog-Ramen/RamenSOPs-staging)
+        # PRIVATE org-owned intake repo: proposals are reviewed there by Prog-Ramen members only
+        "staging": "git@github.com:Prog-Ramen/RamenSOPs-intake.git",
         "release": "pr",                  # pr | direct
+        # encrypted relay for contributors without intake access (rameness sop submit)
+        "relay_repo": "Prog-Ramen/RamenSOPs",
+        "relay_key": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/.github/intake_public_key.pem",
         "staging_assume_private": False,  # for non-GitHub hosts whose visibility can't be checked
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/main/sops/index.json",
         "auto_pull": "gated",             # gated (JEV + comfort gate + permission guard) | ask (always ask) | off
@@ -62,6 +66,7 @@ PROVIDER_PRESETS = {
     "llama-server": {"model": "local", "fast_model": "local",
                      "base_url": "http://localhost:8080/v1", "api_key_env": None},
     "fake": {"model": "fake", "fast_model": "fake"},
+    "replay": {"model": "replay", "fast_model": "replay"},
 }
 
 

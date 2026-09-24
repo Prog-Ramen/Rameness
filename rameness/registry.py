@@ -33,8 +33,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
+import uuid
 import urllib.request
 from pathlib import Path
 
@@ -47,6 +49,12 @@ GH_URL = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
 
 class RegistryError(Exception):
     pass
+
+
+def gh_bin() -> str | None:
+    """The GitHub CLI to use: $RAMENESS_GH (a path, or "none" to never touch GitHub), else gh on PATH."""
+    v = os.environ.get("RAMENESS_GH", "gh")
+    return None if v == "none" else shutil.which(v)
 
 
 def git(cwd: Path, *args: str, check: bool = True) -> str:
@@ -66,8 +74,8 @@ def visibility(url: str, assume_private: bool = False) -> tuple[bool, str]:
         return (True, "assumed private by config") if assume_private else \
                (False, "not a GitHub URL: cannot verify it is private (set registry.staging_assume_private)")
     owner, repo = m.groups()
-    if shutil.which("gh"):
-        p = subprocess.run(["gh", "repo", "view", f"{owner}/{repo}", "--json", "visibility", "-q", ".visibility"],
+    if gh_bin():
+        p = subprocess.run([gh_bin(), "repo", "view", f"{owner}/{repo}", "--json", "visibility", "-q", ".visibility"],
                            capture_output=True, text=True)
         if p.returncode == 0:
             vis = p.stdout.strip().upper()
@@ -117,6 +125,8 @@ class Registry:
         self.public = rc.get("public")
         self.release_mode = rc.get("release", "pr")
         self.assume_private = bool(rc.get("staging_assume_private"))
+        self.relay_repo = rc.get("relay_repo") or "Prog-Ramen/RamenSOPs"
+        self.relay_key = rc.get("relay_key")
         self.home = home / "registry"
         self.org, self.jev = org, jev
         self.ledger = self.home / "proposals.json"
@@ -124,6 +134,7 @@ class Registry:
     # ---- helpers
 
     def _clone(self, url: str, name: str) -> Path:
+        self._empty = False
         d = self.home / name
         if not (d / ".git").exists():
             d.parent.mkdir(parents=True, exist_ok=True)
@@ -137,24 +148,35 @@ class Registry:
         self._base = "main" if "origin/main" in heads else ("master" if "origin/master" in heads else None)
         if self._base:
             git(d, "checkout", "-q", "-B", self._base, f"origin/{self._base}")
-        else:                                    # empty repo
+        else:                                    # empty repo: start from an empty tree
             self._base = "main"
-            git(d, "checkout", "-q", "--orphan", "main", check=False)
+            self._empty = True
+            git(d, "checkout", "-q", "--orphan", "rameness-empty-" + str(time.time_ns()), check=False)
+            git(d, "rm", "-rfq", "--cached", ".", check=False)
         git(d, "clean", "-qfdx")
         install_hook(d)
         return d
 
     def _gh_pr(self, url: str, branch: str, base: str, title: str, body: str) -> str | None:
         m = GH_URL.search(url)
-        if not (m and shutil.which("gh")):
+        if not (m and gh_bin()):
             return None
-        p = subprocess.run(["gh", "pr", "create", "--repo", f"{m.group(1)}/{m.group(2)}", "--head", branch,
+        p = subprocess.run([gh_bin(), "pr", "create", "--repo", f"{m.group(1)}/{m.group(2)}", "--head", branch,
                             "--base", base, "--title", title, "--body", body], capture_output=True, text=True)
         return p.stdout.strip() if p.returncode == 0 else None
 
     def _compare_url(self, url: str, branch: str, base: str) -> str | None:
         m = GH_URL.search(url)
         return f"https://github.com/{m.group(1)}/{m.group(2)}/compare/{base}...{branch}?expand=1" if m else None
+
+    @staticmethod
+    def _contributor() -> str:
+        for cmd in ([gh_bin() or "gh-disabled", "api", "user", "-q", ".login"], ["git", "config", "user.name"]):
+            if shutil.which(cmd[0]):
+                p = subprocess.run(cmd, capture_output=True, text=True)
+                if p.returncode == 0 and p.stdout.strip():
+                    return re.sub(r"[^\w.-]", "-", p.stdout.strip())[:39]
+        return "anonymous"
 
     def proposals(self) -> list[dict]:
         return json.loads(self.ledger.read_text()) if self.ledger.exists() else []
@@ -166,9 +188,9 @@ class Registry:
 
     # ---- propose (private library -> private staging PR)
 
-    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True) -> dict:
-        if not self.staging:
-            raise RegistryError("no staging repo configured (registry.staging) - it must be a PRIVATE repo")
+    def check(self, sop: SOP, override_personal: bool = False, reclassify: bool = True,
+              sign_off=None) -> tuple[dict, bool]:
+        """Everything that must hold before an SOP leaves the machine. Returns (classification, signed_off)."""
         if sop.scope != "private":
             raise RegistryError(f"{sop.id} is already public")
         if sop.status != "validated":
@@ -180,14 +202,35 @@ class Registry:
             raise RegistryError("secrets found - never proposable:\n  " + "\n  ".join(secrets))
         if findings:
             raise RegistryError("private data found - remove it first:\n  " + "\n  ".join(findings))
-        if cls["visibility"] != "shareable" and not override_personal:
-            raise RegistryError(f"JEV classified {sop.id} as personal ({cls['reason']}); it stays private. "
-                                "If you are sure it is general, pass --override-personal (scans still apply).")
+        signed = False
+        if cls["visibility"] == "ambiguous":
+            files = sorted(str(f.relative_to(sop.path)) for f in sop.path.rglob("*") if f.is_file()
+                           and "__pycache__" not in f.parts)
+            ok = sign_off(sop, cls, files) if callable(sign_off) else bool(sign_off)
+            if not ok:
+                raise RegistryError(f"{sop.id} is ambiguous ({cls['reason']}) and needs your sign-off: review the "
+                                    "files and JEV's evidence, then confirm (or pass --sign-off).")
+            signed = True
+        elif cls["visibility"] != "shareable" and not override_personal:
+            raise RegistryError(f"{sop.id} was classified as not shareable ({cls['reason']}); it stays private. "
+                                "If you are sure it is general, pass --override-personal: it still goes only to "
+                                "the private intake review.")
+        return cls, signed
+
+    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True,
+                sign_off=None) -> dict:
+        """For Prog-Ramen members (write access to the private intake repo). ``sign_off``: for
+        ambiguous SOPs, a callable(sop, classification, files) -> bool that shows the contributor
+        exactly what would be submitted and JEV's evidence (or True for a prior explicit sign-off)."""
+        if not self.staging:
+            raise RegistryError("no intake repo configured (registry.staging) - it must be a PRIVATE repo")
+        cls, signed = self.check(sop, override_personal, reclassify, sign_off)
         ok, how = visibility(self.staging, self.assume_private)
         if not ok:
             raise RegistryError(f"refusing to push: staging repo is not verifiably private ({how})")
         repo = self._clone(self.staging, "staging")
-        branch = f"sop/{sop.id}-{time.strftime('%Y%m%d%H%M%S')}"
+        who = self._contributor()
+        branch = f"sop/{who}/{sop.id}-{time.strftime('%Y%m%d%H%M%S')}"
         git(repo, "checkout", "-q", "-b", branch)
         sanitized_copy(sop, repo / "sops" / Path(*sop.id.split(".")))
         build_index(repo / "sops")
@@ -197,14 +240,72 @@ class Registry:
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", f"Propose SOP {sop.id}\n\n{sop.description}")
         git(repo, "push", "-q", "-u", "origin", branch)
-        body = (f"Proposed SOP `{sop.id}`: {sop.description}\n\nClassification: {cls['visibility']} ({cls['reason']}).\n"
-                "Scans: rameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
-                (" + trufflehog" if shutil.which("trufflehog") else "") + ": clean.\n"
-                "Merging here does not publish anything; `rameness sop release` does, after re-scanning.")
+        probs = ", ".join(f"{k} {v:.0%}" for k, v in sorted(cls.get("probs", {}).items(), key=lambda kv: -kv[1]))
+        body = (f"## Proposed SOP `{sop.id}`\n\n{sop.description}\n\n"
+                f"**Contributor:** {who}  \n**Permissions:** {', '.join(sop.permissions) or 'none'}  \n"
+                f"**Tests:** {len(sop.tests)} (passing)\n\n"
+                f"### JEV classification\n- Verdict: **{cls['visibility']}**"
+                f"{' - contributor signed off after reviewing the files and evidence' if signed else ''}"
+                f"{' (overridden by the contributor)' if override_personal and cls['visibility'] == 'private' else ''}\n"
+                f"- Reason: {cls['reason']}\n- Probabilities: {probs or 'n/a'}\n"
+                f"- Organization-specific details JEV found: {', '.join(cls.get('specific') or []) or 'none'}\n"
+                f"- Details JEV was unsure about: {', '.join(cls.get('uncertain') or []) or 'none'}\n\n"
+                "### Scans\nrameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
+                (" + trufflehog" if shutil.which("trufflehog") else "") + ": clean.\n\n"
+                "### Reviewer checklist\n- [ ] Nothing here identifies an organization, customer, person or internal system\n"
+                "- [ ] Constants are generic defaults or parameters, not one company's business rules\n"
+                "- [ ] Useful beyond the contributor's own use case\n\n"
+                "This repository is private. Merging here publishes nothing by itself: the release workflow "
+                "re-scans merged SOPs and opens a release PR on the public registry.")
         pr = self._gh_pr(self.staging, branch, self._base, f"SOP: {sop.id}", body)
         entry = {"id": sop.id, "branch": branch, "t": time.time(), "staging": self.staging, "where": how,
                  "pr": pr or self._compare_url(self.staging, branch, self._base), "classification": cls["visibility"],
-                 "overridden": cls["visibility"] != "shareable"}
+                 "signed_off": signed, "overridden": cls["visibility"] == "private"}
+        self._record(entry)
+        return entry
+
+    # ---- submit (anyone: encrypted relay through a public issue)
+
+    def submit(self, sop: SOP, override_personal: bool = False, sign_off=None, create_issue=None) -> dict:
+        """For contributors without access to the intake repo: seal the SOP with the intake's public
+        key and open an issue on the public repo containing only ciphertext."""
+        from . import relay
+        import urllib.request
+        cls, signed = self.check(sop, override_personal, True, sign_off)
+        src = self.relay_key
+        if not src:
+            raise RegistryError("no relay key configured (registry.relay_key)")
+        try:
+            if re.match(r"(https?|file)://", src):
+                with urllib.request.urlopen(src, timeout=15) as r:
+                    pem = r.read()
+            else:
+                pem = Path(src).expanduser().read_bytes()
+        except Exception as e:
+            raise RegistryError(f"cannot load the intake public key from {src}: {e}")
+        tmp = Path(tempfile.mkdtemp(prefix="rameness-submit-"))
+        try:
+            sanitized_copy(sop, tmp / "sop")
+            meta = {"id": sop.id, "description": sop.description, "signed_off": signed,
+                    "classification": {k: cls.get(k) for k in ("visibility", "reason", "specific", "uncertain")}}
+            body = relay.seal(pem, relay.pack(tmp / "sop", meta))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        title = f"SOP submission {uuid.uuid4().hex[:8]}"            # reveals nothing about the SOP
+        if create_issue:
+            url = create_issue(self.relay_repo, title, body)
+        elif gh_bin():
+            p = subprocess.run([gh_bin(), "issue", "create", "--repo", self.relay_repo, "--title", title, "--body-file", "-"],
+                               input=body, capture_output=True, text=True)
+            if p.returncode:
+                raise RegistryError(f"could not open the submission issue: {p.stderr.strip()}")
+            url = p.stdout.strip()
+        else:
+            out = self.home / f"{title.replace(' ', '-')}.txt"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(body)
+            url = f"(no gh) open an issue on {self.relay_repo} titled '{title}' with the contents of {out}"
+        entry = {"id": sop.id, "via": "relay", "issue": url, "t": time.time(), "signed_off": signed}
         self._record(entry)
         return entry
 
@@ -225,7 +326,9 @@ class Registry:
             raise RegistryError("merged staging content failed the scan; nothing released:\n  " + "\n  ".join(findings))
         pub = self._clone(self.public, "public")
         base = self._base
-        branch = base if self.release_mode == "direct" else f"release/{time.strftime('%Y%m%d-%H%M%S')}"
+        first = self._empty                    # nothing to open a PR against: the first release becomes main
+        mode = "direct" if first else self.release_mode
+        branch = base if mode == "direct" else f"release/{time.strftime('%Y%m%d-%H%M%S')}"
         dest = pub / "sops"
         changed = []
         for sj in sorted(src.rglob("sop.json")):
@@ -253,7 +356,7 @@ class Registry:
                 ["git", "diff", "--quiet", "--cached", pending[-1], "--", "sops"], cwd=pub).returncode == 0:
             git(pub, "reset", "-q", "--hard")
             return {"released": [], "note": f"identical release already pending review: {pending[-1]}"}
-        if branch != base:
+        if branch != base or first:
             git(pub, "checkout", "-q", "-B", branch)          # carries the staged release onto its branch
         git(pub, "commit", "-q", "-m", "Release SOPs: " + ", ".join(changed))
         git(pub, "push", "-q", "-u", "origin", branch)
@@ -262,15 +365,67 @@ class Registry:
             pr = self._gh_pr(self.public, branch, base, f"Release {len(changed)} SOP(s)",
                              "Reviewed in the private staging registry and re-scanned before release:\n"
                              + "\n".join(f"- `{c}`" for c in changed)) or self._compare_url(self.public, branch, base)
-        return {"released": changed, "branch": branch, "pr": pr}
+        out = {"released": changed, "branch": branch, "pr": pr}
+        if first:
+            out["note"] = "the public registry was empty: this first release was pushed as its main branch"
+        return out
 
 
-STAGING_README = """# SOP staging registry (PRIVATE)
+INTAKE_README = """# RamenSOPs intake (PRIVATE)
 
-Keep this repository **private**. SOPs proposed with `rameness sop propose` land here as pull
-requests for review; nothing here is public. After merging, `rameness sop release` re-scans the
-merged SOPs and publishes them to the public registry.
+Review queue for SOPs proposed to the public [RamenSOPs](https://github.com/Prog-Ramen/RamenSOPs)
+registry. **Keep this repository private**: only Prog-Ramen members with access can see the
+proposals here.
+
+1. A contributor runs `rameness sop propose <id>`. JEV must have classified the SOP as shareable
+   (or the contributor overrides), and the scrubber and secret scanners must be clean. The PR body
+   shows JEV's verdict, the organization-specific details it looked at, and its probabilities.
+2. A reviewer (see CODEOWNERS) checks the PR against the checklist and merges or closes it.
+3. On merge, `release-to-public` re-scans the merged SOPs and opens a release PR on RamenSOPs.
+
+Everyone with read access here can see every proposal. Grant access only to trusted members,
+not to outside contributors.
 """
+
+CODEOWNERS = "* @{owner}/sop-reviewers\n"
+
+PR_TEMPLATE = """### Reviewer checklist
+- [ ] Nothing identifies an organization, customer, person or internal system
+- [ ] Constants are generic defaults or parameters, not one company's business rules
+- [ ] Useful beyond the contributor's own use case
+- [ ] Tests pass and the SOP's permissions are the minimum it needs
+"""
+
+RELEASE_WORKFLOW = """name: release-to-public
+on:
+  push: {branches: [main]}
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install "git+https://github.com/{owner}/Rameness.git"
+      - name: Re-scan merged SOPs and open a release PR on the public registry
+        env:
+          # fine-grained token: contents + pull requests (write) on the public registry, read on this repo
+          GH_TOKEN: "${{ secrets.RAMENSOPS_RELEASE_TOKEN }}"
+        run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          mkdir -p ~/.rameness
+          cat > ~/.rameness/config.json <<JSON
+          {"registry": {"staging": "https://github.com/${{ github.repository }}.git",
+                        "public": "https://github.com/{public}.git", "release": "pr"}}
+          JSON
+          rameness sop release
+"""
+
+STAGING_README = INTAKE_README
 
 SCAN_WORKFLOW = """name: secret-scan
 on: [pull_request, push]
@@ -285,13 +440,18 @@ jobs:
 """
 
 
-def init_staging(dest: Path) -> Path:
-    """Scaffold a staging registry repo (README, secret-scan workflow, empty index)."""
+def init_staging(dest: Path, owner: str = "Prog-Ramen", public: str = "Prog-Ramen/RamenSOPs") -> Path:
+    """Scaffold an org-owned private intake repo: README, CODEOWNERS, PR checklist,
+    secret-scan CI and the release-on-merge workflow."""
     (dest / "sops").mkdir(parents=True, exist_ok=True)
-    (dest / "README.md").write_text(STAGING_README)
-    wf = dest / ".github" / "workflows"
-    wf.mkdir(parents=True, exist_ok=True)
-    (wf / "secret-scan.yml").write_text(SCAN_WORKFLOW)
+    (dest / "README.md").write_text(INTAKE_README)
+    gh = dest / ".github"
+    (gh / "workflows").mkdir(parents=True, exist_ok=True)
+    (gh / "CODEOWNERS").write_text(CODEOWNERS.replace("{owner}", owner))
+    (gh / "pull_request_template.md").write_text(PR_TEMPLATE)
+    (gh / "workflows" / "secret-scan.yml").write_text(SCAN_WORKFLOW)
+    (gh / "workflows" / "release-to-public.yml").write_text(
+        RELEASE_WORKFLOW.replace("{owner}", owner).replace("{public}", public))
     build_index(dest / "sops")
     if not (dest / ".git").exists():
         subprocess.run(["git", "init", "-q", "-b", "main", str(dest)], check=True)

@@ -104,32 +104,119 @@ def generality(jev: Jev, sop: SOP) -> float:
                    GENERAL_CUES, PERSONAL_CUES)
 
 
-def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
-    """Personal (stays private) or general (may be proposed for the public registry).
+SPECIFIC_Q = ("Which of these details are specific to one organization (its business rules, thresholds, "
+              "plans, internal names, identifiers) rather than generic defaults anyone would use?")
+SHARE_Q = "Is this SOP general enough to share publicly, or does it encode one organization's use case?"
+SHARE_OPTIONS = [
+    Option("shareable", "generic reusable technique any organization could use standard tooling no internal details"),
+    Option("generalize", "useful technique but hard-codes one organization's constants thresholds names that should "
+                         "become parameters before sharing"),
+    Option("private", "one organization's business process internal systems policies customers people workflow"),
+]
 
-    Deterministic signals first - any scrubber finding or private term makes it personal.
-    Otherwise the JEV decides, and it must be clearly confident to call something general:
-    anything uncertain stays private.
+_DETAIL_PATTERNS = [
+    re.compile(r"\b\d+(?:\.\d+)?\s?(?:%|(?:percent|days?|hours?|minutes?|weeks?|months?|years?)\b)", re.I),
+    re.compile(r"\b[A-Z][A-Z0-9_]{2,}\s*=\s*[^\n]{1,60}"),                          # UPPER_CASE = constant
+    re.compile(r"\b(?:GL|SKU|acct|account|tier|plan|region|cluster|env)\s*[-#:]?\s*[A-Za-z0-9][\w-]{0,15}\b", re.I),
+    re.compile(r"(?<![\w/])[#@][a-z][\w-]{2,}"),                                      # #channel / @team
+    re.compile(r"\b[a-z][\w-]*/[\w.-]+(?:/[\w.-]+)*"),                              # repo/path-like names
+    re.compile(r"(?<=[a-z,;:] )[A-Z][a-zA-Z0-9]{1,}(?:[A-Z][a-z0-9]+)*\b"),           # mid-sentence proper nouns
+    re.compile(r"\bQ[1-4]\b|\b(?:FY|CY)\d{2,4}\b"),
+]
+
+
+def extract_details(sop: SOP, limit: int = 24) -> list[dict]:
+    """Candidate specifics for JEV to judge. Deliberately over-inclusive: JEV decides, not the regex."""
+    texts = [("description", sop.description)]
+    for f in sorted(sop.path.glob("*")):
+        if f.is_file() and f.suffix in (".py", ".sh", ".md", ".json") and f.name != "sop.json":
+            texts.append((f.name, f.read_text(errors="replace")[:6000]))
+    seen, out = set(), []
+    for label, text in texts:
+        for line in text.splitlines():
+            for rx in _DETAIL_PATTERNS:
+                for m in rx.finditer(line):
+                    t = m.group(0).strip()
+                    if t.lower() in seen or len(t) < 2:
+                        continue
+                    seen.add(t.lower())
+                    out.append({"text": t, "where": label, "context": line.strip()[:160]})
+    return out[:limit]
+
+
+def strong_jev(jev: Jev) -> Jev | None:
+    """The backend allowed to make high-stakes calls: a served JEV or a model, never the keyword pass alone."""
+    from .jev import CascadeJev, HttpJev, LLMJev
+    b = jev.backend
+    if isinstance(b, (LLMJev, HttpJev)):
+        return jev
+    if isinstance(b, CascadeJev) and b.strong is not None:
+        return Jev(b.strong, jev.log_path, tuning_path=jev.tuning_path)
+    return None
+
+
+def classify(jev: Jev, sop: SOP, org: Org, save: bool = True, confident: float = 0.85) -> dict:
+    """Shareable (may be proposed) or private. JEV decides; code only gathers evidence.
+
+    1. The scrubber (secrets, private hosts/IPs, emails, home paths, your private_terms) makes an
+       SOP private outright - no model needed.
+    2. Candidate details (numbers with units, UPPER_CASE constants, plan/tier/account codes,
+       #channels, repo paths, proper nouns...) are extracted, and JEV decides which of them are
+       specific to one organization.
+    3. JEV decides shareable / generalize / private with those findings in view.
+
+    Outcomes:
+      shareable - JEV is highly confident (>= ``confident``) it is general and flagged nothing
+      ambiguous - JEV is not highly certain it isn't a personal use case (lower confidence,
+                  details it couldn't call either way, or no model-backed JEV): the contributor
+                  signs off after seeing the files and JEV's evidence
+      private   - JEV is confident it is one organization's use case, or it hard-codes
+                  organization-specific details (then the reason lists what to parameterize)
+    Only a strong JEV (served model or LLM) may call something shareable.
     """
     findings = scrub(sop, org)
-    body = ""
-    for f in sorted(sop.path.glob("*")):
-        if f.is_file() and f.suffix in (".py", ".sh", ".md"):
-            body += f.read_text(errors="replace")[:1500]
-    d = jev.choose("Is this procedure personal to one user or organization, or general enough to share publicly?",
-                   f"{sop.text} {' '.join(org.private_terms)} {body[:2000]}",
-                   [Option("personal", PERSONAL_CUES), Option("general", GENERAL_CUES)])
+    body = "".join(f.read_text(errors="replace")[:1500] for f in sorted(sop.path.glob("*"))
+                   if f.is_file() and f.suffix in (".py", ".sh", ".md"))
+    result: dict = {"visibility": "private", "specific": [], "uncertain": [], "unclassified": False, "probs": {},
+                    "decision": None, "findings": len(findings)}
+    decider = strong_jev(jev)
     if findings:
-        vis, reason = "private", f"scrubber: {findings[0]}" + (f" (+{len(findings) - 1} more)" if len(findings) > 1 else "")
-    elif d.probs["general"] >= 0.65 and d.probs["general"] - d.probs["personal"] >= 0.15:
-        vis, reason = "shareable", "JEV: general"
+        result["reason"] = f"scrubber: {findings[0]}" + (f" (+{len(findings) - 1} more)" if len(findings) > 1 else "")
+    elif decider is None:
+        result.update(visibility="ambiguous", unclassified=True,
+                      reason="no model-backed JEV available: needs your sign-off")
     else:
-        vis, reason = "private", "JEV: personal or not clearly general"
-    result = {"visibility": vis, "reason": reason, "probs": d.probs, "decision": d.id, "findings": len(findings)}
+        details = extract_details(sop)
+        if details:
+            d1 = decider.activate(SPECIFIC_Q, f"{sop.id}: {sop.description}",
+                                  [Option(f"d{i}", f"{x['text']}  (in {x['where']}: {x['context']})")
+                                   for i, x in enumerate(details)])
+            ranked = [(details[int(k[1:])]["text"], p) for k, p in d1.top(len(details))]
+            result["specific"] = [t for t, p in ranked if p >= 0.7]
+            result["uncertain"] = [t for t, p in ranked if 0.3 <= p < 0.7]
+        q = (f"{sop.id}: {sop.description}\ncode:\n{body[:1800]}\norganization-specific details found: "
+             f"{', '.join(result['specific']) or 'none'}")
+        d2 = decider.choose(SHARE_Q, q, SHARE_OPTIONS)
+        result.update(probs=d2.probs, decision=d2.id)
+        ps = d2.probs
+        if result["specific"] or (d2.best == "generalize" and ps["generalize"] >= 0.6):
+            result["reason"] = ("JEV: generalize first - make these parameters: " + ", ".join(result["specific"])
+                                if result["specific"] else "JEV: generalize first")
+        elif d2.best == "private" and ps["private"] >= 0.6:
+            result["reason"] = "JEV: one organization's use case"
+        elif d2.best == "shareable" and ps["shareable"] >= confident and not result["uncertain"]:
+            result.update(visibility="shareable", reason=f"JEV: general ({ps['shareable']:.0%})")
+        else:
+            doubts = [f"shareable only {ps['shareable']:.0%}"] if ps["shareable"] < confident else []
+            if result["uncertain"]:
+                doubts.append("unsure about " + ", ".join(result["uncertain"]))
+            if d2.best != "shareable":
+                doubts.append(f"leans {d2.best}")
+            result.update(visibility="ambiguous", reason="JEV is not certain: " + "; ".join(doubts))
     if save and sop.scope == "private":
         data = json.loads((sop.path / "sop.json").read_text())
-        data["visibility"] = vis
-        data["classified"] = {k: result[k] for k in ("reason", "probs")}
+        data["visibility"] = result["visibility"]
+        data["classified"] = {k: result[k] for k in ("reason", "probs", "specific", "uncertain", "unclassified")}
         (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
     return result
 
@@ -190,7 +277,10 @@ def build_index(pkg_root: Path) -> Path:
 def search_index(jev: Jev, index_src: str, query: str, k: int = 10) -> list[tuple[dict, float]]:
     """Search a registry by lazy traversal: only the branches JEV explores are fetched."""
     from .remote import RemoteRegistry
-    reg = RemoteRegistry(index_src, Path.home() / ".rameness", ttl=0)
+    from .config import user_home
+    if not re.match(r"(https?|file)://", index_src):
+        index_src = Path(index_src).resolve().as_uri()           # local index.json path
+    reg = RemoteRegistry(index_src, user_home(), ttl=0)
     hits = reg.traverse(jev, query, "", {}, set(), activate_th=0.1, explore_th=0.15, beam=6, max_sops=k)
     return [(reg.entries[s.id], p) for s, p in hits]
 

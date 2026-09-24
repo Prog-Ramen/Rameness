@@ -250,34 +250,70 @@ After each task the trace is stored in `.rameness/runs/`. The learner:
 ## Private vs public SOPs
 
 Every learned or agent-saved SOP starts in the **private** project library (`.rameness/sops`) and
-stays there unless you act. What leaves the machine, and how:
+stays there unless it is proposed. Proposals are reviewed **privately by Prog-Ramen members**
+before anything reaches the public registry:
 
 ```
-private library ──propose──► PRIVATE staging repo ──review + merge──► release ──► public RamenSOPs
-  JEV: personal vs general     verified not public before each push     re-scanned    github.com/Prog-Ramen/RamenSOPs
-  scrubber + secret scanners   pre-push hook re-scans every push
+private library ──propose──► Prog-Ramen/RamenSOPs-intake (PRIVATE) ──review + merge──► release PR ──► RamenSOPs (public)
+  scrubber, secret scanners     PR visible only to org members with access              re-scanned by the workflow
+  JEV: shareable?               CODEOWNERS: @Prog-Ramen/sop-reviewers
 ```
 
-* **Personal vs general.** When an SOP is registered, the scrubber runs first. Any secret, email,
-  private host or IP, home path, or `private_terms` match makes it `private`. Otherwise JEV decides
-  personal vs general, and it has to be clearly confident (≥ 0.65, margin ≥ 0.15) to mark an SOP
-  `shareable`; anything uncertain stays private. `rameness sop classify` shows or redoes this.
-* **Hidden until merged.** A PR to a public GitHub repo is public as soon as its branch is pushed,
-  and forks of public repos are public too. So proposals go to a separate **private staging repo**.
-  `rameness sop propose <id>` pushes a sanitized copy (origin, stats and classification stripped) on
-  a `sop/<id>-…` branch there and opens the review PR (`gh`, if installed). It refuses unless the
-  staging repo is verifiably not public (checked through `gh`, the GitHub API, or as a local path).
-* **Secrets never leave.** Scrubber findings block a proposal, and secret-class findings (keys,
-  tokens, private keys, JWTs, credentials in URLs) cannot be overridden. gitleaks and trufflehog
-  also run when installed. Every clone rameness manages gets a **pre-push hook** that re-scans the
-  whole tree, so a manual `git push` of a secret is blocked too.
-* **Release.** After a staging PR is merged, `rameness sop release` re-scans the merged SOPs and
-  opens a release PR on the public repo (or pushes directly with `"release": "direct"`), with a
-  sharded, metadata-only index for discovery (see below). `rameness sop registry-init <dir>` scaffolds a staging
-  repo with a gitleaks CI workflow.
+### JEV decides what is shareable
+
+1. **Scrubber (deterministic).** Secrets, private hosts/IPs, emails, home paths and your
+   `private_terms` make an SOP private outright.
+2. **Evidence, then JEV.** The code extracts candidate details (numbers with units such as
+   "45 days" or "18%", `UPPER_CASE` constants, plan/tier/account codes, `#channels`, repo paths,
+   proper nouns). JEV decides which of them are specific to one organization.
+3. **JEV's verdict.** With those findings in view, JEV chooses `shareable`, `generalize` (a useful
+   technique that hard-codes one organization's constants: stays private and lists what to turn
+   into parameters), or `private`.
+4. **Only a model-backed JEV decides.** This call always goes to the strong backend (your served
+   JEV or an LLM), never the keyword scorer alone.
+
+| Outcome | When | What happens |
+|---|---|---|
+| `shareable` | JEV is highly confident (≥ 0.85) it is general and flagged nothing | proposed with no sign-off |
+| `ambiguous` | JEV is not highly certain it isn't a personal use case: lower confidence, details it couldn't call either way, or no model-backed JEV | you see the exact files and JEV's evidence and **sign off**; the PR records it |
+| `private` | JEV is confident it is one organization's use case, or it hard-codes organization-specific details | blocked; `--override-personal` still only sends it to private review |
+
+`rameness sop classify` shows the verdict and the details JEV flagged. `evals/shareability.py` is a
+labelled set of general, company-specific and subtle business-rule SOPs, used to measure leaks
+(company SOPs marked shareable) for any JEV backend.
+
+### Internal review, then release
+
+* **Intake is a private org repo.** A PR in a private repo is visible only to people with access
+  to it, so Prog-Ramen members review proposals without anything being public. (GitHub has no
+  private PRs on public repos, and forks of public repos are public, which is why intake is a
+  separate repo.) Everyone with read access sees every proposal, so give access to trusted
+  members only. Outside contributors need a submission service that opens intake PRs on their
+  behalf.
+* `rameness sop propose <id>` refuses unless the SOP is shareable (or you override), scans are
+  clean, and the intake repo is verifiably private. It pushes `sop/<contributor>/<id>-…` and opens a
+  PR whose body shows JEV's verdict, the specific details it weighed, its probabilities, and a
+  reviewer checklist. Secret findings can never be overridden. Every clone rameness manages has a
+  pre-push hook that re-scans the tree.
+* **Outside contributors: encrypted relay.** People outside Prog-Ramen can't push to a private
+  repo, and giving them access would show them every other submission. `rameness sop submit <id>`
+  runs the same checks, then seals a sanitized copy with the intake's public key
+  (RSA-OAEP-SHA256 + AES-256-GCM). It opens an issue on RamenSOPs whose title is `SOP submission <random>`
+  and whose body is only ciphertext. The `intake-relay` workflow, which holds the private key as a
+  secret, unseals and safely unpacks it without executing anything, re-scans it, and opens the PR
+  in the private intake repo credited to the submitter. It then wipes the issue body and closes and
+  locks the issue. The public never sees what was submitted. Set it up with
+  `rameness sop relay-init <public-repo-checkout>` (adds the workflow and public key; you store the
+  private key and a relay token as secrets).
+* On merge, the intake repo's `release-to-public` workflow re-scans the merged SOPs and opens a
+  release PR on RamenSOPs (`rameness sop release` does the same by hand).
+* `rameness sop registry-init <dir>` scaffolds the intake repo: README, CODEOWNERS
+  (`@Prog-Ramen/sop-reviewers`), PR checklist, secret-scan CI and the release workflow. The
+  workflow needs a `RAMENSOPS_RELEASE_TOKEN` secret: a fine-grained token with contents and pull
+  requests write on RamenSOPs.
 
 ```json
-"registry": {"staging": "git@github.com:Prog-Ramen/RamenSOPs-staging.git",
+"registry": {"staging": "git@github.com:Prog-Ramen/RamenSOPs-intake.git",
              "public": "https://github.com/Prog-Ramen/RamenSOPs.git", "release": "pr"}
 ```
 
@@ -326,8 +362,14 @@ or any OpenAI-compatible `base_url`. Permissions: `ask` (default), `auto` (`-y`)
 ## Tests
 
 ```bash
-.venv/bin/python -m unittest discover tests
+.venv/bin/python -m unittest discover tests                  # 67 unit / integration tests (~20 s)
+.venv/bin/python -m unittest discover -s e2e -t .            # 27 end-to-end tests (~90 s), real processes
+RAMENESS_E2E_URL=http://host:8034 .venv/bin/python -m unittest discover -s e2e -t .   # + 5 live-model tests
 ```
+
+The end-to-end suite drives the real `rameness` CLI, server, workers and session backends in
+throwaway projects. `--provider replay` (and `"kind": "replay"` fleet slots) script the model so
+these runs are deterministic. `RAMENESS_GH=none` keeps tests away from real GitHub.
 
 ## Layout
 
@@ -344,7 +386,8 @@ rameness/
   llm.py            Anthropic SDK + OpenAI-compatible (llama-server, ollama, vLLM, DeepSeek) with prompted tools
   tools.py          bash/read/write/edit/grep, environment-aware
   publish.py        scrubber, secret scanning, personal-vs-general classification, local publish, index
-  registry.py       private staging → public release flow, visibility checks, pre-push hooks
+  registry.py       private intake → public release flow, visibility checks, pre-push hooks, sign-off
+  relay.py          encrypted submission relay for contributors without intake access
   remote.py         lazy, activation-driven pulls of individual SOPs from a sharded registry index
   fleet/
     manager.py      the manager: JEV decisions, comfort gate, autonomy modes, CRUD, scheduling, supervision, merging
@@ -357,6 +400,7 @@ rameness/
     store.py        SQLite state (agents, events, decisions, escalations, messages)
     server.py       JSON API + UI server
     ui/index.html   the UI
+evals/shareability.py  labelled leak check for JEV's shareable/private decisions
 install.sh          one-environment installer
 ```
 
