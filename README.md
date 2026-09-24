@@ -1,4 +1,4 @@
-![Rameness Logo](rameness_logo.png)
+<img src="rameness_logo.png" alt="Rameness Logo" width="100">
 ![Rameness Text](rameness_txt.png)
 
 **A JEV-driven agent harness and team manager.** A JEV decision model makes the
