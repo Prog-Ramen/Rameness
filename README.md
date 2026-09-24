@@ -1,4 +1,4 @@
-<div align="center"><img src="rameness_logo.png" alt="Rameness Text" width="30%"></div>
+<div align="center"><img src="rameness_logo.png" alt="Rameness Text" width="10%"></div>
 <div align="center"><img src="rameness_txt1.png" alt="Rameness Text" width="70%"></div>
 
 
