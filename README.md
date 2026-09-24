@@ -1,5 +1,6 @@
-<img src="rameness_logo.png" alt="Rameness Logo" width="100">
-![Rameness Text](rameness_txt.png)
+<center><img src="rameness_logo.png" alt="Rameness Logo" width="300"></center>
+<center><img src="rameness_text.png" alt="Rameness Text" width="1000"></center>
+
 
 **A JEV-driven agent harness and team manager.** A JEV decision model makes the
 multiple-choice and multi-probability calls that other harnesses (claude-code, codex, pi,
