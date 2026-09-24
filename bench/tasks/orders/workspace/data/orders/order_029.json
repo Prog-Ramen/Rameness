@@ -1,0 +1,22 @@
+{
+ "id": "ORD-0029",
+ "customer": "C004",
+ "status": "paid",
+ "items": [
+  {
+   "sku": "SKU-3",
+   "qty": 1,
+   "unit_price": 99.57
+  },
+  {
+   "sku": "SKU-10",
+   "qty": 2,
+   "unit_price": 117.2
+  },
+  {
+   "sku": "SKU-12",
+   "qty": 4,
+   "unit_price": 103.3
+  }
+ ]
+}

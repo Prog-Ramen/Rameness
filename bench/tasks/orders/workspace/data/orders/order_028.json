@@ -1,0 +1,22 @@
+{
+ "id": "ORD-0028",
+ "customer": "C008",
+ "status": "refunded",
+ "items": [
+  {
+   "sku": "SKU-5",
+   "qty": 6,
+   "unit_price": 28.34
+  },
+  {
+   "sku": "SKU-2",
+   "qty": 5,
+   "unit_price": 52.09
+  },
+  {
+   "sku": "SKU-12",
+   "qty": 3,
+   "unit_price": 103.3
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "id": "ORD-0040",
+ "customer": "C006",
+ "status": "paid",
+ "items": [
+  {
+   "sku": "SKU-6",
+   "qty": 1,
+   "unit_price": 76.04
+  }
+ ]
+}

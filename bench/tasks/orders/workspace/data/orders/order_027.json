@@ -1,0 +1,17 @@
+{
+ "id": "ORD-0027",
+ "customer": "C001",
+ "status": "pending",
+ "items": [
+  {
+   "sku": "SKU-6",
+   "qty": 3,
+   "unit_price": 76.04
+  },
+  {
+   "sku": "SKU-5",
+   "qty": 6,
+   "unit_price": 28.34
+  }
+ ]
+}

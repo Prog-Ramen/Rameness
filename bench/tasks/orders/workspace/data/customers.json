@@ -1,0 +1,62 @@
+{
+ "C001": {
+  "name": "Customer 1",
+  "region": "east"
+ },
+ "C002": {
+  "name": "Customer 2",
+  "region": "south"
+ },
+ "C003": {
+  "name": "Customer 3",
+  "region": "west"
+ },
+ "C004": {
+  "name": "Customer 4",
+  "region": "north"
+ },
+ "C005": {
+  "name": "Customer 5",
+  "region": "north"
+ },
+ "C006": {
+  "name": "Customer 6",
+  "region": "north"
+ },
+ "C007": {
+  "name": "Customer 7",
+  "region": "east"
+ },
+ "C008": {
+  "name": "Customer 8",
+  "region": "north"
+ },
+ "C009": {
+  "name": "Customer 9",
+  "region": "south"
+ },
+ "C010": {
+  "name": "Customer 10",
+  "region": "north"
+ },
+ "C011": {
+  "name": "Customer 11",
+  "region": "north"
+ },
+ "C012": {
+  "name": "Customer 12",
+  "region": "west"
+ },
+ "C013": {
+  "name": "Customer 13",
+  "region": "west"
+ },
+ "C014": {
+  "name": "Customer 14",
+  "region": "north"
+ },
+ "C015": {
+  "name": "Customer 15",
+  "region": "south"
+ }
+}
