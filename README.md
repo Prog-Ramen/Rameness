@@ -1,4 +1,4 @@
-<div align="center"><img src="rameness_txt.png" alt="Rameness Text" width="100%"></div>
+<div align="center"><img src="rameness_txt.png" alt="Rameness Text" width="90%"></div>
 
 
 **A JEV-driven agent harness and team manager.** A JEV decision model makes the
