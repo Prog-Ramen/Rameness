@@ -1,4 +1,3 @@
-<div align="center"><img src="rameness_logo.png" alt="Rameness Logo" width="50%"></div>
 <div align="center"><img src="rameness_txt.png" alt="Rameness Text" width="100%"></div>
 
 
