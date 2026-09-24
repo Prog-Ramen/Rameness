@@ -1,4 +1,5 @@
-# Rameness
+![Rameness Logo](rameness_logo.png)
+![Rameness Text](rameness_txt.png)
 
 **A JEV-driven agent harness and team manager.** A JEV decision model makes the
 multiple-choice and multi-probability calls that other harnesses (claude-code, codex, pi,
