@@ -66,6 +66,7 @@ PROVIDER_PRESETS = {
     "llama-server": {"model": "local", "fast_model": "local",
                      "base_url": "http://localhost:8080/v1", "api_key_env": None},
     "fake": {"model": "fake", "fast_model": "fake"},
+    "replay": {"model": "replay", "fast_model": "replay"},
 }
 
 

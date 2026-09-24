@@ -55,15 +55,35 @@ Conventions:
 
 **Verified**
 
-- **Unit tests:** 67 pass (`python -m unittest discover tests`), about 20 s. They cover:
-  - harness: routing, SOPs, learning, context, loop guard
-  - fleet: full lifecycle, CRUD, capacity limits, hierarchy, forks, comfort gate, autonomy modes,
-    refine and testing cycles
-  - SOP registry: classification, propose, release, pre-push hook
-  - lazy remote pulls: only explored branches fetched, hash mismatch, permission guard, failing
-    tests, offline registry
-  - encrypted relay, including a ciphertext-only issue body
-  - CLI reachability
+- **Unit tests:** 67 pass (`python -m unittest discover tests`), about 20 s. They cover the harness,
+  fleet, cycles, autonomy, loop guard, the SOP registry, lazy remote pulls, the relay and CLI
+  reachability.
+- **End-to-end suite** (`python -m unittest discover -s e2e -t .`): 27 pass in about 90 s. Every test
+  drives the real CLI, server, worker processes and session backends in a throwaway project:
+  - `e2e/test_cli.py`: installer into a fresh environment, direct route with no model call, agent
+    loop, learning across runs, loop guard, read-only mode, org-context resolve and defer
+  - `e2e/test_fleet.py`: server + UI, ask → worktree → review merge, CRUD over HTTP, autonomy modes,
+    shadow and improve endpoints, refine and testing cycles, a rameness worker doing `ask_manager`,
+    tmux and screen backends, an exec-prefix remote environment
+  - `e2e/test_registry.py`: classify → sign-off → private intake → release (PR, and first release
+    into an empty registry), secret refusal, pre-push hook, encrypted relay submit → receive,
+    scaffolding, lazy remote pulls
+  - `e2e/test_more.py`: context offload + recall, SOP management commands, the fleet CLI without a
+    server, godmode, chat
+- **Live-model e2e** (`RAMENESS_E2E_URL=http://10.0.0.187:8034`, 5 tests, about 4.5 min, all pass on
+  Occamy-1.0 via llama-server):
+  - a real agent fixed a bug through the CLI
+  - the model-backed JEV cascade escalated with no silent fallbacks
+  - prompted tool calls worked with a real model
+  - a fleet worker on a llama-server slot fixed and merged a change
+  - 0 shareability leaks
+- **Bugs the e2e suite found and fixed:**
+  - `sop pull` didn't see SOPs pulled into an already-registered root
+  - a release into an empty public registry used a stale tree (the first release now becomes `main`)
+  - `sop remote --index <path>` found nothing
+  - remote search wrote into the real home directory, ignoring `RAMENESS_HOME`
+  - a race marked fast screen/tmux sessions as "lost" (there is now a start-up grace period)
+  - `llm_calls` counted JEV escalations as main-model calls (now split into `llm_calls` and `aux_calls`)
 - **End-to-end runs:**
   - a local Ollama model (qwen 35B) fixed a bug in its worktree inside a tmux session, and the
     manager committed and merged it
@@ -208,6 +228,28 @@ rameness up                  # manager + UI at http://127.0.0.1:7788 (deep links
 
 On a CPU-only machine a local 35B model takes about a minute per JEV decision; use a smaller
 model or a GPU for anything interactive.
+
+## 8b. Benchmarks against other harnesses (in progress, paused)
+
+The goal: give rameness, pi, the DeepSeek harness (`dsh`), Codex and firstmate the same tasks
+(build a game, a bug fix, a tool-call-heavy task) on the **same model**, one harness at a time, and
+compare success on hidden tests, wall time, turns/tool calls and tokens.
+
+Set up so far on the dev machine:
+
+- **Model:** Occamy-1.0 via llama-server at `http://10.0.0.187:8034` (2 slots, 200k context, tool
+  calling works, about 32 tok/s).
+  - The local Windows `LlamaServer` service (Qwen3.8-27B IQ3_S on :8033) produces garbage and was
+    left running; stopping it needs the user.
+  - `10.0.0.92:8034` did not respond.
+  - Ollama was removed at the user's request.
+- **Harnesses:** pi (`@mariozechner/pi-coding-agent` 0.73) and dsh (`@deepseek-ai/dsh` 0.1.5-rc.3)
+  are installed under Node 22 in `~/.local/node22` (system Node is 18). Codex 0.154 and Claude Code
+  are installed.
+
+Not started yet: the benchmark tasks and grader, per-harness model configuration (pi
+`models.json`, a Codex custom provider, dsh), running them, and firstmate. Firstmate is a
+distribution driven by an interactive primary harness in tmux, so it needs a scripted driver.
 
 ## 9. Pending setup (GitHub; needs PR #2 merged first)
 

@@ -360,8 +360,14 @@ or any OpenAI-compatible `base_url`. Permissions: `ask` (default), `auto` (`-y`)
 ## Tests
 
 ```bash
-.venv/bin/python -m unittest discover tests
+.venv/bin/python -m unittest discover tests                  # 67 unit / integration tests (~20 s)
+.venv/bin/python -m unittest discover -s e2e -t .            # 27 end-to-end tests (~90 s), real processes
+RAMENESS_E2E_URL=http://host:8034 .venv/bin/python -m unittest discover -s e2e -t .   # + 5 live-model tests
 ```
+
+The end-to-end suite drives the real `rameness` CLI, server, workers and session backends in
+throwaway projects. `--provider replay` (and `"kind": "replay"` fleet slots) script the model so
+these runs are deterministic. `RAMENESS_GH=none` keeps tests away from real GitHub.
 
 ## Layout
 

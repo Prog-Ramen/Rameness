@@ -51,6 +51,12 @@ class RegistryError(Exception):
     pass
 
 
+def gh_bin() -> str | None:
+    """The GitHub CLI to use: $RAMENESS_GH (a path, or "none" to never touch GitHub), else gh on PATH."""
+    v = os.environ.get("RAMENESS_GH", "gh")
+    return None if v == "none" else shutil.which(v)
+
+
 def git(cwd: Path, *args: str, check: bool = True) -> str:
     p = subprocess.run(["git", "-c", "user.name=rameness", "-c", "user.email=rameness@localhost", *args],
                        cwd=cwd, capture_output=True, text=True)
@@ -68,8 +74,8 @@ def visibility(url: str, assume_private: bool = False) -> tuple[bool, str]:
         return (True, "assumed private by config") if assume_private else \
                (False, "not a GitHub URL: cannot verify it is private (set registry.staging_assume_private)")
     owner, repo = m.groups()
-    if shutil.which("gh"):
-        p = subprocess.run(["gh", "repo", "view", f"{owner}/{repo}", "--json", "visibility", "-q", ".visibility"],
+    if gh_bin():
+        p = subprocess.run([gh_bin(), "repo", "view", f"{owner}/{repo}", "--json", "visibility", "-q", ".visibility"],
                            capture_output=True, text=True)
         if p.returncode == 0:
             vis = p.stdout.strip().upper()
@@ -128,6 +134,7 @@ class Registry:
     # ---- helpers
 
     def _clone(self, url: str, name: str) -> Path:
+        self._empty = False
         d = self.home / name
         if not (d / ".git").exists():
             d.parent.mkdir(parents=True, exist_ok=True)
@@ -141,18 +148,20 @@ class Registry:
         self._base = "main" if "origin/main" in heads else ("master" if "origin/master" in heads else None)
         if self._base:
             git(d, "checkout", "-q", "-B", self._base, f"origin/{self._base}")
-        else:                                    # empty repo
+        else:                                    # empty repo: start from an empty tree
             self._base = "main"
-            git(d, "checkout", "-q", "--orphan", "main", check=False)
+            self._empty = True
+            git(d, "checkout", "-q", "--orphan", "rameness-empty-" + str(time.time_ns()), check=False)
+            git(d, "rm", "-rfq", "--cached", ".", check=False)
         git(d, "clean", "-qfdx")
         install_hook(d)
         return d
 
     def _gh_pr(self, url: str, branch: str, base: str, title: str, body: str) -> str | None:
         m = GH_URL.search(url)
-        if not (m and shutil.which("gh")):
+        if not (m and gh_bin()):
             return None
-        p = subprocess.run(["gh", "pr", "create", "--repo", f"{m.group(1)}/{m.group(2)}", "--head", branch,
+        p = subprocess.run([gh_bin(), "pr", "create", "--repo", f"{m.group(1)}/{m.group(2)}", "--head", branch,
                             "--base", base, "--title", title, "--body", body], capture_output=True, text=True)
         return p.stdout.strip() if p.returncode == 0 else None
 
@@ -162,7 +171,7 @@ class Registry:
 
     @staticmethod
     def _contributor() -> str:
-        for cmd in (["gh", "api", "user", "-q", ".login"], ["git", "config", "user.name"]):
+        for cmd in ([gh_bin() or "gh-disabled", "api", "user", "-q", ".login"], ["git", "config", "user.name"]):
             if shutil.which(cmd[0]):
                 p = subprocess.run(cmd, capture_output=True, text=True)
                 if p.returncode == 0 and p.stdout.strip():
@@ -285,8 +294,8 @@ class Registry:
         title = f"SOP submission {uuid.uuid4().hex[:8]}"            # reveals nothing about the SOP
         if create_issue:
             url = create_issue(self.relay_repo, title, body)
-        elif shutil.which("gh"):
-            p = subprocess.run(["gh", "issue", "create", "--repo", self.relay_repo, "--title", title, "--body-file", "-"],
+        elif gh_bin():
+            p = subprocess.run([gh_bin(), "issue", "create", "--repo", self.relay_repo, "--title", title, "--body-file", "-"],
                                input=body, capture_output=True, text=True)
             if p.returncode:
                 raise RegistryError(f"could not open the submission issue: {p.stderr.strip()}")
@@ -317,7 +326,9 @@ class Registry:
             raise RegistryError("merged staging content failed the scan; nothing released:\n  " + "\n  ".join(findings))
         pub = self._clone(self.public, "public")
         base = self._base
-        branch = base if self.release_mode == "direct" else f"release/{time.strftime('%Y%m%d-%H%M%S')}"
+        first = self._empty                    # nothing to open a PR against: the first release becomes main
+        mode = "direct" if first else self.release_mode
+        branch = base if mode == "direct" else f"release/{time.strftime('%Y%m%d-%H%M%S')}"
         dest = pub / "sops"
         changed = []
         for sj in sorted(src.rglob("sop.json")):
@@ -345,7 +356,7 @@ class Registry:
                 ["git", "diff", "--quiet", "--cached", pending[-1], "--", "sops"], cwd=pub).returncode == 0:
             git(pub, "reset", "-q", "--hard")
             return {"released": [], "note": f"identical release already pending review: {pending[-1]}"}
-        if branch != base:
+        if branch != base or first:
             git(pub, "checkout", "-q", "-B", branch)          # carries the staged release onto its branch
         git(pub, "commit", "-q", "-m", "Release SOPs: " + ", ".join(changed))
         git(pub, "push", "-q", "-u", "origin", branch)
@@ -354,7 +365,10 @@ class Registry:
             pr = self._gh_pr(self.public, branch, base, f"Release {len(changed)} SOP(s)",
                              "Reviewed in the private staging registry and re-scanned before release:\n"
                              + "\n".join(f"- `{c}`" for c in changed)) or self._compare_url(self.public, branch, base)
-        return {"released": changed, "branch": branch, "pr": pr}
+        out = {"released": changed, "branch": branch, "pr": pr}
+        if first:
+            out["note"] = "the public registry was empty: this first release was pushed as its main branch"
+        return out
 
 
 INTAKE_README = """# RamenSOPs intake (PRIVATE)

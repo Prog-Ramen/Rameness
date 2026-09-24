@@ -22,6 +22,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -33,6 +34,7 @@ def wrapper(argv: list[str], log: Path, exitf: Path) -> str:
 
 class Backend:
     name = "base"
+    GRACE = 10.0          # seconds after start before a missing session counts as lost
 
     def __init__(self, state: Path):
         self.state = state / "sessions"
@@ -48,7 +50,7 @@ class Backend:
     def start(self, name: str, argv: list[str], cwd: str, env: dict | None = None) -> dict:
         log, exitf = self._files(name)
         exitf.unlink(missing_ok=True)
-        h = {"backend": self.name, "name": name, "log": str(log), "exit": str(exitf)}
+        h = {"backend": self.name, "name": name, "log": str(log), "exit": str(exitf), "started": time.time()}
         h.update(self._start(name, wrapper(argv, log, exitf), cwd, env or {}))
         return h
 
@@ -65,7 +67,13 @@ class Backend:
                 return "exited", int(ex.read_text().strip() or 1)
             except ValueError:
                 return "exited", 1
-        return ("running", None) if self.alive(h) else ("lost", None)
+        if self.alive(h):
+            return "running", None
+        # a session that was just launched may not be listed yet (screen/tmux/herdr register
+        # asynchronously): only call it lost after a grace period
+        if time.time() - h.get("started", 0) < self.GRACE:
+            return "running", None
+        return ("exited", int(ex.read_text().strip() or 1)) if ex.exists() else ("lost", None)
 
     def read(self, h: dict, lines: int = 80) -> str:
         p = Path(h["log"])

@@ -51,12 +51,15 @@ class Provider:
     def __init__(self, model: str, fast_model: str | None = None):
         self.model = model
         self.fast_model = fast_model or model
-        self.usage = {"input": 0, "output": 0, "calls": 0}
+        self.usage = {"input": 0, "output": 0, "calls": 0, "aux_calls": 0}
+        self._aux = False
 
     def _count(self, i: int, o: int):
         self.usage["input"] += i
         self.usage["output"] += o
         self.usage["calls"] += 1
+        if self._aux:                      # JEV / planner / argument-extraction calls on the fast model
+            self.usage["aux_calls"] += 1
 
     def chat(self, system: str, messages: list[dict], tools: list[dict], effort: str = "high",
              max_tokens: int = 32000, fast: bool = False) -> Response:
@@ -66,11 +69,13 @@ class Provider:
 
     def complete_json(self, system: str, prompt: str, max_tokens: int = 4000, timeout: float | None = None):
         prev, self.request_timeout = self.request_timeout, timeout
+        self._aux = True
         try:
             r = self.chat(system, [{"role": "user", "content": prompt}], [], effort="low",
                           max_tokens=max_tokens, fast=True)
         finally:
             self.request_timeout = prev
+            self._aux = False
         return parse_json(r.text)
 
 
@@ -290,11 +295,33 @@ class FakeProvider(Provider):
         return item(messages) if callable(item) else item
 
     def complete_json(self, system, prompt, max_tokens=4000, timeout=None):
+        self._aux = True
         self._count(len(prompt) // 4, 10)
+        self._aux = False
         if not self.json_script:
             raise RuntimeError("FakeProvider: no scripted JSON")
         item = self.json_script.pop(0)
         return item(prompt) if callable(item) else item
+
+
+class ReplayProvider(FakeProvider):
+    """Replays model responses from a JSON file - drives the real CLI / worker processes in tests::
+
+        {"chat": [{"text": "...", "tool_calls": [{"name": "bash", "input": {...}}]}, ...],
+         "json": [{...}, ...]}                     # answers for complete_json (planner, LLM-JEV)
+    """
+
+    name = "replay"
+
+    def __init__(self, path: str):
+        import json as _json
+        from pathlib import Path as _Path
+        data = _json.loads(_Path(path).read_text())
+        script = []
+        for n, item in enumerate(data.get("chat", [])):
+            calls = [ToolCall(f"r{n}_{j}", c["name"], c.get("input", {})) for j, c in enumerate(item.get("tool_calls", []))]
+            script.append(Response(item.get("text", ""), calls, item.get("stop") or ("tool_use" if calls else "end_turn")))
+        super().__init__(script, data.get("json", []))
 
 
 def build(cfg: dict) -> Provider | None:
@@ -302,6 +329,8 @@ def build(cfg: dict) -> Provider | None:
     key = os.environ.get(cfg["api_key_env"]) if cfg.get("api_key_env") else None
     if p == "fake":
         return FakeProvider()
+    if p == "replay":
+        return ReplayProvider(cfg.get("replay_script") or os.environ["RAMENESS_REPLAY"])
     if p == "anthropic":
         return AnthropicProvider(cfg["model"], cfg["fast_model"], cfg.get("base_url"), cfg["anthropic_fallbacks"])
     return OpenAICompatProvider(cfg["model"], cfg["fast_model"], cfg.get("base_url"), key,

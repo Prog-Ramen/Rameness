@@ -277,7 +277,10 @@ def build_index(pkg_root: Path) -> Path:
 def search_index(jev: Jev, index_src: str, query: str, k: int = 10) -> list[tuple[dict, float]]:
     """Search a registry by lazy traversal: only the branches JEV explores are fetched."""
     from .remote import RemoteRegistry
-    reg = RemoteRegistry(index_src, Path.home() / ".rameness", ttl=0)
+    from .config import user_home
+    if not re.match(r"(https?|file)://", index_src):
+        index_src = Path(index_src).resolve().as_uri()           # local index.json path
+    reg = RemoteRegistry(index_src, user_home(), ttl=0)
     hits = reg.traverse(jev, query, "", {}, set(), activate_th=0.1, explore_th=0.15, beam=6, max_sops=k)
     return [(reg.entries[s.id], p) for s, p in hits]
 

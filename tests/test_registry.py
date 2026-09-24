@@ -173,6 +173,12 @@ class RegistryTest(unittest.TestCase):
         subprocess.run(["git", "clone", "-q", str(self.staging), str(rev)], check=True)
         sh(rev, "checkout", "-q", "-b", "main", f"origin/{r['branch']}")
         self.assertEqual(sh(rev, "push", "-q", "origin", "main").returncode, 0)
+        seed = self.tmp / "public-seed"                               # the public registry already has a main
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        (seed / "README.md").write_text("# registry\n")
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "readme")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
         out = reg.release()
         self.assertEqual(out["released"], ["text.upper"])
         self.assertTrue(out["branch"].startswith("release/"))

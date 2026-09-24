@@ -153,7 +153,7 @@ def discover(cfg: dict) -> list[Slot]:
                   traits="local private offline free")
              for port, kind in ports.items() if f"http://127.0.0.1:{port}" not in known_urls
              and f"http://localhost:{port}" not in known_urls]
-    to_probe = [s for s in slots if s.url and s.kind != "anthropic"] + cands
+    to_probe = [s for s in slots if s.url and s.kind not in ("anthropic", "replay")] + cands
     with ThreadPoolExecutor(8) as ex:
         list(ex.map(probe_server, to_probe))
     slots += [c for c in cands if c.available]
@@ -181,6 +181,9 @@ def provider_for(slot: Slot):
     from ..llm import AnthropicProvider, OpenAICompatProvider
     if slot.kind == "anthropic":
         return AnthropicProvider(slot.model, slot.model)
+    if slot.kind == "replay":                    # scripted responses (tests, demos); url = script path
+        from ..llm import ReplayProvider
+        return ReplayProvider(slot.url)
     if slot.is_cli:
         raise ValueError(f"{slot.id} is a CLI agent, not a model endpoint")
     key = os.environ.get(slot.api_key_env) if slot.api_key_env else None

@@ -44,7 +44,8 @@ def _harness(a, need_llm=True) -> Harness:
 def _print_result(res, verbose: bool):
     print(res.text)
     m = res.metrics
-    print(f"\n[{res.route}] llm_calls={m.get('llm_calls', 0)} tokens={m.get('input_tokens', 0)}in/"
+    print(f"\n[{res.route}] llm_calls={m.get('llm_calls', 0)} aux_calls={m.get('aux_calls', 0)} "
+          f"tokens={m.get('input_tokens', 0)}in/"
           f"{m.get('output_tokens', 0)}out jev_calls={m.get('jev_calls', 0)} {m.get('seconds', 0)}s", file=sys.stderr)
     if verbose:
         print(res.plan.describe(), file=sys.stderr)
@@ -105,7 +106,10 @@ def cmd_init(a):
 def _intake_receive(a, h) -> None:
     """Relay side (GitHub workflow): forward one encrypted issue to the private intake, then scrub it."""
     from .relay import RelayError, receive
-    gh = lambda *args, **kw: subprocess.run(["gh", *args], capture_output=True, text=True, **kw)
+    from .registry import gh_bin
+    if not gh_bin():
+        sys.exit("intake-receive needs the GitHub CLI (gh)")
+    gh = lambda *args, **kw: subprocess.run([gh_bin(), *args], capture_output=True, text=True, **kw)
     issue = a.arg
     v = gh("issue", "view", issue, "--repo", a.repo, "--json", "body,author")
     if v.returncode:
