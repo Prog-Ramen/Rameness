@@ -100,5 +100,19 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(sh(self.tmp, "--git-dir", str(self.intake), "branch").stdout, "")
 
 
+class CliTest(unittest.TestCase):
+    def test_every_sop_action_is_reachable_from_the_cli(self):
+        # the relay workflow runs `rameness sop intake-receive`; submit/relay-init are user-facing
+        import argparse, contextlib, io
+        from rameness import cli
+        for action in ("submit", "intake-receive", "relay-init", "propose", "release", "pull", "classify"):
+            with self.subTest(action=action), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    cli.main(["sop", action, "--help"])
+                except SystemExit as e:
+                    self.assertEqual(e.code, 0, action)           # 2 would mean "invalid choice"
+
+
 if __name__ == "__main__":
     unittest.main()

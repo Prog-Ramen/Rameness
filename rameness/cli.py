@@ -471,7 +471,8 @@ def main(argv=None):
     p = sub.add_parser("sop", help="manage the SOP library")
     p.add_argument("action", choices=["tree", "list", "show", "search", "run", "test", "promote", "remove",
                                       "publish", "install", "index", "remote", "classify", "propose", "proposals",
-                                      "release", "scrub-tree", "registry-init", "pull"])
+                                      "release", "scrub-tree", "registry-init", "pull",
+                                      "submit", "intake-receive", "relay-init"])
     p.add_argument("arg", nargs="?")
     p.add_argument("--args", help="JSON arguments for 'run'")
     p.add_argument("--to", help="package directory for 'publish'")
