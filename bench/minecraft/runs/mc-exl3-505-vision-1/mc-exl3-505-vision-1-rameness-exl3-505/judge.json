@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "The screenshot shows only a dark 'BLOCKCRAFT' loading screen with an empty progress bar and 'Ready' text. There is no voxel world, sky, crosshair or hotbar.",
+ "overall": 0.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0561454
+}

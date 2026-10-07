@@ -4,13 +4,13 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest.mock import Mock, patch
 
-from rameness import publish, registry
+from rameness import publish
 from rameness.jev import Jev, LexicalJev
 from rameness.org import Org
-from rameness.registry import Registry, RegistryError
-from rameness.sops import Library
+from rameness.registry import Registry, RegistryError, fingerprint
+from rameness.sops import Executor, Library
 
 GENERIC = ("import json, sys\na = json.load(sys.stdin)\n"
            "print(json.dumps({'upper': a['text'].upper()}))\n")
@@ -25,10 +25,8 @@ class RegistryTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         os.environ["RAMENESS_HOME"] = str(self.tmp / "home")
-        self.staging = self.tmp / "staging.git"
         self.public = self.tmp / "public.git"
-        for r in (self.staging, self.public):
-            subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(r)], check=True)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.public)], check=True)
         self.proj = self.tmp / "proj"
         self.root = self.proj / ".rameness" / "sops"
         self.org = Org(name="Acme", private_terms=["analytics.acme.internal"])
@@ -43,7 +41,7 @@ class RegistryTest(unittest.TestCase):
         return Library([(self.root, "private")]).get(sid)
 
     def reg(self, **over):
-        cfg = {"registry": {"staging": str(self.staging), "public": str(self.public), "release": "pr", **over}}
+        cfg = {"registry": {"public": str(self.public), **over}}
         return Registry(cfg, self.tmp / "home", self.org, self.jev)
 
     def test_classification(self):
@@ -57,24 +55,54 @@ class RegistryTest(unittest.TestCase):
         self.assertIn("scrubber", r["reason"])                      # private term found before JEV even weighs in
         self.assertEqual(json.loads((per.path / "sop.json").read_text())["visibility"], "private")
 
-    def test_propose_goes_only_to_staging_sanitized(self):
+    def test_benign_findings_are_judged_by_jev(self):
+        doc = self.sop("text.email", "Validate an email address format: a generic reusable text utility",
+                       GENERIC + "# example: user@example.com, placeholder test fixture\n",
+                       ["text", "email", "validate", "utility", "generic"])
+        r = publish.classify(self.jev, doc, self.org)
+        self.assertEqual(r["visibility"], "shareable")
+        self.assertIn("judged benign", r["reason"])
+        leak = self.sop("ops.backup", "Back up a directory: a generic reusable file utility",
+                        GENERIC + "# runs as jane.doe@initech.com on the production database server\n",
+                        ["file", "backup", "utility", "generic"])
+        self.assertEqual(publish.classify(self.jev, leak, self.org)["visibility"], "private")
+        with self.assertRaisesRegex(RegistryError, "JEV judged these findings private"):
+            self.reg().propose(leak, override_personal=True)
+
+    def test_propose_opens_public_branch_sanitized(self):
         gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
                        GENERIC, ["text", "convert", "format", "utility", "generic"])
         r = self.reg().propose(gen)
         self.assertTrue(r["branch"].startswith("sop/text.upper-"))
-        self.assertIn(r["branch"], sh(self.tmp, "--git-dir", str(self.staging), "branch").stdout)
-        self.assertEqual(sh(self.tmp, "--git-dir", str(self.public), "branch").stdout, "")   # public untouched
-        blob = sh(self.tmp, "--git-dir", str(self.staging), "show", f"{r['branch']}:sops/text/upper/sop.json").stdout
+        self.assertIn(r["branch"], sh(self.tmp, "--git-dir", str(self.public), "branch").stdout)
+        files = sh(self.tmp, "--git-dir", str(self.public), "ls-tree", "-r", "--name-only", r["branch"]).stdout
+        self.assertIn("sops/text/upper/run.py", files)
+        self.assertNotIn("sops/index.json", files)                  # generated on merge, never in a PR
+        blob = sh(self.tmp, "--git-dir", str(self.public), "show", f"{r['branch']}:sops/text/upper/sop.json").stdout
         d = json.loads(blob)
         self.assertNotIn("origin", d)                                # the task that produced it stays private
         self.assertNotIn("classified", d)
         self.assertEqual(d["scope"], "public")
+
+    def test_push_goes_to_fork_when_configured(self):
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        fork = self.tmp / "fork.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(fork)], check=True)
+        r = self.reg(fork=str(fork)).propose(gen)
+        self.assertEqual(r["pushed"], str(fork))
+        self.assertIn(r["branch"], sh(self.tmp, "--git-dir", str(fork), "branch").stdout)
+        self.assertEqual(sh(self.tmp, "--git-dir", str(self.public), "branch").stdout, "")
 
     def test_secrets_and_personal_are_refused(self):
         leak = self.sop("net.fetch", "fetch a url - generic http utility",
                         "TOKEN = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789'\n", ["http", "generic"])
         with self.assertRaisesRegex(RegistryError, "secrets"):
             self.reg().propose(leak, override_personal=True)       # no override for secrets
+        term = self.sop("net.ping", "ping a host - generic network utility",
+                        "print('analytics.acme.internal')\n", ["network", "generic"])
+        with self.assertRaisesRegex(RegistryError, "private term"):
+            self.reg().propose(term, override_personal=True)       # nor for the org's private terms
         per = self.sop("team.report", "Build our team's weekly company report for the internal account",
                        "print('report')", ["company", "team", "internal", "account"])
         with self.assertRaisesRegex(RegistryError, "personal"):
@@ -84,19 +112,12 @@ class RegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(RegistryError, "tests pass"):
             self.reg().propose(cand)
 
-    def test_public_staging_repo_is_refused(self):
-        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
-                       GENERIC, ["text", "convert", "format", "utility", "generic"])
-        with mock.patch.object(registry, "visibility", return_value=(False, "gh: public")):
-            with self.assertRaisesRegex(RegistryError, "not verifiably private"):
-                self.reg().propose(gen)
-
     def test_pre_push_hook_blocks_secrets(self):
         gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
                        GENERIC, ["text", "convert", "format", "utility", "generic"])
         reg = self.reg()
         reg.propose(gen)
-        clone = self.tmp / "home" / "registry" / "staging"
+        clone = self.tmp / "home" / "registry" / "public"
         (clone / "oops.env").write_text("AWS_KEY=AKIAABCDEFGHIJKLMNOP\n")
         sh(clone, "add", "-A")
         sh(clone, "commit", "-qm", "oops")
@@ -104,23 +125,126 @@ class RegistryTest(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("BLOCKED", p.stderr)
 
-    def test_release_after_merge_publishes_via_pr_branch(self):
-        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
-                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+    def validated(self):
+        from rameness.learning import register_sop
+        lib = Library([(self.root, "private")])
+        executor = Executor(lib, ["compute"], cwd=self.proj)
+        sop, failures = register_sop(lib, executor, {
+            "id": "text.upper", "description": "Convert text to upper case: a generic reusable text utility",
+            "script": GENERIC, "permissions": ["compute"], "keywords": ["text", "utility", "generic"],
+            "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+            "tests": [{"input": {"text": "ab"}, "expect": {"upper": "AB"}}]},
+            root=self.root, jev=self.jev, org=self.org)
+        self.assertEqual(failures, [])
+        self.assertEqual(sop.visibility, "shareable")
+        return lib, executor, sop
+
+    def test_auto_pipeline_validates_pushes_and_deduplicates(self):
+        lib, executor, sop = self.validated()
         reg = self.reg()
-        self.assertEqual(reg.release()["released"], [])            # nothing merged yet
-        r = reg.propose(gen)
-        rev = self.tmp / "reviewer"                                 # a reviewer merges the PR in staging
-        subprocess.run(["git", "clone", "-q", str(self.staging), str(rev)], check=True)
-        sh(rev, "checkout", "-q", "-b", "main", f"origin/{r['branch']}")
-        self.assertEqual(sh(rev, "push", "-q", "origin", "main").returncode, 0)
-        out = reg.release()
-        self.assertEqual(out["released"], ["text.upper"])
-        self.assertTrue(out["branch"].startswith("release/"))
-        files = sh(self.tmp, "--git-dir", str(self.public), "ls-tree", "-r", "--name-only", out["branch"]).stdout
-        self.assertIn("sops/text/upper/run.py", files)
-        self.assertIn("sops/index.json", files)
-        self.assertEqual(reg.release()["released"], [])             # idempotent
+        with patch.object(reg, "_gh_pr", return_value="https://github.com/example/sops/pull/2") as pr:
+            rows = reg.auto_propose(lib, executor)
+            self.assertEqual(rows[0]["status"], "proposed", rows)
+            self.assertEqual(reg.auto_propose(lib, executor), [])
+            self.assertEqual(reg.propose(sop)["pr"], rows[0]["pr"])
+            self.assertEqual(pr.call_count, 1)
+        self.assertEqual(len(reg.proposals()), 1)
+        self.assertIn(reg.proposals()[0]["branch"], sh(self.tmp, "--git-dir", str(self.public), "branch").stdout)
+
+    def test_pr_failure_retries_same_pushed_branch_after_restart(self):
+        lib, executor, sop = self.validated()
+        reg = self.reg()
+        with patch.object(reg, "_gh_pr", side_effect=RegistryError("GitHub unavailable")):
+            rows = reg.auto_propose(lib, executor)
+        self.assertEqual(rows[0]["status"], "failed")
+        self.assertIn("GitHub unavailable", rows[0]["error"])
+        pending = reg.proposals()[0]
+        self.assertEqual(pending["status"], "pushed")
+        restarted = self.reg()
+        with patch.object(restarted, "_gh_pr", return_value="https://github.com/example/sops/pull/2"), \
+                patch.object(restarted, "_push", side_effect=AssertionError("must not push again")):
+            self.assertEqual(restarted.auto_propose(lib, executor)[0]["status"], "proposed")
+        self.assertEqual(restarted.proposals()[0]["branch"], pending["branch"])
+        self.assertEqual(len(restarted.proposals()), 1)
+
+    def test_auto_pipeline_skips_private_and_candidates_and_rechecks_tests(self):
+        lib, executor, sop = self.validated()
+        reg = self.reg()
+        with patch.object(reg, "propose") as propose:
+            sop.visibility = "private"
+            self.assertEqual(reg.auto_propose(lib, executor), [])
+            sop.visibility, sop.status = "shareable", "candidate"
+            self.assertEqual(reg.auto_propose(lib, executor), [])
+            sop.status = "validated"
+            (sop.path / "run.py").write_text("raise RuntimeError('broken')\n")
+            rows = reg.auto_propose(lib, executor)
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertIn("tests failed", rows[0]["error"])
+            propose.assert_not_called()
+
+    def test_auto_pipeline_rechecks_privacy_before_push(self):
+        lib, executor, sop = self.validated()
+        with (sop.path / "run.py").open("a") as f:
+            f.write("\n# analytics.acme.internal\n")
+        reg = self.reg()
+        with patch.object(reg, "_push") as push:
+            rows = reg.auto_propose(lib, executor)
+        self.assertEqual(rows[0]["status"], "failed")
+        self.assertIn("private terms", rows[0]["error"])
+        push.assert_not_called()
+
+    def test_missing_tests_cannot_auto_publish(self):
+        lib, executor, sop = self.validated()
+        sop.tests = []
+        rows = self.reg().auto_propose(lib, executor)
+        self.assertEqual(rows[0]["status"], "failed")
+        self.assertIn("no tests", rows[0]["error"])
+
+    def test_shape_only_and_error_only_tests_cannot_auto_publish(self):
+        lib, executor, sop = self.validated()
+        for tests in ([{"input": {"text": "ab"}, "expect_keys": ["upper"]}],
+                      [{"input": {}, "expect_error": True}]):
+            with self.subTest(tests=tests):
+                sop.tests = tests
+                reg = self.reg()
+                with patch.object(reg, "propose") as propose:
+                    rows = reg.auto_propose(lib, executor)
+                self.assertEqual(rows[0]["status"], "failed")
+                self.assertIn("expected output values", rows[0]["error"])
+                propose.assert_not_called()
+
+    def test_content_changes_make_new_proposals_bookkeeping_does_not(self):
+        lib, executor, sop = self.validated()
+        before = fingerprint(sop)
+        sop.origin = {"task": "a different internal task"}
+        sop.classified = {"reason": "new classification"}
+        sop.save()
+        self.assertEqual(fingerprint(sop), before)
+        reg = self.reg()
+        reg.auto_propose(lib, executor)
+        with (sop.path / "run.py").open("a") as f:
+            f.write("\n# Generic utility documentation\n")
+        self.assertNotEqual(fingerprint(sop), before)
+        reg.auto_propose(lib, executor)
+        self.assertEqual(len(reg.proposals()), 2)
+
+    def test_gh_create_error_is_not_reported_as_compare_link(self):
+        reg = self.reg()
+        with patch("rameness.registry.shutil.which", return_value="/usr/bin/gh"), \
+                patch("rameness.registry.subprocess.run", side_effect=[
+                    Mock(returncode=1, stdout="", stderr="not authenticated"),
+                    Mock(returncode=0, stdout="[]", stderr="")]):
+            with self.assertRaisesRegex(RegistryError, "not authenticated"):
+                reg._gh_pr("https://github.com/example/sops.git", "branch", "main", "title", "body")
+
+    def test_gh_create_recovers_existing_pr(self):
+        reg = self.reg()
+        with patch("rameness.registry.shutil.which", return_value="/usr/bin/gh"), \
+                patch("rameness.registry.subprocess.run", side_effect=[
+                    Mock(returncode=1, stdout="", stderr="already exists"),
+                    Mock(returncode=0, stdout='[{"url":"https://github.com/example/sops/pull/2"}]', stderr="")]):
+            self.assertEqual(reg._gh_pr("https://github.com/example/sops.git", "branch", "main", "title", "body"),
+                             "https://github.com/example/sops/pull/2")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+{
+ "duplicate_rows_removed": 12,
+ "paid_orders": 377,
+ "refunded_orders": 23,
+ "total_paid_revenue": 50912.75,
+ "top_product_by_revenue": "Doohickey",
+ "best_month": "2025-11",
+ "unique_customers": 60,
+ "orders_missing_customer": 14,
+ "average_paid_order_value": 135.05
+}

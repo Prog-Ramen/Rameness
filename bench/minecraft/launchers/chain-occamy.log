@@ -1,0 +1,8 @@
+[mc-main-1-dsh-occamy] start
+[mc-main-1-dsh-occamy] done in 78.8 min: score 14.3 (2/14), 125 requests, max context 160665, exit 0
+[mc-main-1-claude-code-occamy] start
+[mc-main-1-claude-code-occamy] done in 150.0 min: score 57.1 (8/14), 69 requests, max context 128489, TIMED OUT
+results: /root/bench/results/minecraft/mc-main-1/results.json
+[mc-rameness-fix-rameness-occamy] start (context window 200192 x 2 slots)
+[mc-rameness-fix-rameness-occamy] done in 17.0 min: score 42.9 (6/14), 35 requests, max context 30119/200192, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-rameness-fix/results.json

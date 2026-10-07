@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voxel Craft</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="debug"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="overlay">
+  <div class="panel">
+    <h1>Voxel Craft</h1>
+    <p class="sub">a tiny minecraft clone in your browser</p>
+    <ul class="controls">
+      <li><b>W A S D</b> — move</li>
+      <li><b>Mouse</b> — look</li>
+      <li><b>Space</b> — jump / swim up / fly up</li>
+      <li><b>Left click</b> — break block</li>
+      <li><b>Right click</b> — place block</li>
+      <li><b>1-9</b> — select block</li>
+      <li><b>Shift</b> — sprint (fly down)</li>
+      <li><b>F</b> — toggle fly</li>
+      <li><b>Esc</b> — release mouse</li>
+    </ul>
+    <button id="play">Click to play</button>
+  </div>
+</div>
+
+<script src="js/math.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

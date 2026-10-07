@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a browser Minecraft clone</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2374ac4e'/%3E%3Crect y='10' width='16' height='6' fill='%23866043'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="crosshair"><span></span><span></span></div>
+
+  <div id="hud">
+    <div id="stats">
+      <span id="fps">– fps</span>
+      <span id="pos">–</span>
+      <span id="mode">WALK</span>
+    </div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel">
+      <h1 class="title">Click to play</h1>
+      <div class="controls">
+        <b>W A S D</b> move &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Space</b> jump / swim / fly up<br>
+        <b>Shift</b> sprint / fly down &nbsp;·&nbsp; <b>C</b> fly down &nbsp;·&nbsp; <b>F</b> toggle fly &nbsp;·&nbsp; <b>R</b> respawn<br>
+        <b>Left click</b> break block &nbsp;·&nbsp; <b>Right click</b> place block &nbsp;·&nbsp; <b>1–9 / wheel</b> select block<br>
+        <b>Esc</b> release mouse
+      </div>
+      <div class="hint">Terrain is generated from a fixed seed — same world every load.</div>
+    </div>
+  </div>
+
+  <script src="three.min.js"></script>
+  <script src="noise.js"></script>
+  <script src="world.js"></script>
+  <script src="textures.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

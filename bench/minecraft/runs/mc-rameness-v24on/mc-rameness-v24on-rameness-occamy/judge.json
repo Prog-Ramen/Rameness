@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 3,
+ "notes": "The scene renders only an empty sky-blue background with no terrain or blocks visible, just a HUD/hotbar and stray cursor artifacts, indicating broken world rendering.",
+ "overall": 1.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0704454
+}

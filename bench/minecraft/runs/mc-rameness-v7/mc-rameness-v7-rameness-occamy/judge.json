@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 3,
+ "world": 5,
+ "ui": 5,
+ "notes": "Blocky terrain and trees are recognizable but foliage renders solid black and the ground has jagged unlit gaps/holes suggesting broken lighting or geometry, while the hotbar uses flat color swatches instead of block textures.",
+ "overall": 4.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0712504
+}

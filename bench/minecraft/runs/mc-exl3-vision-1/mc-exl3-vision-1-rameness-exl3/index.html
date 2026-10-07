@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MineJS — a Minecraft-like in the browser</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1a2e; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #eef2f7; }
+  #game { position: fixed; inset: 0; }
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%); mix-blend-mode: difference;
+  }
+  #crosshair span { position: absolute; background: #fff; }
+  #crosshair span:first-child { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair span:last-child { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #hotbar {
+    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    display: flex; gap: 6px; padding: 6px;
+    background: rgba(10, 14, 22, 0.55); border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  #hotbar .slot {
+    width: 40px; height: 40px; border-radius: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+  }
+  #hotbar .slot.sel { border-color: #fff; background: rgba(255, 255, 255, 0.22); }
+  #blockname {
+    position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%);
+    font-size: 15px; text-shadow: 0 1px 3px #000; opacity: 0; transition: opacity .4s;
+  }
+  #blockname.show { opacity: 1; }
+  #debug {
+    position: absolute; left: 8px; top: 8px; font: 12px/1.5 ui-monospace, monospace;
+    color: #dfe8f5; text-shadow: 0 1px 2px #000; white-space: pre; pointer-events: none;
+  }
+
+  /* ---------- full-screen tints ---------- */
+  #overlay { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s; }
+  #overlay.water {
+    opacity: 1;
+    background: radial-gradient(circle at 50% 45%, rgba(30, 90, 190, 0.25), rgba(10, 40, 120, 0.62));
+  }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .3s; }
+  #fade.on { opacity: 1; }
+
+  /* ---------- pause / start ---------- */
+  #pause {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: rgba(6, 10, 18, 0.62); backdrop-filter: blur(3px);
+    text-align: center; cursor: pointer; z-index: 5;
+  }
+  #pause.hidden { display: none; }
+  #pause h1 {
+    font-size: 52px; letter-spacing: 4px; text-transform: uppercase;
+    background: linear-gradient(#b9f, #7fd 60%, #5b7);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 4px 24px rgba(0, 0, 0, .4);
+  }
+  #loadstatus { color: #9fb2cc; font-size: 15px; }
+  #startbtn {
+    pointer-events: none; padding: 12px 34px; border-radius: 9px; font-size: 19px;
+    background: #2d7a3a; border: 2px solid #57b968; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  }
+  #pause .help { color: #b8c6da; font-size: 13.5px; line-height: 2; }
+  #pause .help b { color: #fff; }
+
+  #fatal {
+    position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; background: #160b0b; padding: 24px; text-align: center;
+  }
+  #fatal .err { color: #f28b8b; font: 12px ui-monospace, monospace; max-width: 720px; word-break: break-word; }
+</style>
+</head>
+<body>
+  <div id="game">
+    <canvas id="gl"></canvas>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

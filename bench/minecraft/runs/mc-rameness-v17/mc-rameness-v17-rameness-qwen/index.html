@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockworld — a browser Minecraft</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="topbar">
+    <span id="fps">fps -</span>
+    <span id="pos">0 0 0</span>
+    <span id="seed"></span>
+    <span id="fly" style="display:none">flying</span>
+  </div>
+  <div id="crosshair"></div>
+  <div id="itemName"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="waterOverlay"></div>
+
+<div id="paused" style="display:none">
+  <div class="panel">
+    <h1>BLOCKWORLD</h1>
+    <p class="sub">an infinite Minecraft-ish world, generated right in your browser</p>
+    <div class="help">
+      <div><b>W A S D</b> move &nbsp;·&nbsp; <b>Mouse</b> look</div>
+      <div><b>Space</b> jump / swim &nbsp;·&nbsp; <b>Ctrl</b> sprint &nbsp;·&nbsp; <b>Shift</b> sneak</div>
+      <div><b>Left click</b> break block &nbsp;·&nbsp; <b>Right click</b> place block</div>
+      <div><b>1–9 / wheel</b> select block &nbsp;·&nbsp; <b>F</b> or <b>double-Space</b> fly &nbsp;·&nbsp; <b>R</b> respawn</div>
+      <div>Blocks you change are saved in your browser (localStorage).</div>
+      <div>Use <span class="code">?seed=123</span> in the URL to load a specific world.</div>
+    </div>
+    <button id="play">Click to play</button>
+    <p class="foot">no build step · no dependencies · plain WebGL</p>
+  </div>
+</div>
+
+<div id="nogl" style="display:none"></div>
+
+<script src="js/noise.js"></script>
+<script src="js/world.js"></script>
+<script src="js/atlas.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

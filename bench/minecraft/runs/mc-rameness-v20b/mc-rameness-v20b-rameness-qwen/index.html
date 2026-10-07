@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft — a browser Minecraft clone</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="crosshair"></div>
+
+<div id="hud">
+  <div id="hud-top-left">
+    <div id="hud-fps">fps —</div>
+    <div id="hud-pos">pos —</div>
+    <div id="hud-chunks">chunks —</div>
+  </div>
+  <div id="hud-debug"></div>
+  <div id="hud-hint">left click: break &nbsp;·&nbsp; right click: place &nbsp;·&nbsp; hold to keep digging</div>
+</div>
+
+<div id="hotbar"></div>
+
+<div id="overlay">
+  <div id="menu">
+    <h1>Blockcraft</h1>
+    <p class="tag">a tiny Minecraft clone that lives in your browser</p>
+    <div id="controls">
+      <div><b>W A S D</b> move</div>
+      <div><b>mouse</b> look</div>
+      <div><b>space</b> jump &nbsp;·&nbsp; <b>double-tap space</b> / <b>F</b> fly</div>
+      <div><b>left click</b> break block</div>
+      <div><b>right click</b> place block</div>
+      <div><b>1–9 / wheel</b> pick block</div>
+      <div><b>Esc</b> pause &nbsp;·&nbsp; <b>G</b> toggle debug</div>
+    </div>
+    <div id="seedrow">
+      <label for="seed">seed</label>
+      <input id="seed" type="text" value="">
+      <button id="btn-play">Play</button>
+      <button id="btn-reset">New world</button>
+    </div>
+    <p id="menu-foot">world is generated procedurally and saved in your browser</p>
+  </div>
+</div>
+
+<div id="flash"></div>
+
+<script src="js/three.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/mesh.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

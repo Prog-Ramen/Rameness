@@ -1,0 +1,4 @@
+[mc-rameness-v18b-rameness-occamy] start (context window 200192 x 1 slots)
+[bench] stopped 1 process(es) the run left running
+[mc-rameness-v18b-rameness-occamy] done in 54.3 min: score 28.6 (4/14), 84 requests, max context 75775/200192, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-rameness-v18b/results.json

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voxelcraft — a browser Minecraft clone</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <!-- 3D canvas -->
+  <canvas id="game"></canvas>
+
+  <!-- Under-water tint overlay -->
+  <div id="waterveil"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair" aria-hidden="true">
+    <span class="ch-v"></span><span class="ch-h"></span>
+  </div>
+
+  <!-- Hotbar -->
+  <div id="hotbar" aria-hidden="true"></div>
+
+  <!-- FPS / debug -->
+  <div id="hud" aria-hidden="true"></div>
+
+  <!-- Click-to-play overlay -->
+  <div id="overlay">
+    <div class="card">
+      <h1>Voxelcraft</h1>
+      <p class="sub">A Minecraft-style voxel world that runs in your browser.</p>
+      <div class="controls">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></div>
+        <div><kbd>Space</kbd><span>Jump</span></div>
+        <div><kbd>Mouse</kbd><span>Look</span></div>
+        <div><kbd>Left click</kbd><span>Break block</span></div>
+        <div><kbd>Right click</kbd><span>Place block</span></div>
+        <div><kbd>1–9</kbd><span>Select block</span></div>
+        <div><kbd>Shift</kbd><span>Sprint</span></div>
+        <div><kbd>F</kbd><span>Toggle fly</span></div>
+      </div>
+      <p class="hint">Click anywhere to play. <kbd>Esc</kbd> to pause.</p>
+      <div class="seedrow">
+        <label>World seed <input id="seed" type="text" value="voxelcraft" spellcheck="false"></label>
+        <button id="start">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause menu -->
+  <div id="paused" hidden>
+    <div class="card small">
+      <h2>Paused</h2>
+      <p>Press <kbd>Esc</kbd> released — click to resume.</p>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="card small">
+      <div class="spinner"></div>
+      <p id="loading-text">Generating world…</p>
+    </div>
+  </div>
+
+  <!-- Vendored Three.js (UMD build, no network needed at runtime) -->
+  <script src="vendor/three.min.js"></script>
+  <!-- Game code -->
+  <script src="js/noise.js"></script>
+  <script src="js/blocks.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/raycast.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

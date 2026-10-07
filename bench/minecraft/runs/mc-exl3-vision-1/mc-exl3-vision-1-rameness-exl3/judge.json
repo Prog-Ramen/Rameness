@@ -1,0 +1,10 @@
+{
+ "minecraft": 2,
+ "rendering": 1,
+ "world": 1,
+ "ui": 7,
+ "notes": "The terrain renders as a flat, untextured orange mass with gaps and artifacts, so the world is essentially unreadable. Only the sky, the hotbar with its textured block icons, the crosshair and the debug text look right.",
+ "overall": 2.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.05604580000000001
+}

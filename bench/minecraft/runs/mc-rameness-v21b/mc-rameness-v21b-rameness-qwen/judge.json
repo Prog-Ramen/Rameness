@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 3,
+ "world": 3,
+ "ui": 6,
+ "notes": "Blocky textures and hotbar/crosshair are present but terrain is a chaotic mess of floating slivers and disconnected chunks with a stray wireframe box, looking broken rather than a coherent landscape.",
+ "overall": 4.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07148360000000001
+}

@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 7,
+ "world": 6,
+ "ui": 7,
+ "notes": "Blocky voxel terrain with textured grass, dirt, sand, logs, leaves and water under a plain blue sky, plus a hotbar, crosshair and coordinate readout. The terrain is flat-ish with few block types, there are no clouds, and the water looks a bit streaky.",
+ "overall": 6.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0570708
+}

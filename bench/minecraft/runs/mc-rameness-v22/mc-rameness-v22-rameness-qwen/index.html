@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a browser Minecraft clone</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<div id="game"></div>
+<div id="crosshair"></div>
+<div id="blocklabel"></div>
+<div id="hotbar"></div>
+<div id="info"></div>
+
+<div id="overlay">
+  <div class="overlay-inner">
+    <h1>VOXELCRAFT</h1>
+    <p class="tag">an endless voxel sandbox in your browser</p>
+    <div class="controls">
+      <div><b>Mouse</b> look around</div>
+      <div><b>W A S D</b> move &nbsp;·&nbsp; <b>Space</b> jump / swim</div>
+      <div><b>Shift</b> sprint &nbsp;·&nbsp; <b>F</b> toggle flight</div>
+      <div><b>Left click</b> break block</div>
+      <div><b>Right click</b> place block &nbsp;·&nbsp; <b>Middle click</b> pick block</div>
+      <div><b>1–9 / wheel</b> choose block</div>
+    </div>
+    <p class="hint">Your world is saved automatically in this browser.</p>
+    <div id="startbtn">click to play</div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

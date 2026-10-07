@@ -1,0 +1,10 @@
+{
+ "minecraft": 4,
+ "rendering": 4,
+ "world": 4,
+ "ui": 5,
+ "notes": "The scene is very dark, as if at night, and shows blocky trees and grass with a hotbar and crosshair. The textures are murky, the geometry looks odd (slanted dirt faces, a huge trunk), and the hotbar slots are empty gray boxes.",
+ "overall": 4.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.057008600000000006
+}

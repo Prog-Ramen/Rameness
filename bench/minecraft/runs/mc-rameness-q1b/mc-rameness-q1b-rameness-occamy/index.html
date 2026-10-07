@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Clone</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    canvas { display: block; }
+
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 24px; height: 24px; z-index: 10;
+      pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.8);
+    }
+    #crosshair::before { top: 11px; left: 0; width: 24px; height: 2px; }
+    #crosshair::after  { top: 0; left: 11px; width: 2px; height: 24px; }
+
+    #hotbar {
+      position: fixed; bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 4px; z-index: 10;
+      background: rgba(0,0,0,0.55); padding: 4px; border-radius: 4px;
+      pointer-events: none;
+    }
+    .hotbar-slot {
+      width: 48px; height: 48px; border: 2px solid #555;
+      background: rgba(0,0,0,0.4); display: flex; align-items: center;
+      justify-content: center; border-radius: 4px; position: relative;
+    }
+    .hotbar-slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
+    .hotbar-slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+    .hotbar-slot .key-hint {
+      position: absolute; top: 2px; left: 4px; font-size: 10px;
+      color: #ccc; font-family: monospace;
+    }
+    .hotbar-slot .block-name {
+      position: absolute; bottom: 2px; font-size: 9px;
+      color: #fff; font-family: monospace; text-shadow: 1px 1px 0 #000;
+    }
+
+    #debug {
+      position: fixed; top: 8px; left: 8px; z-index: 10;
+      color: #fff; font-family: monospace; font-size: 12px;
+      background: rgba(0,0,0,0.4); padding: 6px 8px; border-radius: 4px;
+      pointer-events: none; line-height: 1.5;
+    }
+
+    #info {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; z-index: 20; background: rgba(0,0,0,0.6);
+      color: #fff; font-family: Arial, sans-serif;
+    }
+    #info h1 { font-size: 48px; margin-bottom: 16px; }
+    #info p { font-size: 16px; color: #ccc; }
+    #info.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <div id="hotbar"></div>
+  <div id="debug"></div>
+  <div id="info">
+    <h1>⛏ Minecraft Clone</h1>
+    <p>Click to play</p>
+    <p style="margin-top:12px;font-size:13px;color:#888">
+      WASD move · Space jump · Mouse look<br>
+      Left click break · Right click place · 1-9 hotbar
+    </p>
+  </div>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

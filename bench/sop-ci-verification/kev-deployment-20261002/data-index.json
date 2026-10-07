@@ -1,0 +1,46 @@
+{
+  "format": 3,
+  "id": "data",
+  "entries": [
+    {
+      "type": "sop",
+      "id": "data.jsonl_audit",
+      "description": "Validate arbitrary JSON Lines text using standard JSON object rules. Return counts of physical lines, blank lines and objects, plus 1-based invalid-JSON and non-object line numbers. Accept text and an optional report output path. Handle empty input, CRLF and Unicode; reject nonstandard numeric constants. Uses only the Python standard library, with all input and output locations supplied by the caller.",
+      "keywords": [],
+      "kind": "script",
+      "permissions": [
+        "compute",
+        "fs:write"
+      ],
+      "version": "1.0.0",
+      "inputs": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The full JSONL content to audit (may contain blank lines; a trailing newline is not required)."
+          },
+          "output_file": {
+            "type": "string",
+            "description": "Optional path to also write the report as a JSON file."
+          }
+        }
+      },
+      "status": "validated",
+      "path": "data/jsonl_audit",
+      "files": [
+        {
+          "path": "data/jsonl_audit/run.py",
+          "sha256": "b141e7fe581aa65df9e046cdd4cf6500c9beafb4557992ef8e2d64023a806443"
+        },
+        {
+          "path": "data/jsonl_audit/sop.json",
+          "sha256": "9003062dda10bb2beb793b7943f6c6d2a5b47c4453edb1e10b62c7b5db2c8bc2"
+        }
+      ]
+    }
+  ]
+}

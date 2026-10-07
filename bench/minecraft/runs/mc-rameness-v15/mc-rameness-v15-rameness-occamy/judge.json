@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "Screen is entirely black with only a crosshair visible, no world or blocks rendered at all.",
+ "overall": 0.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0694304
+}

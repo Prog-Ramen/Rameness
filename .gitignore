@@ -9,3 +9,4 @@ examples/**/.rameness/decisions.jsonl
 examples/**/.rameness/runs/
 examples/**/.rameness/artifacts/
 examples/**/.rameness/*.db*
+bench/models.local.json

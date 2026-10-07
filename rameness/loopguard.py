@@ -21,25 +21,61 @@ import hashlib
 import json
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .jev import Jev, Option
 
 ACTIONS = [
-    Option("continue", "progress new information different varied exploring polling waiting build running"),
-    Option("reorient", "repeating same tool call again loop stuck circular same error oscillating retrying identical"),
+    Option("continue", "progress new information different varied exploring polling waiting build running",
+           desc="The agent is making progress or legitimately waiting; let it keep going."),
+    Option("reorient", "repeating same tool call again loop stuck circular same error oscillating retrying identical",
+           desc="The agent is repeating the same action or error in a loop; interrupt it and make it change approach."),
     Option("reset", "degenerate repeated text garbled phrase repetition confused context polluted long "
-                    "hallucinating nonsense"),
-    Option("stop", "no progress many interventions impossible blocked permission denied hopeless exhausted"),
+                    "hallucinating nonsense",
+           desc="The agent's output has degenerated into repetition or nonsense; reset its context and restart from a summary."),
+    Option("stop", "no progress many interventions impossible blocked permission denied hopeless exhausted",
+           desc="The task cannot progress: repeated interventions failed or the agent is blocked; stop it."),
 ]
 
 
+WRITES = {"write_file", "edit_file", "edit_lines"}
+
+
 def _sig(call) -> str:
-    return call.name + ":" + json.dumps(call.input, sort_keys=True)[:400]
+    # the whole input: two different test scripts often share their first few hundred characters
+    body = json.dumps(call.input, sort_keys=True)
+    return f"{call.name}:{body[:160]}#{hashlib.sha1(body.encode('utf-8', 'replace')).hexdigest()[:10]}"
 
 
 def _words(t: str) -> set[str]:
     return set(re.findall(r"[a-z0-9_]+", t.lower()))
+
+
+_ERR = re.compile(r"error|exception|unexpected token|traceback|\bfail(ed|ure)?\b|cannot |not defined|is not a function|"
+                  r"undefined|refused|denied|no such file|not found", re.I)
+_BENIGN = re.compile(r"\b0 (failed|failures?|errors?)\b|\berrors?:? ?0\b|\bno errors?\b|\bwithout errors?\b", re.I)
+
+
+def error_lines(text: str, limit: int = 5) -> list[str]:
+    """The distinct error-looking lines of a tool result, numbers masked so reruns compare equal."""
+    out: list[str] = []
+    for ln in text.splitlines():
+        if _ERR.search(ln) and not _BENIGN.search(ln):
+            norm = re.sub(r"\d+", "#", " ".join(ln.split()))[:160]
+            if norm and norm not in out:
+                out.append(norm)
+                if len(out) >= limit:
+                    break
+    return out
+
+
+def recurring_error(err_lists: list[list[str]], need: int) -> tuple[str, int] | None:
+    """The error line seen in the most results, if it shows up in at least ``need`` of them."""
+    c = Counter(e for errs in err_lists for e in set(errs))
+    if not c:
+        return None
+    line, n = c.most_common(1)[0]
+    return (line, n) if n >= need else None
 
 
 def degenerate(text: str, n: int = 6, min_repeats: int = 4) -> bool:
@@ -59,16 +95,28 @@ class LoopGuard:
     error_streak: int = 4
     similar_text: float = 0.9
     cooldown: int = 3
+    repeat_error: int = 5          # the same error line in this many of the last error_window results
+    error_window: int = 12
+    stop_confidence: float = 0.5   # ending the run needs a confident 'stop' ...
+    max_interventions: int = 4     # ... unless this many interventions have already failed
     calls: list[str] = field(default_factory=list)
     outputs: list[str] = field(default_factory=list)
+    errlines: list[list[str]] = field(default_factory=list)
     texts: list[str] = field(default_factory=list)
     errors: int = 0
     interventions: list[str] = field(default_factory=list)
     last_intervention_turn: int = -99
 
     def observe(self, response, results: list[tuple[str, bool]]) -> None:
-        self.calls += [_sig(c) for c in response.tool_calls]
-        self.outputs += [hashlib.sha1(o.encode("utf-8", "replace")).hexdigest()[:12] for o, _ in results]
+        if any(c.name in WRITES for c in response.tool_calls):
+            # the code changed: running the same test or build again is an edit-test cycle, not a loop
+            self.calls.clear()
+        self.calls += [_sig(c) for c in response.tool_calls if c.name not in WRITES]
+        # keyed by call and result: different edits that each answer "edited <file>" are not a repeat
+        self.outputs += [hashlib.sha1((_sig(c) + "\0" + o).encode("utf-8", "replace")).hexdigest()[:12]
+                         for c, (o, _) in zip(response.tool_calls, results)]
+        # different commands can keep hitting the same error: that is a loop too
+        self.errlines = (self.errlines + [error_lines(o) for o, _ in results])[-self.error_window:]
         if response.text:
             self.texts.append(response.text)
         if results:
@@ -87,7 +135,10 @@ class LoopGuard:
             s.append("oscillating between two actions")
         outs = self.outputs[-self.window:]
         if len(outs) >= 4 and len(set(outs[-4:])) == 1:
-            s.append("the last 4 tool results were identical (no new information)")
+            s.append("the same call returned the same result 4 times (no new information)")
+        rec = recurring_error(self.errlines, self.repeat_error)
+        if rec:
+            s.append(f"the same error keeps coming back ({rec[1]} of the last {len(self.errlines)} results): {rec[0]}")
         if self.errors >= self.error_streak:
             s.append(f"{self.errors} consecutive turns of tool errors")
         if len(self.texts) >= 3:
@@ -109,15 +160,21 @@ class LoopGuard:
         history = f" previous interventions: {', '.join(self.interventions)}" if self.interventions else ""
         prior = {"continue": 1.0, "reorient": 1.0, "reset": 1.0 + 0.5 * self.interventions.count("reorient"),
                  "stop": 1.0 + 0.6 * max(0, len(self.interventions) - 1)}
-        opts = [Option(o.id, o.text, prior[o.id]) for o in ACTIONS]
+        opts = [replace(o, prior=prior[o.id]) for o in ACTIONS]
         d = self.jev.choose("The agent may be stuck in a loop. What should happen?",
                             f"{'; '.join(sig)}.{history} task: {task[:300]}", opts)
         action = d.best
+        if action == "stop" and d.probs["stop"] < self.stop_confidence \
+                and len(self.interventions) < self.max_interventions:
+            action = max((o for o in d.probs if o != "stop"), key=d.probs.get)
+        elif len(self.interventions) >= self.max_interventions and action != "continue":
+            action = "stop"
         if action != "continue":
             self.interventions.append(action)
             self.last_intervention_turn = turn
             self.calls.clear()
             self.outputs.clear()
+            self.errlines.clear()
             self.errors = 0
         return action, sig, d
 
@@ -131,7 +188,9 @@ class LoopGuard:
         return ("[rameness loop guard] You are going in circles: " + "; ".join(sig) + ".\n"
                 f"Your task: {task}\n"
                 "Already tried (do NOT repeat these):\n" + "\n".join(f"- {t}" for t in tried[-8:]) + "\n"
-                "Step back: state in one sentence what is blocking you, then take a *different* action. "
+                "Step back: state in one sentence what is blocking you, then take a *different* action. If the same "
+                "error keeps coming back, stop varying the same idea: reduce the failing part to the smallest case "
+                "that still fails, or rebuild that part a different way. "
                 "If you have enough to finish, finish and report. If you are blocked on something outside "
                 "your control, say so plainly.")
 

@@ -34,8 +34,12 @@ def _harness(a, need_llm=True) -> Harness:
     if not need_llm:
         from .llm import FakeProvider
         llm = FakeProvider()        # planning / SOP commands never call the model
-        cfg["jev"]["backend"] = "lexical" if cfg["jev"]["backend"] in ("llm", "cascade") else cfg["jev"]["backend"]
-    return Harness(cfg, llm=llm)
+    h = Harness(cfg, llm=llm)
+    if h.jev.backend.name == "lexical" and cfg["jev"]["backend"] != "lexical":
+        print("rameness: no decision model reachable - start a local one (`rameness jev up`) or set "
+              "TYPESAFE_API_KEY; "
+              "using the offline lexical scorer meanwhile", file=sys.stderr)
+    return h
 
 
 def _print_result(res, verbose: bool):
@@ -50,8 +54,9 @@ def _print_result(res, verbose: bool):
 def _run_with_clarify(h: Harness, task: str, verbose: bool, interactive: bool = True):
     resolved: dict = {}
     for _ in range(4):
-        res = h.run(task, resolved)
-        if res.route != "clarify" or not interactive or not sys.stdin.isatty():
+        can_ask = interactive and sys.stdin.isatty()
+        res = h.run(task, resolved, allow_clarify=can_ask)
+        if res.route != "clarify" or not can_ask:
             return res
         for r in res.plan.questions:
             ans = input(f"? {r.question or f'Which {r.name}?'} ").strip()
@@ -100,7 +105,26 @@ def cmd_init(a):
 
 
 def cmd_sop(a):
+    if a.action == "review":                    # CI gate for registry PRs: no harness, config or model needed
+        from .review import markdown, review
+        r = review(Path(a.arg or "."), base=a.base, static=a.static)
+        if a.json:
+            Path(a.json).write_text(json.dumps(r, indent=1))
+        print(markdown(r))
+        sys.exit(0 if r["ok"] else 1)
+    if a.action == "index":
+        print(f"wrote {pub.build_index(Path(a.arg))}")
+        return
     h = _harness(a, need_llm=False)
+    if a.action == "discover":                  # candidate SOPs from event logs; reports only, generates nothing
+        from . import discover as dsc
+        runs = dsc.load_paths([x for x in (a.arg or str(h.state)).split(",") if x])
+        rows = dsc.discover(runs, None if a.no_jev else h.jev, top=a.top)
+        turns = sum(len({st.turn for st in ss}) for ss in runs.values())
+        print(dsc.report(rows, len(runs), turns))
+        if a.json:
+            Path(a.json).write_text(json.dumps(rows, indent=1, default=str))
+        return
     lib = h.lib
     if a.action == "tree":
         print(lib.tree())
@@ -149,26 +173,23 @@ def cmd_sop(a):
     elif a.action == "propose":
         from .registry import Registry, RegistryError
         try:
-            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal)
+            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal,
+                                                                    to=a.dest)
         except RegistryError as e:
             sys.exit(f"not proposed: {e}")
-        print(f"proposed {r['id']} to the private staging repo ({r['where']})\n  branch {r['branch']}\n  review: {r['pr']}")
+        print(f"proposed {r['id']} to the public registry (pushed to {r['pushed']})\n  branch {r['branch']}\n  PR: {r['pr']}")
+        for f in r["benign"]:
+            print(f"  judged benign by JEV: {f}")
     elif a.action == "proposals":
         from .registry import Registry
         for p in Registry(h.cfg, h.home, h.org, h.jev).proposals():
-            print(f"{p['id']:32s} {p['branch']:44s} {p['pr'] or ''}")
-    elif a.action == "release":
-        from .registry import Registry, RegistryError
-        try:
-            r = Registry(h.cfg, h.home, h.org, h.jev).release()
-        except RegistryError as e:
-            sys.exit(f"not released: {e}")
-        print(json.dumps(r, indent=1))
+            print(f"{p['id']:32s} {p.get('status', 'proposed'):12s} {p['branch']:44s} {p['pr'] or ''}")
     elif a.action == "scrub-tree":
         findings = pub.scrub_tree(Path(a.arg or "."), h.org)
+        hard = pub.hard_findings(findings)
         for f in findings:
-            print(f"BLOCKED {f}", file=sys.stderr)
-        sys.exit(1 if findings else 0)
+            print(f"{'BLOCKED' if f in hard else 'warning'} {f}", file=sys.stderr)
+        sys.exit(1 if hard else 0)
     elif a.action == "pull":
         from .remote import RemoteRegistry
         rc = h.cfg.get("registry") or {}
@@ -180,9 +201,6 @@ def cmd_sop(a):
             reg.remove(a.arg)
             sys.exit("removed again, tests failed:\n  " + "\n  ".join(f))
         print(f"pulled {a.arg} -> {path} (verified, tests pass); fetched listings: {reg.fetched}")
-    elif a.action == "registry-init":
-        from .registry import init_staging
-        print(f"staging registry scaffolded at {init_staging(Path(a.arg))} - push it to a PRIVATE repo")
     elif a.action == "publish":
         s = lib.get(a.arg)
         if not a.to:
@@ -200,14 +218,50 @@ def cmd_sop(a):
         print(f"published to {pub.publish(s, Path(a.to), h.org, force=a.force)}")
     elif a.action == "install":
         print(f"installed to {pub.install(a.arg, h.home, a.name)}")
-    elif a.action == "index":
-        print(f"wrote {pub.build_index(Path(a.arg))}")
     elif a.action == "remote":
         src = a.index or h.cfg["registry"]["remote_index"]
         if not src:
             sys.exit("--index <url or path> (or registry.remote_index in config) required")
         for e, p in pub.search_index(h.jev, src, a.arg):
             print(f"{p:.2f}  {e['id']:30s} {e['description'][:70]}")
+
+
+def cmd_jev(a):
+    if a.action in ("setup", "up", "down", "status"):
+        from . import jevserve
+        jc = config_mod.load()["jev"]
+        name = a.name or jc.get("serve") or "laya"
+        try:
+            if a.action == "setup":
+                jevserve.setup(name)
+                print(f"{name} installed. Start it with `rameness jev up {name}`"
+                      + (' and set "jev": {"serve": "kev"} in ~/.rameness/config.json so `rameness up` starts it'
+                         if name == "kev" else ""))
+            elif a.action == "up":
+                print(jevserve.up(name, jc))
+            elif a.action == "down":
+                print(jevserve.down(name))
+            else:
+                print("\n".join(jevserve.status(jc)))
+        except Exception as e:
+            sys.exit(f"rameness jev {a.action}: {e}")
+        return
+    from . import jevbench
+    h = _harness(a, need_llm=False)
+    b = h.jev.backend
+    print(f"jev backend: {b.name}" + (f" at {b.url} (model {b.model})" if hasattr(b, "url") else ""), file=sys.stderr)
+    out = {}
+    for name, para in (("seen", False), ("paraphrased", True)):
+        r = jevbench.run(h.jev, keywords_only=a.keywords, paraphrased=para)
+        out[name] = r
+        print(f"{name:12s} accuracy {r['accuracy']:.2f}  p(gold) {r['p_gold']:.2f}  n={r['n']}  " +
+              " ".join(f"{k}={v['accuracy']:.2f}" for k, v in r["sets"].items()))
+        for m in r["misses"] if a.verbose else []:
+            print(f"   miss [{m['set']}] {m['state'][:60]!r}: wanted {m['gold']}, got {m['got']} (p={m['p_gold']:.2f})")
+    if getattr(b, "failures", 0):
+        print(f"warning: {b.failures} decisions fell back ({b.last_error})", file=sys.stderr)
+    if a.json:
+        Path(a.json).write_text(json.dumps(out, indent=1))
 
 
 def cmd_learn(a):
@@ -239,6 +293,8 @@ def cmd_fleet(a):
     act = a.action
     if act == "up":
         from .fleet.server import serve
+        from .jevserve import ensure
+        ensure(config_mod.load()["jev"], out=lambda m: print(f"jev: {m}", file=sys.stderr))
         f = _fleet(probe=True)
         if a.open:
             import webbrowser
@@ -354,7 +410,7 @@ def main(argv=None):
     ap.add_argument("--provider", help="anthropic | openai | deepseek | ollama | llama-server")
     ap.add_argument("--model")
     ap.add_argument("--base-url", help="OpenAI-compatible endpoint, e.g. http://localhost:8080/v1 (llama-server)")
-    ap.add_argument("--jev", help="lexical | llm | http | cascade | cascade-http")
+    ap.add_argument("--jev", help="auto | laya-local | laya | kev | typesafe | lexical")
     ap.add_argument("-y", "--yes", action="store_true", help="auto-approve tool actions")
     ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -371,6 +427,12 @@ def main(argv=None):
     p.set_defaults(fn=cmd_plan)
     sub.add_parser("init", help="create ./.rameness").set_defaults(fn=cmd_init)
     sub.add_parser("learn", help="show recurring step patterns across runs").set_defaults(fn=cmd_learn)
+    p = sub.add_parser("jev", help="the decision model: setup / up / down / status of local servers, bench")
+    p.add_argument("action", choices=["setup", "up", "down", "status", "bench"])
+    p.add_argument("name", nargs="?", choices=["laya", "kev"], help="setup/up/down: which local model (default: jev.serve)")
+    p.add_argument("--keywords", action="store_true", help="force the options' keyword cues (default: jev.option_text)")
+    p.add_argument("--json", help="also write the full results here")
+    p.set_defaults(fn=cmd_jev)
     p = sub.add_parser("fleet", help="manager + team of agents (UI: `rameness fleet up`)")
     p.add_argument("action", choices=["up", "ask", "tree", "ls", "show", "spawn", "prompt", "reassign", "pause",
                                       "resume", "retire", "rm", "fork", "attach", "logs", "slots", "envs", "needs",
@@ -398,13 +460,21 @@ def main(argv=None):
     p = sub.add_parser("sop", help="manage the SOP library")
     p.add_argument("action", choices=["tree", "list", "show", "search", "run", "test", "promote", "remove",
                                       "publish", "install", "index", "remote", "classify", "propose", "proposals",
-                                      "release", "scrub-tree", "registry-init", "pull"])
+                                      "scrub-tree", "pull", "review", "discover"])
     p.add_argument("arg", nargs="?")
     p.add_argument("--args", help="JSON arguments for 'run'")
     p.add_argument("--to", help="package directory for 'publish'")
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--base", default="origin/main", help="review: the branch the PR targets")
+    p.add_argument("--static", action="store_true", help="review: skip running SOP tests (never executes PR code)")
+    p.add_argument("--json", help="review / discover: also write the result as JSON here")
+    p.add_argument("--top", type=int, default=12, help="discover: how many candidates to report")
+    p.add_argument("--no-jev", action="store_true", help="discover: skip JEV screening (counts only)")
+    p.add_argument("--dest", choices=["builtin", "registry"],
+                   help="propose: open the PR for a built-in SOP (Rameness repo) or the registry (default: "
+                        "decided from how many runs use it)")
     p.add_argument("--override-personal", action="store_true",
                    help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)

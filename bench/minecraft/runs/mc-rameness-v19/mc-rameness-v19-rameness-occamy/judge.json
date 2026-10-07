@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "Game never loaded past the black start menu screen, showing no world, blocks, or gameplay at all.",
+ "overall": 0.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06963240000000001
+}

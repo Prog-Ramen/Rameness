@@ -1,0 +1,3 @@
+[mc-rameness-v24onb-rameness-occamy] start (context window 200192 x 1 slots)
+[mc-rameness-v24onb-rameness-occamy] done in 92.0 min: score 42.9 (6/14), 132 requests, max context 146774/200192, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-rameness-v24onb/results.json

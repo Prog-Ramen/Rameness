@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a tiny Minecraft in the browser</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: "Segoe UI", system-ui, sans-serif; }
+  #game { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 20px; height: 20px;
+    transform: translate(-50%, -50%); mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 9px; top: 2px; width: 2px; height: 16px; }
+  #crosshair::after { left: 2px; top: 9px; width: 16px; height: 2px; }
+  #hotbar {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; background: rgba(0,0,0,.35); padding: 4px; border-radius: 6px;
+  }
+  .slot {
+    width: 48px; height: 48px; border: 2px solid rgba(255,255,255,.35); border-radius: 4px;
+    background: rgba(0,0,0,.25); position: relative;
+  }
+  .slot.sel { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); }
+  .slot canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+  .slot .num { position: absolute; top: 1px; left: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+  #debug {
+    position: absolute; top: 8px; left: 8px; color: #fff; font-size: 12px;
+    text-shadow: 0 1px 2px #000; white-space: pre; line-height: 1.5;
+  }
+  #minimap {
+    position: absolute; top: 8px; right: 8px; width: 112px; height: 112px;
+    border: 2px solid rgba(255,255,255,.4); border-radius: 6px; background: #111;
+    image-rendering: pixelated;
+  }
+  #minimap.hidden { display: none; }
+  #minimap .north {
+    position: absolute; top: 1px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 10px; text-shadow: 0 1px 2px #000;
+  }
+  #waterFx {
+    position: absolute; inset: 0; background: rgba(20, 60, 150, .38);
+    pointer-events: none; display: none;
+  }
+  #waterFx.on { display: block; }
+  #minebar {
+    position: absolute; left: 50%; top: calc(50% + 18px); transform: translateX(-50%);
+    width: 44px; height: 5px; background: rgba(0,0,0,.5); border-radius: 3px; display: none;
+  }
+  #minebar.on { display: block; }
+  #minebar > div { height: 100%; width: 0%; background: #fff; border-radius: 3px; }
+  #overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 14, 24, .55); backdrop-filter: blur(2px); z-index: 10;
+  }
+  #overlay.hidden { display: none; }
+  .panel {
+    background: rgba(20, 26, 40, .92); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 10px; padding: 28px 34px; color: #eee; text-align: center; max-width: 420px;
+  }
+  .panel h1 { margin: 0 0 4px; font-size: 34px; letter-spacing: 4px; color: #9fd66a; text-shadow: 0 2px 0 #234; }
+  .panel .sub { margin: 0 0 18px; color: #9aa4b8; font-size: 13px; }
+  #play {
+    font-size: 18px; padding: 10px 40px; border: none; border-radius: 6px; cursor: pointer;
+    background: #6fae3d; color: #fff; font-weight: 600;
+  }
+  #play:hover { background: #7fc24a; }
+  .settings { margin-top: 18px; display: grid; grid-template-columns: auto auto; gap: 8px 10px; font-size: 13px; align-items: center; text-align: left; }
+  .settings label { display: flex; align-items: center; gap: 8px; }
+  .settings input[type=number] { width: 90px; }
+  .settings select { width: 100px; }
+  #newworld {
+    grid-column: 1 / 3; margin-top: 4px; padding: 7px; border-radius: 5px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.25); background: #2c3a55; color: #dfe7f5;
+  }
+  #newworld:hover { background: #3a4c70; }
+  .help { margin-top: 18px; font-size: 12px; color: #8f9ab0; line-height: 1.7; }
+  .help b { color: #cfd8ea; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <div id="debug"></div>
+  <div id="minimap"><span class="north">N</span></div>
+  <div id="crosshair"></div>
+  <div id="minebar"><div></div></div>
+  <div id="hotbar"></div>
+  <div id="waterFx"></div>
+</div>
+<div id="overlay">
+  <div class="panel">
+    <h1>VOXELCRAFT</h1>
+    <p class="sub">a tiny Minecraft, no build step, one folder</p>
+    <button id="play">Play</button>
+    <div class="settings">
+      <label>Seed <input id="seed" type="number" value="1337"></label>
+      <label>Render distance <select id="rdist">
+        <option value="2">2 (fast)</option>
+        <option value="4" selected>4 (default)</option>
+        <option value="6">6</option>
+        <option value="8">8 (far)</option>
+      </select></label>
+      <label style="grid-column:1/3"><input id="sound" type="checkbox" checked> Sound effects</label>
+      <button id="newworld">Start a new world</button>
+    </div>
+    <div class="help">
+      <b>WASD</b> move &nbsp; <b>Space</b> jump / swim &nbsp; <b>Ctrl</b> sprint<br>
+      <b>Shift</b> sneak (stay on ledges) &nbsp; <b>F</b> fly<br>
+      <b>Mouse</b> look &nbsp; <b>Hold LMB</b> mine block &nbsp; <b>RMB</b> place block<br>
+      <b>1–9</b> / <b>wheel</b> select block &nbsp; <b>M</b> minimap &nbsp; <b>Esc</b> pause
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.min.js" } }
+</script>
+<script type="module">
+import { createGame } from './js/main.js';
+import { HOTBAR, BLOCKS } from './js/blocks.js';
+import { tilePixels, tileAverage } from './js/textures.js';
+
+const params = new URLSearchParams(location.search);
+const seed = params.get('seed') != null && !isNaN(parseInt(params.get('seed'), 10)) ? parseInt(params.get('seed'), 10) : 1337;
+const game = createGame(document.getElementById('game'), {
+  seed,
+  renderDistance: 4,
+  glDebug: typeof window !== 'undefined' && !!window.__glDebug,
+});
+window.game = game; // test/debug hook
+
+// --- hotbar UI ---
+const hotbarEl = document.getElementById('hotbar');
+function iconCanvas(blockId) {
+  const tile = BLOCKS[blockId].tiles[2];
+  const src = document.createElement('canvas'); src.width = 16; src.height = 16;
+  const sctx = src.getContext('2d');
+  const img = sctx.createImageData(16, 16);
+  img.data.set(tilePixels(tile));
+  sctx.putImageData(img, 0, 0);
+  const out = document.createElement('canvas'); out.width = 44; out.height = 44;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(src, 0, 0, 44, 44);
+  return out;
+}
+const slots = HOTBAR.map((id, i) => {
+  const d = document.createElement('div');
+  d.className = 'slot';
+  d.title = BLOCKS[id].name;
+  const num = document.createElement('span');
+  num.className = 'num'; num.textContent = i + 1;
+  d.appendChild(num);
+  d.appendChild(iconCanvas(id));
+  hotbarEl.appendChild(d);
+  return d;
+});
+function syncHotbar() {
+  slots.forEach((s, i) => s.classList.toggle('sel', i === game.selected));
+}
+syncHotbar();
+
+// --- debug readout (throttled) ---
+const debugEl = document.getElementById('debug');
+let lastHudUpdate = 0;
+game.setOnHud((kind, payload) => {
+  if (kind === 'hotbar') { syncHotbar(); return; }
+  if (kind === 'lock') {
+    document.getElementById('overlay').classList.toggle('hidden', payload === true);
+    return;
+  }
+  if (kind !== 'frame') return;
+  window.__hud = payload; // latest frame payload (tests/debug)
+  const now = performance.now();
+  if (now - lastHudUpdate < 200) return;
+  lastHudUpdate = now;
+  const p = payload;
+  const hours = Math.floor(p.time * 24), mins = Math.floor((p.time * 24 % 1) * 60);
+  debugEl.textContent =
+    `${Math.round(p.fps)} fps · ${Math.floor(p.x)} ${Math.floor(p.y)} ${Math.floor(p.z)}\n` +
+    `🕒 ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')} · ${p.chunks} chunks · ${p.blocks / 4 | 0} blocks drawn` +
+    (p.target ? `\n⛏ ${p.target}` : '') +
+    (p.flying ? '\n✈ flying' : '') + (p.inWater ? '\n🌊 in water' : '');
+  document.getElementById('waterFx').classList.toggle('on', !!p.inWater);
+  const minebar = document.getElementById('minebar');
+  if (p.mining > 0.02) {
+    minebar.classList.add('on');
+    minebar.firstElementChild.style.width = `${Math.min(100, p.mining * 100)}%`;
+  } else minebar.classList.remove('on');
+  if (now - lastMap > 400 && !mapEl.classList.contains('hidden')) { lastMap = now; drawMinimap(); }
+});
+
+// --- restore UI from saved settings ---
+const rdistSel = document.getElementById('rdist');
+const soundChk = document.getElementById('sound');
+{
+  const s = game.getSettings();
+  rdistSel.value = String(s.renderDistance);
+  soundChk.checked = !!s.sound;
+}
+
+// --- minimap (M toggles) ---
+const mapEl = document.getElementById('minimap');
+const mapCanvas = document.createElement('canvas');
+mapCanvas.width = 56; mapCanvas.height = 56;
+mapCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;';
+mapEl.appendChild(mapCanvas);
+const mctx = mapCanvas.getContext('2d');
+const img = mctx.createImageData(56, 56);
+// average colour per atlas tile (shared pure helper from the textures module)
+const tileAvg = [];
+for (let t = 0; t < 16; t++) tileAvg.push(tileAverage(t));
+function drawMinimap() {
+  const p = game.player;
+  const cx = Math.floor(p.x), cz = Math.floor(p.z);
+  const d = img.data;
+  for (let mz = 0; mz < 56; mz++) {
+    for (let mx = 0; mx < 56; mx++) {
+      const top = game.world.columnTop(cx + mx - 28, cz + mz - 28);
+      let r, g, b;
+      if (!top) { r = 42; g = 42; b = 50; }
+      else if (top.id === 6) { r = 38; g = 92; b = 190; }        // water
+      else { const a = tileAvg[BLOCKS[top.id].tiles[0]]; r = a[0]; g = a[1]; b = a[2]; }
+      const i = (mz * 56 + mx) * 4;
+      d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255;
+    }
+  }
+  mctx.putImageData(img, 0, 0);
+  // player marker: dot + heading line
+  mctx.strokeStyle = '#fff'; mctx.lineWidth = 1;
+  const px = 28, py = 28;
+  const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+  mctx.beginPath(); mctx.moveTo(px, py); mctx.lineTo(px + fx * 10, py + fz * 10); mctx.stroke();
+  mctx.fillStyle = '#ff5';
+  mctx.beginPath(); mctx.arc(px, py, 2, 0, 7); mctx.fill();
+}
+let lastMap = 0;
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyM' && document.pointerLockElement) mapEl.classList.toggle('hidden');
+});
+
+// --- keep the game's save fresh on tab close ---
+window.addEventListener('beforeunload', () => { try { game.saveNow(); } catch (e) {} });
+
+// --- overlay / settings ---
+const overlay = document.getElementById('overlay');
+const seedInput = document.getElementById('seed');
+seedInput.value = seed;
+document.getElementById('play').addEventListener('click', () => {
+  game.setSettings({
+    renderDistance: parseInt(document.getElementById('rdist').value, 10),
+    sound: document.getElementById('sound').checked,
+  });
+  game.lock();
+});
+document.getElementById('newworld').addEventListener('click', () => {
+  try { localStorage.removeItem('voxelcraft_save_v1'); } catch (e) {}
+  const s = parseInt(seedInput.value, 10) || 1337;
+  location.href = 'index.html?seed=' + s;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+ "minecraft": 8,
+ "rendering": 8,
+ "world": 6,
+ "ui": 8,
+ "notes": "Convincing Minecraft-style grass/dirt terrain with textured trees, sky, a hand-held block, a hotbar, hearts and a crosshair. The view is close to the ground, so the world looks fairly limited, with no water or varied blocks visible, and the debug text overlay is cluttered.",
+ "overall": 7.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0570562
+}

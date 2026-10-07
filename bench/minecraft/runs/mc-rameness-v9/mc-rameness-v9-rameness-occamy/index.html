@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Clone</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.152.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="ui">
+    <div id="crosshair"></div>
+    <div id="hotbar"></div>
+    <div id="info">
+      <div id="fps">FPS: 0</div>
+      <div id="coords"></div>
+    </div>
+    <div id="overlay">
+      <div id="title">Minecraft Clone</div>
+      <div id="instructions">
+        <p><b>WASD</b> — Move &nbsp; <b>Space</b> — Jump &nbsp; <b>Shift</b> — Sprint</p>
+        <p><b>Mouse</b> — Look around</p>
+        <p><b>Left Click</b> — Break block &nbsp; <b>Right Click</b> — Place block</p>
+        <p><b>1–9 / Scroll</b> — Select block</p>
+      </div>
+      <div id="click-hint">Click to play</div>
+    </div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 2,
+ "world": 2,
+ "ui": 5,
+ "notes": "Trees are rendered as broken, paper-thin single-plane trunks and leaf slabs with no depth/volume and severe z-fighting, giving a badly garbled scene despite a proper hotbar/HUD.",
+ "overall": 3.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0698304
+}

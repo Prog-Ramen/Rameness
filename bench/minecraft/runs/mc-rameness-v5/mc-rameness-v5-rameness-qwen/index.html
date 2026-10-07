@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Minecraft (browser clone)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="damage-flash"></div>
+  <div id="health">
+    <div id="hearts"></div>
+    <div id="fps"></div>
+  </div>
+  <div id="coords"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="overlay" class="overlay">
+  <div class="panel" id="start-panel">
+    <h1>MINECRAFT</h1>
+    <p class="sub">browser clone &mdash; no build step, all procedural</p>
+    <button id="play-btn">Play</button>
+    <div class="controls">
+      <p><b>Move</b> WASD &nbsp; <b>Jump</b> Space &nbsp; <b>Sprint</b> Shift</p>
+      <p><b>Break</b> Left click &nbsp; <b>Place</b> Right click</p>
+      <p><b>Hotbar</b> 1&ndash;7 or mouse wheel &nbsp; <b>Look</b> Mouse</p>
+      <p>Click the world to lock the mouse. Esc pauses.</p>
+    </div>
+  </div>
+  <div class="panel hidden" id="pause-panel">
+    <h1>Paused</h1>
+    <button id="resume-btn">Resume</button>
+    <button id="respawn-btn">Respawn</button>
+    <div class="controls">
+      <p><b>Move</b> WASD &nbsp; <b>Jump</b> Space &nbsp; <b>Sprint</b> Shift</p>
+      <p><b>Break</b> Left click &nbsp; <b>Place</b> Right click</p>
+    </div>
+  </div>
+  <div class="panel hidden" id="death-panel">
+    <h1>You died!</h1>
+    <button id="death-respawn-btn">Respawn</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="panel">
+    <h1 id="loading-title">Generating world&hellip;</h1>
+    <div id="loading-bar"><div id="loading-fill"></div></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

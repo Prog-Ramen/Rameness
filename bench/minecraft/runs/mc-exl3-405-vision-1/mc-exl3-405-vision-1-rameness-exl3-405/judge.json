@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 6,
+ "world": 6,
+ "ui": 8,
+ "notes": "A convincing snowy-plains Minecraft scene with textured trees, a hotbar, a debug HUD and a crosshair. The snow terrain looks smooth and washed out, with some odd leaf-layer geometry, and there is little water or block variety.",
+ "overall": 6.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.056305400000000005
+}

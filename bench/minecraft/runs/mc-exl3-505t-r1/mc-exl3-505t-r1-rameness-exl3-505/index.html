@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft.js — browser voxel world</title>
+<link rel="stylesheet" href="css/game.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='8' fill='%2379b04a'/><rect y='8' width='16' height='8' fill='%238a6242'/></svg>">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="water-tint"></div>
+    <div id="hurt-tint"></div>
+    <div id="crosshair"></div>
+    <div id="held-name"></div>
+    <div id="bars">
+      <div id="hearts"></div>
+      <div id="bubbles"></div>
+    </div>
+    <div id="hotbar"></div>
+    <div id="debug" class="hidden"></div>
+    <div id="toasts"></div>
+    <div id="hint">LMB mine · RMB place · 1-9 / wheel select · F fly · G mode · R respawn · P time · F3 debug · Esc menu</div>
+  </div>
+
+  <div id="screen-title" class="screen">
+    <div class="panel">
+      <h1 class="logo">MINECRAFT<span>.js</span></h1>
+      <p class="sub">An infinite voxel world that runs from plain files — no build step, no downloads.</p>
+      <div class="buttons">
+        <button id="btn-play" class="primary">Play</button>
+        <button id="btn-new">New World</button>
+        <button id="btn-settings-title">Settings</button>
+      </div>
+      <label class="seedrow">World seed
+        <input id="seed-input" type="text" spellcheck="false" placeholder="leave blank for a random seed">
+      </label>
+      <div id="world-name" class="worldname"></div>
+      <div class="controls">
+        <h2>Controls</h2>
+        <ul class="keys">
+          <li><b>W A S D</b> move · <b>Space</b> jump / swim · <b>Shift</b> sprint</li>
+          <li><b>Mouse</b> look · <b>Left click</b> mine · <b>Right click</b> place</li>
+          <li><b>1-9 / scroll</b> hotbar · <b>Middle click</b> pick block (creative)</li>
+          <li><b>F</b> toggle flight · <b>G</b> creative / survival · <b>R</b> respawn · <b>P</b> skip to next day</li>
+          <li><b>F3</b> debug overlay · <b>Esc</b> menu</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen hidden">
+    <div class="panel">
+      <h2 class="title">Game menu</h2>
+      <div class="buttons">
+        <button id="btn-resume" class="primary">Back to game</button>
+        <button id="btn-save">Save world</button>
+        <button id="btn-settings">Settings</button>
+        <button id="btn-title">Save and quit to title</button>
+      </div>
+      <div class="worldline">Seed: <span id="current-seed"></span></div>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen hidden">
+    <div class="panel">
+      <h2 class="title">Settings</h2>
+      <div id="settings-list"></div>
+      <div class="buttons">
+        <button id="btn-settings-back" class="primary">Done</button>
+        <button id="btn-newworld-settings">New world with this seed</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-inventory" class="screen hidden">
+    <div class="panel wide">
+      <h2 class="title">Creative inventory</h2>
+      <p class="sub">Click a block to put it in hotbar slot <span id="inv-slot">1</span>. Press <b>E</b> or <b>Esc</b> to close.</p>
+      <div id="inv-grid"></div>
+      <div class="buttons"><button id="btn-inv-close" class="primary">Close</button></div>
+    </div>
+  </div>
+
+  <div id="loading" class="hidden">
+    <div class="bar"><div id="loading-fill"></div></div>
+    <span id="loading-text">Generating world…</span>
+  </div>
+
+  <div id="fatal" class="screen hidden">
+    <div class="panel">
+      <h2 class="title">Could not start</h2>
+      <p class="sub">three.js failed to load, or WebGL is unavailable in this browser.</p>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three/three.global.js"></script>
+<script src="js/core/blocks.js"></script>
+<script src="js/core/noise.js"></script>
+<script src="js/core/atlas.js"></script>
+<script src="js/core/gen.js"></script>
+<script src="js/core/mesher.js"></script>
+<script src="js/core/world.js"></script>
+<script src="js/core/player.js"></script>
+<script src="js/core/input.js"></script>
+<script src="js/core/sound.js"></script>
+<script src="js/core/render.js"></script>
+<script src="js/core/mobs.js"></script>
+<script src="js/core/ui.js"></script>
+<script src="js/core/touch.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

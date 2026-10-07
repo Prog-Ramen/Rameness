@@ -1,0 +1,10 @@
+{
+ "minecraft": 2,
+ "rendering": 1,
+ "world": 2,
+ "ui": 7,
+ "notes": "The geometry is badly garbled, with huge stretched brown slabs, horizontal streaking and a broken view, so the world is barely readable as Minecraft, though the hotbar, crosshair, debug HUD and sky are present and tidy.",
+ "overall": 3.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.050248600000000004
+}

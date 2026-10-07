@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 2,
+ "notes": "Screenshot shows only a blank blue screen with a world-generation loading bar and hotbar, no actual voxel world rendered.",
+ "overall": 0.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0196716
+}

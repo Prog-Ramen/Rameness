@@ -1,0 +1,10 @@
+{
+ "minecraft": 8,
+ "rendering": 8,
+ "world": 7,
+ "ui": 6,
+ "notes": "Solid voxel terrain with mountains, trees, water, and beach with correct block textures, but hotbar lacks selected-item highlight clarity and no health/hunger bars are visible.",
+ "overall": 7.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0197604
+}

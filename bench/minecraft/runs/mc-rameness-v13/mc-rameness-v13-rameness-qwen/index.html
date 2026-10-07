@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blockcraft — a tiny minecraft in the browser</title>
+<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="crosshair"></div>
+
+<div id="hud" class="hidden">
+  <div id="debug"></div>
+  <div id="worldname"></div>
+</div>
+
+<div id="hotbar" class="hidden">
+  <div id="hotbar-label"></div>
+  <div id="slots"></div>
+</div>
+
+<div id="menu" class="overlay">
+  <div id="menu-box">
+    <h1>blockcraft</h1>
+    <p class="subtitle">a tiny minecraft that lives in your browser &mdash; no build step, no install</p>
+    <div id="menu-buttons">
+      <button id="btn-play">Play</button>
+      <button id="btn-new">New world</button>
+    </div>
+    <p id="menu-status">loading world&hellip;</p>
+    <div id="controls">
+      <table>
+        <tr><td>W A S D</td><td>move</td><td>Space</td><td>jump</td><td>Mouse</td><td>look</td></tr>
+        <tr><td>Left click</td><td>break block</td><td>Right click</td><td>place block</td><td>1&ndash;9 / wheel</td><td>select block</td></tr>
+        <tr><td>Ctrl (hold)</td><td>sprint</td><td>Shift (hold)</td><td>sneak</td><td>F</td><td>toggle fly</td></tr>
+        <tr><td>Esc</td><td>pause menu</td><td>T</td><td>fast-forward time</td><td>M</td><td>mute</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/raycast.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+[bench] cleared 2 leftover /tmp entries of bench
+[mc-flashnext-1-rameness-flashnext] start (context window 262144 x 1 slots, reasoning budget 5000)
+[mc-flashnext-1-rameness-flashnext] done in 150.0 min: score 92.9 (13/14), 121 requests, max context 190705/262144, compactions 0 (logged 0), TIMED OUT
+[bench] cleared 10 leftover /tmp entries of bench
+[mc-flashnext-1-claude-code-flashnext] start (context window 262144 x 1 slots, reasoning budget 5000)

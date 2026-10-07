@@ -1,0 +1,46 @@
+name: sop-merge
+on:
+  workflow_run:
+    workflows: [sop-check, secret-scan]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  models: read
+concurrency:
+  group: sop-merge
+  cancel-in-progress: false
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned secret scanner for independent security triage
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o gitleaks.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Recheck and merge eligible PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOP_REVIEW_BACKEND: ${{ vars.SOP_REVIEW_BACKEND }}
+          SOP_KEV_MODEL: ${{ vars.SOP_KEV_MODEL }}
+          SOP_KEV_REVISION: ${{ vars.SOP_KEV_REVISION }}
+          SOP_REVIEW_MODEL: ${{ vars.SOP_REVIEW_MODEL }}
+          SOP_SECURITY_MODEL: ${{ vars.SOP_SECURITY_MODEL }}
+        run: python ci/merge.py
