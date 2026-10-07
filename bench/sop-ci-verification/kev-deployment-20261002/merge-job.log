@@ -1,0 +1,688 @@
+﻿2026-10-02T08:01:24.6833551Z Current runner version: '2.337.0'
+2026-10-02T08:01:24.6859569Z ##[group]Runner Image Provisioner
+2026-10-02T08:01:24.6860305Z Hosted Compute Agent
+2026-10-02T08:01:24.6860795Z Version: 20260901.588
+2026-10-02T08:01:24.6861511Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-02T08:01:24.6862195Z Build Date: 2026-09-01T19:56:44Z
+2026-10-02T08:01:24.6862745Z Worker ID: {24b66415-cb55-47e4-8cf8-9e07524c2179}
+2026-10-02T08:01:24.6863353Z Azure Region: northcentralus
+2026-10-02T08:01:24.6863871Z ##[endgroup]
+2026-10-02T08:01:24.6865226Z ##[group]Operating System
+2026-10-02T08:01:24.6865844Z Ubuntu
+2026-10-02T08:01:24.6866281Z 24.04.5
+2026-10-02T08:01:24.6866737Z LTS
+2026-10-02T08:01:24.6867181Z ##[endgroup]
+2026-10-02T08:01:24.6867672Z ##[group]Runner Image
+2026-10-02T08:01:24.6868211Z Image: ubuntu-24.04
+2026-10-02T08:01:24.6868686Z Version: 20260927.320.1
+2026-10-02T08:01:24.6869806Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-02T08:01:24.6871076Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-02T08:01:24.6871928Z ##[endgroup]
+2026-10-02T08:01:24.6873062Z ##[group]GITHUB_TOKEN Permissions
+2026-10-02T08:01:24.6875052Z Actions: write
+2026-10-02T08:01:24.6875549Z Contents: write
+2026-10-02T08:01:24.6876129Z Issues: write
+2026-10-02T08:01:24.6876597Z Metadata: read
+2026-10-02T08:01:24.6877065Z PullRequests: write
+2026-10-02T08:01:24.6877583Z ##[endgroup]
+2026-10-02T08:01:24.6879263Z Secret source: Actions
+2026-10-02T08:01:24.6880092Z Cache mode: write
+2026-10-02T08:01:24.6880922Z Prepare workflow directory
+2026-10-02T08:01:24.7191275Z Prepare all required actions
+2026-10-02T08:01:24.7246260Z Getting action download info
+2026-10-02T08:01:24.9535142Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-02T08:01:25.0715373Z Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-02T08:01:25.1797137Z Download action repository 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2026-10-02T08:01:25.4053002Z Complete job name: decide
+2026-10-02T08:01:25.4663553Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-10-02T08:01:25.4664532Z with:
+2026-10-02T08:01:25.4664863Z   ref: main
+2026-10-02T08:01:25.4665194Z   fetch-depth: 0
+2026-10-02T08:01:25.4665559Z   persist-credentials: false
+2026-10-02T08:01:25.4665972Z   repository: Prog-Ramen/RamenSOPs
+2026-10-02T08:01:25.4668944Z   token: ***
+2026-10-02T08:01:25.4669285Z   ssh-strict: true
+2026-10-02T08:01:25.4669629Z   ssh-user: git
+2026-10-02T08:01:25.4669959Z   clean: true
+2026-10-02T08:01:25.4670313Z   sparse-checkout-cone-mode: true
+2026-10-02T08:01:25.4670717Z   fetch-tags: false
+2026-10-02T08:01:25.4671057Z   show-progress: true
+2026-10-02T08:01:25.4671404Z   lfs: false
+2026-10-02T08:01:25.4671744Z   submodules: false
+2026-10-02T08:01:25.4672097Z   set-safe-directory: true
+2026-10-02T08:01:25.4672490Z   allow-unsafe-pr-checkout: false
+2026-10-02T08:01:25.4673044Z ##[endgroup]
+2026-10-02T08:01:25.5464287Z Syncing repository: Prog-Ramen/RamenSOPs
+2026-10-02T08:01:25.5466391Z ##[group]Getting Git version info
+2026-10-02T08:01:25.5467264Z Working directory is '/home/runner/work/RamenSOPs/RamenSOPs'
+2026-10-02T08:01:25.5468557Z [command]/usr/bin/git version
+2026-10-02T08:01:25.5501355Z git version 2.55.0
+2026-10-02T08:01:25.5516610Z ##[endgroup]
+2026-10-02T08:01:25.5527524Z Temporarily overriding HOME='/home/runner/work/_temp/57d7eac4-5d8f-4df4-8075-9f104071de1f' before making global git config changes
+2026-10-02T08:01:25.5529340Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T08:01:25.5531084Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/RamenSOPs/RamenSOPs
+2026-10-02T08:01:25.5575438Z Deleting the contents of '/home/runner/work/RamenSOPs/RamenSOPs'
+2026-10-02T08:01:25.5577479Z ##[group]Initializing the repository
+2026-10-02T08:01:25.5578811Z [command]/usr/bin/git init /home/runner/work/RamenSOPs/RamenSOPs
+2026-10-02T08:01:25.5653895Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-02T08:01:25.5656199Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-02T08:01:25.5658590Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-02T08:01:25.5659982Z hint: call:
+2026-10-02T08:01:25.5660503Z hint:
+2026-10-02T08:01:25.5661140Z hint: 	git config --global init.defaultBranch <name>
+2026-10-02T08:01:25.5661915Z hint:
+2026-10-02T08:01:25.5662620Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-02T08:01:25.5663751Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-02T08:01:25.5664917Z hint:
+2026-10-02T08:01:25.5665453Z hint: 	git branch -m <name>
+2026-10-02T08:01:25.5666079Z hint:
+2026-10-02T08:01:25.5666909Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-02T08:01:25.5668134Z Initialized empty Git repository in /home/runner/work/RamenSOPs/RamenSOPs/.git/
+2026-10-02T08:01:25.5670263Z [command]/usr/bin/git remote add origin https://github.com/Prog-Ramen/RamenSOPs
+2026-10-02T08:01:25.5821417Z ##[endgroup]
+2026-10-02T08:01:25.5822375Z ##[group]Disabling automatic garbage collection
+2026-10-02T08:01:25.5825568Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-02T08:01:25.5857580Z ##[endgroup]
+2026-10-02T08:01:25.5858474Z ##[group]Setting up auth
+2026-10-02T08:01:25.5862113Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T08:01:25.5890384Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T08:01:25.6216503Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T08:01:25.6248118Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T08:01:25.6432968Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T08:01:25.6462736Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T08:01:25.6660784Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-02T08:01:25.6695535Z ##[endgroup]
+2026-10-02T08:01:25.6696268Z ##[group]Fetching the repository
+2026-10-02T08:01:25.6702841Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-10-02T08:01:26.4662418Z From https://github.com/Prog-Ramen/RamenSOPs
+2026-10-02T08:01:26.4664175Z  * [new branch]      ci/fix-container-stdin  -> origin/ci/fix-container-stdin
+2026-10-02T08:01:26.4665495Z  * [new branch]      ci/fix-pr-revision-env  -> origin/ci/fix-pr-revision-env
+2026-10-02T08:01:26.4667139Z  * [new branch]      ci/kev4b-review         -> origin/ci/kev4b-review
+2026-10-02T08:01:26.4668331Z  * [new branch]      ci/openai-reviewer      -> origin/ci/openai-reviewer
+2026-10-02T08:01:26.4669597Z  * [new branch]      ci/reviewer-recovery-security -> origin/ci/reviewer-recovery-security
+2026-10-02T08:01:26.4670921Z  * [new branch]      ci/sop-review-and-merge -> origin/ci/sop-review-and-merge
+2026-10-02T08:01:26.4672092Z  * [new branch]      docs/sharded-index      -> origin/docs/sharded-index
+2026-10-02T08:01:26.4673069Z  * [new branch]      main                    -> origin/main
+2026-10-02T08:01:26.4674207Z  * [new branch]      registry                -> origin/registry
+2026-10-02T08:01:26.4675639Z  * [new branch]      sop/data.jsonl_audit-1790884651666871172 -> origin/sop/data.jsonl_audit-1790884651666871172
+2026-10-02T08:01:26.4678894Z ##[endgroup]
+2026-10-02T08:01:26.4679809Z ##[group]Determining the checkout info
+2026-10-02T08:01:26.4680689Z [command]/usr/bin/git branch --list --remote origin/main
+2026-10-02T08:01:26.4702947Z   origin/main
+2026-10-02T08:01:26.4711837Z ##[endgroup]
+2026-10-02T08:01:26.4712888Z [command]/usr/bin/git sparse-checkout disable
+2026-10-02T08:01:26.4820799Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-02T08:01:26.4822364Z ##[group]Checking out the ref
+2026-10-02T08:01:26.4823142Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-02T08:01:26.4974235Z Switched to a new branch 'main'
+2026-10-02T08:01:26.4978006Z branch 'main' set up to track 'origin/main'.
+2026-10-02T08:01:26.4983562Z ##[endgroup]
+2026-10-02T08:01:26.5019818Z [command]/usr/bin/git log -1 --format=%H
+2026-10-02T08:01:26.5043281Z 7ff93a7a637490c3e0caab8f3a4f19404542bc9e
+2026-10-02T08:01:26.5050111Z ##[group]Removing auth
+2026-10-02T08:01:26.5053027Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T08:01:26.5081260Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T08:01:26.5269171Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T08:01:26.5291544Z http.https://github.com/.extraheader
+2026-10-02T08:01:26.5297838Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-02T08:01:26.5330909Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T08:01:26.5515063Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T08:01:26.5545940Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T08:01:26.5729594Z ##[endgroup]
+2026-10-02T08:01:26.5937301Z ##[group]Run count=$(gh api "repos/Prog-Ramen/RamenSOPs/pulls?state=open&base=main&per_page=100" --jq '[.[] | select(.head.ref | startswith("sop/"))] | length')
+2026-10-02T08:01:26.5939940Z [36;1mcount=$(gh api "repos/Prog-Ramen/RamenSOPs/pulls?state=open&base=main&per_page=100" --jq '[.[] | select(.head.ref | startswith("sop/"))] | length')[0m
+2026-10-02T08:01:26.5941580Z [36;1mecho "count=$count" >> "$GITHUB_OUTPUT"[0m
+2026-10-02T08:01:26.6157764Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:01:26.6158296Z env:
+2026-10-02T08:01:26.6164775Z   GH_TOKEN: ***
+2026-10-02T08:01:26.6165174Z ##[endgroup]
+2026-10-02T08:01:27.1299470Z ##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+2026-10-02T08:01:27.1300670Z with:
+2026-10-02T08:01:27.1301387Z   python-version: 3.13
+2026-10-02T08:01:27.1302165Z   check-latest: false
+2026-10-02T08:01:27.1308139Z   token: ***
+2026-10-02T08:01:27.1308851Z   update-environment: true
+2026-10-02T08:01:27.1309662Z   allow-prereleases: false
+2026-10-02T08:01:27.1310436Z   freethreaded: false
+2026-10-02T08:01:27.1311147Z ##[endgroup]
+2026-10-02T08:01:27.2381955Z ##[group]Installed versions
+2026-10-02T08:01:27.2576044Z (node:2164) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T08:01:27.2578225Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T08:01:27.2579928Z Successfully set up CPython (3.13.15)
+2026-10-02T08:01:27.2581747Z ##[endgroup]
+2026-10-02T08:01:27.2738865Z ##[group]Run bash ci/setup_kev.sh
+2026-10-02T08:01:27.2739938Z [36;1mbash ci/setup_kev.sh[0m
+2026-10-02T08:01:27.2816929Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:01:27.2817724Z env:
+2026-10-02T08:01:27.2818733Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:01:27.2819973Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:01:27.2821182Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:01:27.2822323Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:01:27.2823442Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:01:27.2824865Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:01:27.2825839Z ##[endgroup]
+2026-10-02T08:01:27.2956904Z Cloning into '/home/runner/work/_temp/kev-src'...
+2026-10-02T08:01:34.6689939Z Updating files:  54% (1654/3049)
+2026-10-02T08:01:34.6792273Z Updating files:  55% (1677/3049)
+2026-10-02T08:01:34.6910456Z Updating files:  56% (1708/3049)
+2026-10-02T08:01:34.7340718Z Updating files:  57% (1738/3049)
+2026-10-02T08:01:34.7572331Z Updating files:  58% (1769/3049)
+2026-10-02T08:01:34.7799165Z Updating files:  59% (1799/3049)
+2026-10-02T08:01:34.7891981Z Updating files:  60% (1830/3049)
+2026-10-02T08:01:34.8187129Z Updating files:  61% (1860/3049)
+2026-10-02T08:01:34.8412962Z Updating files:  62% (1891/3049)
+2026-10-02T08:01:34.8589610Z Updating files:  63% (1921/3049)
+2026-10-02T08:01:34.8654760Z Updating files:  64% (1952/3049)
+2026-10-02T08:01:34.8775455Z Updating files:  65% (1982/3049)
+2026-10-02T08:01:34.9121986Z Updating files:  66% (2013/3049)
+2026-10-02T08:01:34.9307321Z Updating files:  67% (2043/3049)
+2026-10-02T08:01:34.9522874Z Updating files:  68% (2074/3049)
+2026-10-02T08:01:34.9576250Z Updating files:  69% (2104/3049)
+2026-10-02T08:01:34.9661917Z Updating files:  70% (2135/3049)
+2026-10-02T08:01:34.9882277Z Updating files:  71% (2165/3049)
+2026-10-02T08:01:35.0166679Z Updating files:  72% (2196/3049)
+2026-10-02T08:01:35.0398623Z Updating files:  73% (2226/3049)
+2026-10-02T08:01:35.0663354Z Updating files:  74% (2257/3049)
+2026-10-02T08:01:35.0793832Z Updating files:  75% (2287/3049)
+2026-10-02T08:01:35.0860174Z Updating files:  76% (2318/3049)
+2026-10-02T08:01:35.1021930Z Updating files:  77% (2348/3049)
+2026-10-02T08:01:35.1154188Z Updating files:  78% (2379/3049)
+2026-10-02T08:01:35.1447224Z Updating files:  79% (2409/3049)
+2026-10-02T08:01:35.1635417Z Updating files:  80% (2440/3049)
+2026-10-02T08:01:35.1754650Z Updating files:  81% (2470/3049)
+2026-10-02T08:01:35.2174138Z Updating files:  82% (2501/3049)
+2026-10-02T08:01:35.2366605Z Updating files:  83% (2531/3049)
+2026-10-02T08:01:35.2525960Z Updating files:  84% (2562/3049)
+2026-10-02T08:01:35.2574337Z Updating files:  85% (2592/3049)
+2026-10-02T08:01:35.2654537Z Updating files:  86% (2623/3049)
+2026-10-02T08:01:35.2689559Z Updating files:  87% (2653/3049)
+2026-10-02T08:01:35.2712035Z Updating files:  88% (2684/3049)
+2026-10-02T08:01:35.2728234Z Updating files:  89% (2714/3049)
+2026-10-02T08:01:35.2747303Z Updating files:  90% (2745/3049)
+2026-10-02T08:01:35.2969915Z Updating files:  91% (2775/3049)
+2026-10-02T08:01:35.3286919Z Updating files:  92% (2806/3049)
+2026-10-02T08:01:35.3313738Z Updating files:  93% (2836/3049)
+2026-10-02T08:01:35.3336225Z Updating files:  94% (2867/3049)
+2026-10-02T08:01:35.3358610Z Updating files:  95% (2897/3049)
+2026-10-02T08:01:35.3383720Z Updating files:  96% (2928/3049)
+2026-10-02T08:01:35.3409258Z Updating files:  97% (2958/3049)
+2026-10-02T08:01:35.3429595Z Updating files:  98% (2989/3049)
+2026-10-02T08:01:35.3509153Z Updating files:  99% (3019/3049)
+2026-10-02T08:01:35.3509687Z Updating files: 100% (3049/3049)
+2026-10-02T08:01:35.3509983Z Updating files: 100% (3049/3049), done.
+2026-10-02T08:01:36.1219096Z Note: switching to 'eb45fd2381396eb7edc3964b753ebc1b0ab1da2b'.
+2026-10-02T08:01:36.1219355Z 
+2026-10-02T08:01:36.1219526Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-02T08:01:36.1220437Z changes and commit them, and you can discard any commits you make in this
+2026-10-02T08:01:36.1220820Z state without impacting any branches by switching back to a branch.
+2026-10-02T08:01:36.1221030Z 
+2026-10-02T08:01:36.1221358Z If you want to create a new branch to retain commits you create, you may
+2026-10-02T08:01:36.1221701Z do so (now or later) by using -c with the switch command. Example:
+2026-10-02T08:01:36.1221899Z 
+2026-10-02T08:01:36.1221992Z   git switch -c <new-branch-name>
+2026-10-02T08:01:36.1222120Z 
+2026-10-02T08:01:36.1222208Z Or undo this operation with:
+2026-10-02T08:01:36.1222328Z 
+2026-10-02T08:01:36.1222402Z   git switch -
+2026-10-02T08:01:36.1222493Z 
+2026-10-02T08:01:36.1222663Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-02T08:01:36.1222898Z 
+2026-10-02T08:01:36.1223504Z HEAD is now at eb45fd2 Full-weight SFT at corpus scale: shared state prefix in training, balanced micro-batches, bit-identical resume with automatic trial continuation, causal-conv1d; 27B on 8 H200 runs the SFT mix at 7.6 records/s (#125)
+2026-10-02T08:01:39.4156348Z Looking in indexes: https://download.pytorch.org/whl/cpu
+2026-10-02T08:01:39.5166586Z Collecting torch==2.8.0
+2026-10-02T08:01:39.5683511Z   Downloading torch-2.8.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl.metadata (29 kB)
+2026-10-02T08:01:39.5872293Z Collecting filelock (from torch==2.8.0)
+2026-10-02T08:01:39.6240071Z   Downloading filelock-3.32.3-py3-none-any.whl.metadata (2.0 kB)
+2026-10-02T08:01:39.6348257Z Collecting typing-extensions>=4.10.0 (from torch==2.8.0)
+2026-10-02T08:01:39.6374453Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-10-02T08:01:39.6438540Z Collecting setuptools (from torch==2.8.0)
+2026-10-02T08:01:39.6496851Z   Downloading setuptools-78.1.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-02T08:01:39.6647177Z Collecting sympy>=1.13.3 (from torch==2.8.0)
+2026-10-02T08:01:39.6672753Z   Downloading sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+2026-10-02T08:01:39.6831499Z Collecting networkx (from torch==2.8.0)
+2026-10-02T08:01:39.6858011Z   Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+2026-10-02T08:01:39.6961999Z Collecting jinja2 (from torch==2.8.0)
+2026-10-02T08:01:39.7005904Z   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2026-10-02T08:01:39.7148258Z Collecting fsspec (from torch==2.8.0)
+2026-10-02T08:01:39.7175072Z   Downloading fsspec-2026.7.0-py3-none-any.whl.metadata (10 kB)
+2026-10-02T08:01:39.7397219Z Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch==2.8.0)
+2026-10-02T08:01:39.7423604Z   Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+2026-10-02T08:01:39.7560407Z Collecting MarkupSafe>=2.0 (from jinja2->torch==2.8.0)
+2026-10-02T08:01:39.7600044Z   Downloading markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+2026-10-02T08:01:39.7717780Z Downloading torch-2.8.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl (183.9 MB)
+2026-10-02T08:01:40.3923829Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 183.9/183.9 MB 299.2 MB/s  0:00:00
+2026-10-02T08:01:40.3959238Z Downloading sympy-1.14.0-py3-none-any.whl (6.3 MB)
+2026-10-02T08:01:40.4420080Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.3/6.3 MB 176.0 MB/s  0:00:00
+2026-10-02T08:01:40.4448544Z Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+2026-10-02T08:01:40.4476415Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 kB 214.6 MB/s  0:00:00
+2026-10-02T08:01:40.4502156Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-10-02T08:01:40.4529610Z Downloading filelock-3.32.3-py3-none-any.whl (98 kB)
+2026-10-02T08:01:40.4556906Z Downloading fsspec-2026.7.0-py3-none-any.whl (206 kB)
+2026-10-02T08:01:40.4603887Z Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+2026-10-02T08:01:40.4642722Z Downloading markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+2026-10-02T08:01:40.4675413Z Downloading networkx-3.6.1-py3-none-any.whl (2.1 MB)
+2026-10-02T08:01:40.4742450Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 343.9 MB/s  0:00:00
+2026-10-02T08:01:40.4784172Z Downloading setuptools-78.1.0-py3-none-any.whl (1.3 MB)
+2026-10-02T08:01:40.4867282Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 204.1 MB/s  0:00:00
+2026-10-02T08:01:40.7746953Z Installing collected packages: mpmath, typing-extensions, sympy, setuptools, networkx, MarkupSafe, fsspec, filelock, jinja2, torch
+2026-10-02T08:01:57.1176439Z 
+2026-10-02T08:01:57.1191846Z Successfully installed MarkupSafe-3.0.3 filelock-3.32.3 fsspec-2026.7.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.6.1 setuptools-78.1.0 sympy-1.14.0 torch-2.8.0+cpu typing-extensions-4.16.0
+2026-10-02T08:01:57.5282860Z Processing /home/runner/work/_temp/kev-src
+2026-10-02T08:01:57.5297615Z   Installing build dependencies: started
+2026-10-02T08:01:58.2907557Z   Installing build dependencies: finished with status 'done'
+2026-10-02T08:01:58.2912052Z   Getting requirements to build wheel: started
+2026-10-02T08:01:58.8993568Z   Getting requirements to build wheel: finished with status 'done'
+2026-10-02T08:01:58.9000728Z   Preparing metadata (pyproject.toml): started
+2026-10-02T08:01:59.0715465Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-10-02T08:01:59.1212852Z Collecting accelerate>=1.15.0 (from kev==0.1.0)
+2026-10-02T08:01:59.1560306Z   Downloading accelerate-1.15.0-py3-none-any.whl.metadata (19 kB)
+2026-10-02T08:01:59.1787223Z Collecting datasets>=3.0 (from kev==0.1.0)
+2026-10-02T08:01:59.1815451Z   Downloading datasets-5.0.1-py3-none-any.whl.metadata (23 kB)
+2026-10-02T08:01:59.3273695Z Collecting numpy>=2.5.3 (from kev==0.1.0)
+2026-10-02T08:01:59.3303644Z   Downloading numpy-2.5.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+2026-10-02T08:01:59.3371545Z Collecting peft>=0.21 (from kev==0.1.0)
+2026-10-02T08:01:59.3415044Z   Downloading peft-0.21.0-py3-none-any.whl.metadata (15 kB)
+2026-10-02T08:01:59.4054240Z Collecting pydantic>=2.9 (from kev==0.1.0)
+2026-10-02T08:01:59.4083560Z   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+2026-10-02T08:01:59.4657690Z Collecting scikit-learn>=1.9.1 (from kev==0.1.0)
+2026-10-02T08:01:59.4687335Z   Downloading scikit_learn-1.9.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.3 kB)
+2026-10-02T08:01:59.4705511Z Requirement already satisfied: torch<2.9,>=2.6 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from kev==0.1.0) (2.8.0+cpu)
+2026-10-02T08:01:59.4869984Z Collecting transformers<6,>=5.17 (from kev==0.1.0)
+2026-10-02T08:01:59.4899712Z   Downloading transformers-5.17.0-py3-none-any.whl.metadata (32 kB)
+2026-10-02T08:01:59.5428380Z Collecting fastapi>=0.115 (from kev==0.1.0)
+2026-10-02T08:01:59.5455911Z   Downloading fastapi-0.141.1-py3-none-any.whl.metadata (27 kB)
+2026-10-02T08:01:59.5540728Z Collecting typesafe-sdk>=0.6.0 (from kev==0.1.0)
+2026-10-02T08:01:59.5571938Z   Downloading typesafe_sdk-0.6.0-py3-none-any.whl.metadata (2.6 kB)
+2026-10-02T08:01:59.5695026Z Collecting uvicorn>=0.30 (from kev==0.1.0)
+2026-10-02T08:01:59.5721601Z   Downloading uvicorn-0.53.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-02T08:01:59.5855612Z Collecting filelock (from torch<2.9,>=2.6->kev==0.1.0)
+2026-10-02T08:01:59.5887940Z   Downloading filelock-4.0.0-py3-none-any.whl.metadata (2.0 kB)
+2026-10-02T08:01:59.5901165Z Requirement already satisfied: typing-extensions>=4.10.0 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from torch<2.9,>=2.6->kev==0.1.0) (4.16.0)
+2026-10-02T08:01:59.6313461Z Collecting setuptools (from torch<2.9,>=2.6->kev==0.1.0)
+2026-10-02T08:01:59.6342906Z   Downloading setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-02T08:01:59.6387037Z Requirement already satisfied: sympy>=1.13.3 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from torch<2.9,>=2.6->kev==0.1.0) (1.14.0)
+2026-10-02T08:01:59.6390637Z Requirement already satisfied: networkx in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from torch<2.9,>=2.6->kev==0.1.0) (3.6.1)
+2026-10-02T08:01:59.6392962Z Requirement already satisfied: jinja2 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from torch<2.9,>=2.6->kev==0.1.0) (3.1.6)
+2026-10-02T08:01:59.6473258Z Collecting fsspec (from torch<2.9,>=2.6->kev==0.1.0)
+2026-10-02T08:01:59.6500855Z   Downloading fsspec-2026.6.0-py3-none-any.whl.metadata (10 kB)
+2026-10-02T08:01:59.6850327Z Collecting huggingface-hub<2.0,>=1.5.0 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:01:59.6878749Z   Downloading huggingface_hub-1.32.0-py3-none-any.whl.metadata (16 kB)
+2026-10-02T08:01:59.7037714Z Collecting packaging>=20.0 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:01:59.7064509Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-10-02T08:01:59.7267167Z Collecting pyyaml>=5.1 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:01:59.7294909Z   Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2026-10-02T08:01:59.9812112Z Collecting regex>=2025.10.22 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:01:59.9851905Z   Downloading regex-2026.9.10-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+2026-10-02T08:02:00.0946539Z Collecting tokenizers<0.24.0,>=0.23.1 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.0982940Z   Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+2026-10-02T08:02:00.1084905Z Collecting typer (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.1112444Z   Downloading typer-0.27.2-py3-none-any.whl.metadata (16 kB)
+2026-10-02T08:02:00.1845589Z Collecting safetensors>=0.8.0 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.1877402Z   Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+2026-10-02T08:02:00.2033633Z Collecting tqdm>=4.60 (from transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2060734Z   Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+2026-10-02T08:02:00.2196059Z Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2224401Z   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+2026-10-02T08:02:00.2477138Z Collecting hf-xet<2.0.0,>=1.5.2 (from huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2506855Z   Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+2026-10-02T08:02:00.2589401Z Collecting httpx<1,>=0.23.0 (from huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2618163Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-10-02T08:02:00.2737189Z Collecting anyio (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2785405Z   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+2026-10-02T08:02:00.2869043Z Collecting certifi (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.2895697Z   Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T08:02:00.2971416Z Collecting httpcore==1.* (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.3005244Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-10-02T08:02:00.3081603Z Collecting idna (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.3124329Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-10-02T08:02:00.3182982Z Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:00.3211140Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-10-02T08:02:00.3632868Z Collecting psutil (from accelerate>=1.15.0->kev==0.1.0)
+2026-10-02T08:02:00.3661087Z   Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl.metadata (22 kB)
+2026-10-02T08:02:00.4227293Z Collecting pyarrow>=21.0.0 (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.4258029Z   Downloading pyarrow-25.0.1-cp313-cp313-manylinux_2_28_x86_64.whl.metadata (3.0 kB)
+2026-10-02T08:02:00.4314540Z Collecting dill<0.4.2,>=0.3.0 (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.4341623Z   Downloading dill-0.4.1-py3-none-any.whl.metadata (10 kB)
+2026-10-02T08:02:00.5078481Z Collecting pandas (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.5108392Z   Downloading pandas-3.0.5-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+2026-10-02T08:02:00.5399711Z Collecting requests>=2.32.2 (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.5427144Z   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+2026-10-02T08:02:00.6265477Z Collecting xxhash (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.6295871Z   Downloading xxhash-4.0.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (17 kB)
+2026-10-02T08:02:00.6404036Z Collecting multiprocess<0.70.20 (from datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.6431217Z   Downloading multiprocess-0.70.19-py313-none-any.whl.metadata (7.5 kB)
+2026-10-02T08:02:00.9682115Z Collecting aiohttp!=4.0.0a0,!=4.0.0a1 (from fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.9716420Z   Downloading aiohttp-3.14.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.3 kB)
+2026-10-02T08:02:00.9812028Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.9840423Z   Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
+2026-10-02T08:02:00.9891997Z Collecting aiosignal>=1.4.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:00.9918156Z   Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+2026-10-02T08:02:00.9984209Z Collecting attrs>=17.3.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:01.0016808Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-10-02T08:02:01.0412559Z Collecting frozenlist>=1.1.1 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:01.0441517Z   Downloading frozenlist-1.8.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+2026-10-02T08:02:01.2051508Z Collecting multidict<7.0,>=4.5 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:01.2094539Z   Downloading multidict-6.8.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2026-10-02T08:02:01.2535105Z Collecting propcache>=0.2.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:01.2564392Z   Downloading propcache-0.5.4-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (25 kB)
+2026-10-02T08:02:01.4207720Z Collecting yarl<2.0,>=1.17.0 (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]<=2026.6.0,>=2023.1.0->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:01.4239159Z   Downloading yarl-1.25.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (111 kB)
+2026-10-02T08:02:01.4466186Z Collecting starlette>=0.46.0 (from fastapi>=0.115->kev==0.1.0)
+2026-10-02T08:02:01.4494294Z   Downloading starlette-1.6.0-py3-none-any.whl.metadata (6.4 kB)
+2026-10-02T08:02:01.4549141Z Collecting typing-inspection>=0.4.2 (from fastapi>=0.115->kev==0.1.0)
+2026-10-02T08:02:01.4576367Z   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+2026-10-02T08:02:01.4620272Z Collecting annotated-doc>=0.0.2 (from fastapi>=0.115->kev==0.1.0)
+2026-10-02T08:02:01.4646864Z   Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+2026-10-02T08:02:01.4756962Z Collecting annotated-types>=0.6.0 (from pydantic>=2.9->kev==0.1.0)
+2026-10-02T08:02:01.4783795Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-10-02T08:02:01.9514972Z Collecting pydantic-core==2.46.5 (from pydantic>=2.9->kev==0.1.0)
+2026-10-02T08:02:01.9546607Z   Downloading pydantic_core-2.46.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-10-02T08:02:02.0339509Z Collecting charset_normalizer<4,>=2 (from requests>=2.32.2->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:02.0372588Z   Downloading charset_normalizer-3.5.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (45 kB)
+2026-10-02T08:02:02.0496495Z Collecting urllib3<3,>=1.26 (from requests>=2.32.2->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:02.0524211Z   Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+2026-10-02T08:02:02.1346247Z Collecting scipy>=1.10.0 (from scikit-learn>=1.9.1->kev==0.1.0)
+2026-10-02T08:02:02.1376716Z   Downloading scipy-1.18.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+2026-10-02T08:02:02.1573023Z Collecting joblib>=1.4.0 (from scikit-learn>=1.9.1->kev==0.1.0)
+2026-10-02T08:02:02.1608891Z   Downloading joblib-1.6.0-py3-none-any.whl.metadata (6.5 kB)
+2026-10-02T08:02:02.1793167Z Collecting narwhals>=2.0.1 (from scikit-learn>=1.9.1->kev==0.1.0)
+2026-10-02T08:02:02.1833323Z   Downloading narwhals-2.26.0-py3-none-any.whl.metadata (15 kB)
+2026-10-02T08:02:02.1900418Z Collecting threadpoolctl>=3.5.0 (from scikit-learn>=1.9.1->kev==0.1.0)
+2026-10-02T08:02:02.1926869Z   Downloading threadpoolctl-3.7.0-py3-none-any.whl.metadata (24 kB)
+2026-10-02T08:02:02.2007105Z Collecting cloudpickle>=3.0 (from joblib>=1.4.0->scikit-learn>=1.9.1->kev==0.1.0)
+2026-10-02T08:02:02.2033277Z   Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+2026-10-02T08:02:02.2099810Z Requirement already satisfied: mpmath<1.4,>=1.1.0 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from sympy>=1.13.3->torch<2.9,>=2.6->kev==0.1.0) (1.3.0)
+2026-10-02T08:02:02.2171745Z Collecting httpx2>=2.0.0 (from typesafe-sdk>=0.6.0->kev==0.1.0)
+2026-10-02T08:02:02.2198172Z   Downloading httpx2-2.13.0-py3-none-any.whl.metadata (10 kB)
+2026-10-02T08:02:02.2571413Z Collecting msgspec>=0.21.1 (from typesafe-sdk>=0.6.0->kev==0.1.0)
+2026-10-02T08:02:02.2607527Z   Downloading msgspec-0.21.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.8 kB)
+2026-10-02T08:02:02.2689718Z Collecting tenacity>=9.0.0 (from typesafe-sdk>=0.6.0->kev==0.1.0)
+2026-10-02T08:02:02.2717210Z   Downloading tenacity-9.1.4-py3-none-any.whl.metadata (1.2 kB)
+2026-10-02T08:02:02.2785325Z Collecting httpcore2==2.13.0 (from httpx2>=2.0.0->typesafe-sdk>=0.6.0->kev==0.1.0)
+2026-10-02T08:02:02.2812631Z   Downloading httpcore2-2.13.0-py3-none-any.whl.metadata (26 kB)
+2026-10-02T08:02:02.2902325Z Collecting truststore>=0.10 (from httpx2>=2.0.0->typesafe-sdk>=0.6.0->kev==0.1.0)
+2026-10-02T08:02:02.2929839Z   Downloading truststore-0.10.4-py3-none-any.whl.metadata (4.4 kB)
+2026-10-02T08:02:02.2998674Z Requirement already satisfied: MarkupSafe>=2.0 in /home/runner/work/_temp/kev-env/lib/python3.13/site-packages (from jinja2->torch<2.9,>=2.6->kev==0.1.0) (3.0.3)
+2026-10-02T08:02:02.3089120Z Collecting python-dateutil>=2.8.2 (from pandas->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:02.3115911Z   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+2026-10-02T08:02:02.3185979Z Collecting six>=1.5 (from python-dateutil>=2.8.2->pandas->datasets>=3.0->kev==0.1.0)
+2026-10-02T08:02:02.3212833Z   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-10-02T08:02:02.3294346Z Collecting shellingham>=1.3.0 (from typer->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:02.3321673Z   Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+2026-10-02T08:02:02.3481136Z Collecting rich>=13.8.0 (from typer->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:02.3508591Z   Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+2026-10-02T08:02:02.3595691Z Collecting markdown-it-py>=2.2.0 (from rich>=13.8.0->typer->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:02.3625337Z   Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+2026-10-02T08:02:02.3732048Z Collecting pygments<3.0.0,>=2.13.0 (from rich>=13.8.0->typer->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:02.3775612Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T08:02:02.3833844Z Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers<6,>=5.17->kev==0.1.0)
+2026-10-02T08:02:02.3870314Z   Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+2026-10-02T08:02:02.3936401Z Downloading transformers-5.17.0-py3-none-any.whl (12.3 MB)
+2026-10-02T08:02:02.4212648Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.3/12.3 MB 500.0 MB/s  0:00:00
+2026-10-02T08:02:02.4239766Z Downloading huggingface_hub-1.32.0-py3-none-any.whl (842 kB)
+2026-10-02T08:02:02.4268882Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 842.9/842.9 kB 472.7 MB/s  0:00:00
+2026-10-02T08:02:02.4296496Z Downloading click-8.5.0-py3-none-any.whl (125 kB)
+2026-10-02T08:02:02.4324581Z Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+2026-10-02T08:02:02.4395781Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 751.1 MB/s  0:00:00
+2026-10-02T08:02:02.4423429Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-10-02T08:02:02.4449891Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-10-02T08:02:02.4477747Z Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+2026-10-02T08:02:02.4542320Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 635.0 MB/s  0:00:00
+2026-10-02T08:02:02.4569290Z Downloading accelerate-1.15.0-py3-none-any.whl (394 kB)
+2026-10-02T08:02:02.4599079Z Downloading datasets-5.0.1-py3-none-any.whl (559 kB)
+2026-10-02T08:02:02.4617204Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 559.1/559.1 kB 1.0 GB/s  0:00:00
+2026-10-02T08:02:02.4643321Z Downloading dill-0.4.1-py3-none-any.whl (120 kB)
+2026-10-02T08:02:02.4670682Z Downloading fsspec-2026.6.0-py3-none-any.whl (203 kB)
+2026-10-02T08:02:02.4698439Z Downloading multiprocess-0.70.19-py313-none-any.whl (156 kB)
+2026-10-02T08:02:02.4726014Z Downloading aiohttp-3.14.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
+2026-10-02T08:02:02.4761562Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 731.1 MB/s  0:00:00
+2026-10-02T08:02:02.4792863Z Downloading multidict-6.8.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (287 kB)
+2026-10-02T08:02:02.4821279Z Downloading yarl-1.25.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (117 kB)
+2026-10-02T08:02:02.4848229Z Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
+2026-10-02T08:02:02.4874242Z Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+2026-10-02T08:02:02.4899585Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-10-02T08:02:02.4925991Z Downloading fastapi-0.141.1-py3-none-any.whl (131 kB)
+2026-10-02T08:02:02.4953151Z Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+2026-10-02T08:02:02.4979053Z Downloading filelock-4.0.0-py3-none-any.whl (106 kB)
+2026-10-02T08:02:02.5005767Z Downloading frozenlist-1.8.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (234 kB)
+2026-10-02T08:02:02.5033423Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-10-02T08:02:02.5059792Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-10-02T08:02:02.5086192Z Downloading numpy-2.5.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+2026-10-02T08:02:02.5334921Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 709.0 MB/s  0:00:00
+2026-10-02T08:02:02.5361861Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-10-02T08:02:02.5388998Z Downloading peft-0.21.0-py3-none-any.whl (832 kB)
+2026-10-02T08:02:02.5418245Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 832.9/832.9 kB 451.0 MB/s  0:00:00
+2026-10-02T08:02:02.5446244Z Downloading propcache-0.5.4-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (234 kB)
+2026-10-02T08:02:02.5473856Z Downloading pyarrow-25.0.1-cp313-cp313-manylinux_2_28_x86_64.whl (50.1 MB)
+2026-10-02T08:02:02.6249756Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.1/50.1 MB 658.5 MB/s  0:00:00
+2026-10-02T08:02:02.6290519Z Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+2026-10-02T08:02:02.6326612Z Downloading pydantic_core-2.46.5-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-10-02T08:02:02.6365476Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 765.4 MB/s  0:00:00
+2026-10-02T08:02:02.6392010Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-10-02T08:02:02.6419453Z Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (801 kB)
+2026-10-02T08:02:02.6438729Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 801.6/801.6 kB 1.1 GB/s  0:00:00
+2026-10-02T08:02:02.6466674Z Downloading regex-2026.9.10-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (804 kB)
+2026-10-02T08:02:02.6486158Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 804.6/804.6 kB 1.0 GB/s  0:00:00
+2026-10-02T08:02:02.6512658Z Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+2026-10-02T08:02:02.6542699Z Downloading charset_normalizer-3.5.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (250 kB)
+2026-10-02T08:02:02.6571498Z Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+2026-10-02T08:02:02.6599812Z Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+2026-10-02T08:02:02.6629030Z Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+2026-10-02T08:02:02.6666619Z Downloading scikit_learn-1.9.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (9.1 MB)
+2026-10-02T08:02:02.6814816Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.1/9.1 MB 667.7 MB/s  0:00:00
+2026-10-02T08:02:02.6841899Z Downloading joblib-1.6.0-py3-none-any.whl (306 kB)
+2026-10-02T08:02:02.6872156Z Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+2026-10-02T08:02:02.6898944Z Downloading narwhals-2.26.0-py3-none-any.whl (474 kB)
+2026-10-02T08:02:02.6931336Z Downloading scipy-1.18.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+2026-10-02T08:02:02.7469421Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 675.9 MB/s  0:00:00
+2026-10-02T08:02:02.7501068Z Downloading starlette-1.6.0-py3-none-any.whl (75 kB)
+2026-10-02T08:02:02.7531991Z Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+2026-10-02T08:02:02.7560630Z Downloading threadpoolctl-3.7.0-py3-none-any.whl (26 kB)
+2026-10-02T08:02:02.7589294Z Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+2026-10-02T08:02:02.7617388Z Downloading typesafe_sdk-0.6.0-py3-none-any.whl (32 kB)
+2026-10-02T08:02:02.7645933Z Downloading httpx2-2.13.0-py3-none-any.whl (95 kB)
+2026-10-02T08:02:02.7683469Z Downloading httpcore2-2.13.0-py3-none-any.whl (83 kB)
+2026-10-02T08:02:02.7734026Z Downloading msgspec-0.21.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (225 kB)
+2026-10-02T08:02:02.7781228Z Downloading tenacity-9.1.4-py3-none-any.whl (28 kB)
+2026-10-02T08:02:02.7809162Z Downloading truststore-0.10.4-py3-none-any.whl (18 kB)
+2026-10-02T08:02:02.7851930Z Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+2026-10-02T08:02:02.7890543Z Downloading uvicorn-0.53.0-py3-none-any.whl (87 kB)
+2026-10-02T08:02:02.7933064Z Downloading pandas-3.0.5-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (10.9 MB)
+2026-10-02T08:02:02.8158758Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.9/10.9 MB 541.2 MB/s  0:00:00
+2026-10-02T08:02:02.8194314Z Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+2026-10-02T08:02:02.8223570Z Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-10-02T08:02:02.8261070Z Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+2026-10-02T08:02:02.8290675Z Downloading setuptools-84.0.0-py3-none-any.whl (818 kB)
+2026-10-02T08:02:02.8311483Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 818.2/818.2 kB 950.9 MB/s  0:00:00
+2026-10-02T08:02:02.8340492Z Downloading typer-0.27.2-py3-none-any.whl (123 kB)
+2026-10-02T08:02:02.8372377Z Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+2026-10-02T08:02:02.8403829Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-10-02T08:02:02.8437966Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 502.9 MB/s  0:00:00
+2026-10-02T08:02:02.8481212Z Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+2026-10-02T08:02:02.8511135Z Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+2026-10-02T08:02:02.8536388Z Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+2026-10-02T08:02:02.8563237Z Downloading xxhash-4.0.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (268 kB)
+2026-10-02T08:02:03.1572719Z Building wheels for collected packages: kev
+2026-10-02T08:02:03.1579177Z   Building wheel for kev (pyproject.toml): started
+2026-10-02T08:02:03.3473881Z   Building wheel for kev (pyproject.toml): finished with status 'done'
+2026-10-02T08:02:03.3479437Z   Created wheel for kev: filename=kev-0.1.0-py3-none-any.whl size=183820 sha256=f8123e33377fafd9a42c6f001f344b84edcb980c0209e9c181991081cb3432fc
+2026-10-02T08:02:03.3480489Z   Stored in directory: /tmp/pip-ephem-wheel-cache-_6scmq12/wheels/88/45/e5/aa6c95c1448a8b81d4c406f288a6a2296b8b6a2805befcb745
+2026-10-02T08:02:03.3505411Z Successfully built kev
+2026-10-02T08:02:03.5097326Z Installing collected packages: xxhash, urllib3, typing-inspection, truststore, tqdm, threadpoolctl, tenacity, six, shellingham, setuptools, safetensors, regex, pyyaml, pygments, pydantic-core, pyarrow, psutil, propcache, packaging, numpy, narwhals, multidict, msgspec, mdurl, idna, hf-xet, h11, fsspec, frozenlist, filelock, dill, cloudpickle, click, charset_normalizer, certifi, attrs, annotated-types, annotated-doc, aiohappyeyeballs, yarl, uvicorn, scipy, requests, python-dateutil, pydantic, multiprocess, markdown-it-py, joblib, httpcore2, httpcore, anyio, aiosignal, starlette, scikit-learn, rich, pandas, httpx2, httpx, aiohttp, typesafe-sdk, typer, huggingface-hub, fastapi, tokenizers, datasets, accelerate, transformers, peft, kev
+2026-10-02T08:02:03.6792360Z   Attempting uninstall: setuptools
+2026-10-02T08:02:03.6816884Z     Found existing installation: setuptools 78.1.0
+2026-10-02T08:02:03.7055397Z     Uninstalling setuptools-78.1.0:
+2026-10-02T08:02:03.7646379Z       Successfully uninstalled setuptools-78.1.0
+2026-10-02T08:02:09.4367556Z   Attempting uninstall: fsspec
+2026-10-02T08:02:09.4397249Z     Found existing installation: fsspec 2026.7.0
+2026-10-02T08:02:09.4435332Z     Uninstalling fsspec-2026.7.0:
+2026-10-02T08:02:09.4445773Z       Successfully uninstalled fsspec-2026.7.0
+2026-10-02T08:02:09.5980697Z   Attempting uninstall: filelock
+2026-10-02T08:02:09.6007789Z     Found existing installation: filelock 3.32.3
+2026-10-02T08:02:09.6028789Z     Uninstalling filelock-3.32.3:
+2026-10-02T08:02:09.6035476Z       Successfully uninstalled filelock-3.32.3
+2026-10-02T08:02:30.3538058Z 
+2026-10-02T08:02:30.3593585Z Successfully installed accelerate-1.15.0 aiohappyeyeballs-2.7.1 aiohttp-3.14.3 aiosignal-1.4.0 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 attrs-26.1.0 certifi-2026.7.22 charset_normalizer-3.5.1 click-8.5.0 cloudpickle-3.1.2 datasets-5.0.1 dill-0.4.1 fastapi-0.141.1 filelock-4.0.0 frozenlist-1.8.0 fsspec-2026.6.0 h11-0.16.0 hf-xet-1.6.0 httpcore-1.0.9 httpcore2-2.13.0 httpx-0.28.1 httpx2-2.13.0 huggingface-hub-1.32.0 idna-3.20 joblib-1.6.0 kev-0.1.0 markdown-it-py-4.2.0 mdurl-0.1.2 msgspec-0.21.1 multidict-6.8.0 multiprocess-0.70.19 narwhals-2.26.0 numpy-2.5.3 packaging-26.3 pandas-3.0.5 peft-0.21.0 propcache-0.5.4 psutil-7.2.2 pyarrow-25.0.1 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 python-dateutil-2.9.0.post0 pyyaml-6.0.3 regex-2026.9.10 requests-2.34.2 rich-15.0.0 safetensors-0.8.0 scikit-learn-1.9.1 scipy-1.18.1 setuptools-84.0.0 shellingham-1.5.4 six-1.17.0 starlette-1.6.0 tenacity-9.1.4 threadpoolctl-3.7.0 tokenizers-0.23.2 tqdm-4.70.1 transformers-5.17.0 truststore-0.10.4 typer-0.27.2 typesafe-sdk-0.6.0 typing-inspection-0.4.4 urllib3-2.8.0 uvicorn-0.53.0 xxhash-4.0.1 yarl-1.25.1
+2026-10-02T08:02:30.7737079Z ##[group]Run actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+2026-10-02T08:02:30.7737403Z with:
+2026-10-02T08:02:30.7737579Z   path: ~/.cache/ramensops-kev
+2026-10-02T08:02:30.7737927Z   key: ramensops-kev4b-b559c103da523707f604afcf752fb6bc90b77bf6e71a32a59d7c9e032d975f28
+2026-10-02T08:02:30.7738300Z   enableCrossOsArchive: false
+2026-10-02T08:02:30.7738503Z   fail-on-cache-miss: false
+2026-10-02T08:02:30.7738695Z   lookup-only: false
+2026-10-02T08:02:30.7738862Z env:
+2026-10-02T08:02:30.7739075Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:30.7739408Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:02:30.7739733Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:30.7740045Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:30.7740333Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:30.7740668Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:02:30.7740925Z ##[endgroup]
+2026-10-02T08:02:30.8600875Z (node:2352) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T08:02:30.8601437Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T08:02:31.1053102Z Cache not found for input keys: ramensops-kev4b-b559c103da523707f604afcf752fb6bc90b77bf6e71a32a59d7c9e032d975f28
+2026-10-02T08:02:31.1130207Z ##[group]Run $RUNNER_TEMP/kev-env/bin/python ci/kev_download.py
+2026-10-02T08:02:31.1130580Z [36;1m$RUNNER_TEMP/kev-env/bin/python ci/kev_download.py[0m
+2026-10-02T08:02:31.1189513Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:02:31.1189719Z env:
+2026-10-02T08:02:31.1189938Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:31.1190305Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:02:31.1190629Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:31.1190924Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:31.1191215Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:02:31.1191502Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:02:31.1191770Z   HF_HOME: /home/runner/.cache/ramensops-kev
+2026-10-02T08:02:31.1191987Z ##[endgroup]
+2026-10-02T08:02:31.8205740Z 
+2026-10-02T08:02:31.8551625Z Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-10-02T08:02:31.9219864Z 
+2026-10-02T08:02:32.8392009Z Fetching 13 files:  46%|████▌     | 6/13 [00:00<00:00, 59.25it/s]
+2026-10-02T08:02:34.1567120Z Fetching 13 files:  92%|█████████▏| 12/13 [00:01<00:00, 10.32it/s]
+2026-10-02T08:02:34.1567790Z Fetching 13 files: 100%|██████████| 13/13 [00:02<00:00,  5.57it/s]
+2026-10-02T08:02:34.3600698Z 
+2026-10-02T08:02:34.4605151Z Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]
+2026-10-02T08:02:51.8209147Z Fetching 10 files:  60%|██████    | 6/10 [00:00<00:00, 59.82it/s]
+2026-10-02T08:03:15.8842504Z Fetching 10 files:  80%|████████  | 8/10 [00:17<00:00, 59.82it/s]
+2026-10-02T08:03:25.1920954Z Fetching 10 files:  90%|█████████ | 9/10 [00:41<00:05,  5.76s/it]
+2026-10-02T08:03:25.1927019Z Fetching 10 files: 100%|██████████| 10/10 [00:50<00:00,  6.35s/it]
+2026-10-02T08:03:25.1927481Z Fetching 10 files: 100%|██████████| 10/10 [00:50<00:00,  5.08s/it]
+2026-10-02T08:03:30.8123295Z Verified model cache bytes: 9502870412
+2026-10-02T08:03:30.9093393Z ##[group]Run actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+2026-10-02T08:03:30.9093711Z with:
+2026-10-02T08:03:30.9093886Z   path: ~/.cache/ramensops-kev
+2026-10-02T08:03:30.9094433Z   key: ramensops-kev4b-b559c103da523707f604afcf752fb6bc90b77bf6e71a32a59d7c9e032d975f28
+2026-10-02T08:03:30.9094801Z   enableCrossOsArchive: false
+2026-10-02T08:03:30.9094995Z env:
+2026-10-02T08:03:30.9095208Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:03:30.9095539Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:03:30.9095870Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:03:30.9096167Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:03:30.9096466Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:03:30.9096755Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:03:30.9097008Z ##[endgroup]
+2026-10-02T08:03:30.9960097Z (node:2471) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T08:03:30.9960656Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T08:03:31.0089000Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/RamenSOPs/RamenSOPs --files-from manifest.txt --use-compress-program zstdmt
+2026-10-02T08:04:02.7855699Z (node:2471) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-02T08:04:03.7579683Z Sent 0 of 7415305571 (0.0%), 0.0 MBs/sec
+2026-10-02T08:04:04.7604295Z Sent 536870912 of 7415305571 (7.2%), 255.7 MBs/sec
+2026-10-02T08:04:05.7589411Z Sent 1140850688 of 7415305571 (15.4%), 362.3 MBs/sec
+2026-10-02T08:04:06.7581380Z Sent 1744830464 of 7415305571 (23.5%), 415.7 MBs/sec
+2026-10-02T08:04:07.7582456Z Sent 2214592512 of 7415305571 (29.9%), 422.1 MBs/sec
+2026-10-02T08:04:08.7582799Z Sent 2751463424 of 7415305571 (37.1%), 437.0 MBs/sec
+2026-10-02T08:04:09.7586668Z Sent 3355443200 of 7415305571 (45.3%), 456.9 MBs/sec
+2026-10-02T08:04:10.7632182Z Sent 3959422976 of 7415305571 (53.4%), 471.7 MBs/sec
+2026-10-02T08:04:11.7624852Z Sent 4496293888 of 7415305571 (60.6%), 476.2 MBs/sec
+2026-10-02T08:04:12.7625083Z Sent 4966055936 of 7415305571 (67.0%), 473.4 MBs/sec
+2026-10-02T08:04:13.7641787Z Sent 5570035712 of 7415305571 (75.1%), 482.7 MBs/sec
+2026-10-02T08:04:14.7600461Z Sent 6106906624 of 7415305571 (82.4%), 485.1 MBs/sec
+2026-10-02T08:04:15.7634892Z Sent 6509559808 of 7415305571 (87.8%), 477.3 MBs/sec
+2026-10-02T08:04:16.7605575Z Sent 7079761251 of 7415305571 (95.5%), 482.1 MBs/sec
+2026-10-02T08:04:17.0590767Z Sent 7415305571 of 7415305571 (100.0%), 494.4 MBs/sec
+2026-10-02T08:04:17.6528031Z Cache saved with key: ramensops-kev4b-b559c103da523707f604afcf752fb6bc90b77bf6e71a32a59d7c9e032d975f28
+2026-10-02T08:04:17.6637140Z ##[group]Run set -euo pipefail
+2026-10-02T08:04:17.6637393Z [36;1mset -euo pipefail[0m
+2026-10-02T08:04:17.6637733Z [36;1m"$RUNNER_TEMP/kev-env/bin/python" ci/kev_server.py > "$RUNNER_TEMP/kev-server.log" 2>&1 &[0m
+2026-10-02T08:04:17.6638284Z [36;1mecho "KEV_PID=$!" >> "$GITHUB_ENV"[0m
+2026-10-02T08:04:17.6638517Z [36;1mecho "$!" > "$RUNNER_TEMP/kev.pid"[0m
+2026-10-02T08:04:17.6638736Z [36;1mpython ci/kev_ready.py[0m
+2026-10-02T08:04:17.6737327Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:04:17.6737543Z env:
+2026-10-02T08:04:17.6737765Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:17.6738114Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:04:17.6738444Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:17.6738737Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:17.6739026Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:17.6739400Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:04:17.6739684Z   HF_HOME: /home/runner/.cache/ramensops-kev
+2026-10-02T08:04:17.6739902Z   OMP_NUM_THREADS: 4
+2026-10-02T08:04:17.6740085Z   MKL_NUM_THREADS: 4
+2026-10-02T08:04:17.6740247Z   KEV_PREFIX_CACHE: 1
+2026-10-02T08:04:17.6740415Z ##[endgroup]
+2026-10-02T08:04:47.7581862Z Pinned Kev-4B CPU service ready
+2026-10-02T08:04:47.7692502Z ##[group]Run set -euo pipefail
+2026-10-02T08:04:47.7692746Z [36;1mset -euo pipefail[0m
+2026-10-02T08:04:47.7692937Z [36;1mcd "$RUNNER_TEMP"[0m
+2026-10-02T08:04:47.7693192Z [36;1mcurl --fail --silent --show-error --location --retry 3 \[0m
+2026-10-02T08:04:47.7693754Z [36;1m  https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o gitleaks.tar.gz[0m
+2026-10-02T08:04:47.7694643Z [36;1mecho '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum --check[0m
+2026-10-02T08:04:47.7695081Z [36;1mtar -xzf gitleaks.tar.gz gitleaks[0m
+2026-10-02T08:04:47.7695330Z [36;1mecho "$RUNNER_TEMP" >> "$GITHUB_PATH"[0m
+2026-10-02T08:04:47.7752272Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:04:47.7752482Z env:
+2026-10-02T08:04:47.7752726Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:47.7753065Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:04:47.7753423Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:47.7753720Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:47.7754110Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:47.7754408Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:04:47.7754659Z   KEV_PID: 2500
+2026-10-02T08:04:47.7754823Z ##[endgroup]
+2026-10-02T08:04:47.9185945Z gitleaks.tar.gz: OK
+2026-10-02T08:04:48.0504350Z ##[group]Run python ci/merge.py
+2026-10-02T08:04:48.0504629Z [36;1mpython ci/merge.py[0m
+2026-10-02T08:04:48.0559450Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:04:48.0559660Z env:
+2026-10-02T08:04:48.0559881Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:48.0560233Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:04:48.0560594Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:48.0560890Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:48.0561178Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:04:48.0561468Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:04:48.0561722Z   KEV_PID: 2500
+2026-10-02T08:04:48.0561889Z   SOP_REVIEW_BACKEND: kev
+2026-10-02T08:04:48.0563859Z   GH_TOKEN: ***
+2026-10-02T08:04:48.0564233Z   GH_REPO: Prog-Ramen/RamenSOPs
+2026-10-02T08:04:48.0564444Z   SOP_REVIEW_MODEL: 
+2026-10-02T08:04:48.0564665Z   SOP_SECURITY_MODEL: 
+2026-10-02T08:04:48.0564844Z ##[endgroup]
+2026-10-02T08:08:35.0565099Z PR #2: merged checked commit 39bde6449f6db75a7b1d1d21fec497c90c09333a
+2026-10-02T08:08:35.0708473Z ##[group]Run kill "$KEV_PID" || true
+2026-10-02T08:08:35.0708735Z [36;1mkill "$KEV_PID" || true[0m
+2026-10-02T08:08:35.0763822Z shell: /usr/bin/bash -e {0}
+2026-10-02T08:08:35.0764335Z env:
+2026-10-02T08:08:35.0764568Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:08:35.0764913Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib/pkgconfig
+2026-10-02T08:08:35.0765245Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:08:35.0765544Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:08:35.0765840Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.15/x64
+2026-10-02T08:08:35.0766134Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.15/x64/lib
+2026-10-02T08:08:35.0766392Z   KEV_PID: 2500
+2026-10-02T08:08:35.0766558Z ##[endgroup]
+2026-10-02T08:08:35.0897814Z Post job cleanup.
+2026-10-02T08:08:35.1910330Z (node:2675) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T08:08:35.1910908Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T08:08:35.2090441Z Post job cleanup.
+2026-10-02T08:08:35.3117542Z [command]/usr/bin/git version
+2026-10-02T08:08:35.3184392Z git version 2.55.0
+2026-10-02T08:08:35.3255032Z Temporarily overriding HOME='/home/runner/work/_temp/f227dd24-9639-4275-949d-e46c0f70d0da' before making global git config changes
+2026-10-02T08:08:35.3256167Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T08:08:35.3264924Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/RamenSOPs/RamenSOPs
+2026-10-02T08:08:35.3269079Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T08:08:35.3280380Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T08:08:35.3571993Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T08:08:35.3613214Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T08:08:35.3859710Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T08:08:35.3889009Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T08:08:35.4286236Z Cleaning up orphan processes
+2026-10-02T08:08:35.4571423Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830, actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830, actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
