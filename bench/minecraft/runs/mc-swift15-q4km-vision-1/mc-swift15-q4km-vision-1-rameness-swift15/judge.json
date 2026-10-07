@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 7,
+ "world": 5,
+ "ui": 8,
+ "notes": "Convincing Minecraft look with textured grass, blocky trees, water, sky and a hotbar, but the terrain is flat, the trees are oversized and boxy, and there is little variety in the blocks.",
+ "overall": 6.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0567908
+}

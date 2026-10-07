@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft — a tiny Minecraft clone</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="info"></div>
+  <div id="debug"></div>
+  <canvas id="hotbar" width="360" height="48"></canvas>
+  <div id="slotnames"></div>
+</div>
+
+<div id="toasts"></div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>Blockcraft</h1>
+    <p class="sub">a tiny minecraft clone &middot; no build step, just voxels</p>
+    <div class="row">
+      <label for="worldname">World name</label>
+      <input id="worldname" type="text" maxlength="24" value="My World" autocomplete="off">
+    </div>
+    <div class="row btns">
+      <button id="btn-new" class="btn">New world</button>
+      <button id="btn-continue" class="btn">Continue</button>
+    </div>
+    <div id="menu-msg" class="msg"></div>
+    <div class="controls">
+      <p><b>W A S D</b> move &nbsp; <b>Space</b> jump / swim &nbsp; <b>Shift</b> sneak</p>
+      <p><b>Mouse</b> look &nbsp; <b>LMB</b> break &nbsp; <b>RMB</b> place &nbsp; <b>Wheel / 1-9</b> select block</p>
+      <p><b>Double-tap W</b> sprint &nbsp; <b>F</b> fly (Space up, Shift down) &nbsp; <b>Esc</b> pause</p>
+      <p><b>N</b> new world (confirm in pause) &nbsp; world auto-saves to this browser</p>
+    </div>
+  </div>
+</div>
+
+<div id="paused" class="overlay hidden">
+  <div class="panel small">
+    <h2>Paused</h2>
+    <div class="row btns">
+      <button id="btn-resume" class="btn">Resume</button>
+      <button id="btn-sound" class="btn">Sound: on</button>
+      <button id="btn-reset" class="btn danger">Reset world</button>
+    </div>
+    <p id="pause-hint" class="msg"></p>
+  </div>
+</div>
+
+<div id="loading" class="overlay hidden">
+  <div class="panel small">
+    <p id="loading-text">Generating world&hellip;</p>
+    <div class="bar"><div id="loading-fill"></div></div>
+  </div>
+</div>
+
+<script src="js/atlas.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

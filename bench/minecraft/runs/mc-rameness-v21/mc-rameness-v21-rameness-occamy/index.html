@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Clone</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+  #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+  /* HUD */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; width: 24px; height: 24px;
+    transform: translate(-50%, -50%); z-index: 10; pointer-events: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,0.85);
+  }
+  #crosshair::before { top: 10px; left: 2px; width: 2px; height: 20px; }
+  #crosshair::after  { top: 2px; left: 10px; width: 20px; height: 2px; }
+
+  #hotbar {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 4px; pointer-events: none;
+  }
+  .hotbar-slot {
+    width: 48px; height: 48px; border: 2px solid rgba(100,100,100,0.7);
+    background: rgba(30,30,30,0.65); display: flex; align-items: center;
+    justify-content: center; color: #fff; font-size: 11px; flex-direction: column;
+    user-select: none;
+  }
+  .hotbar-slot.active { border-color: #fff; background: rgba(60,60,60,0.8); }
+  .hotbar-slot .key-hint { color: #aaa; font-size: 9px; line-height: 1; }
+  .hotbar-slot .block-name { font-size: 10px; margin-top: 2px; }
+
+  #info {
+    position: fixed; top: 12px; left: 12px; z-index: 10; color: #fff;
+    font-size: 13px; background: rgba(0,0,0,0.4); padding: 6px 10px;
+    border-radius: 4px; pointer-events: none; line-height: 1.5;
+  }
+
+  /* Start overlay */
+  #overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.75); z-index: 20; display: flex;
+    align-items: center; justify-content: center; flex-direction: column;
+    color: #fff; gap: 12px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 36px; letter-spacing: 2px; }
+  #overlay .sub { font-size: 14px; color: #ccc; }
+  #overlay .hint { font-size: 12px; color: #999; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="game-container"></div>
+
+<div id="crosshair"></div>
+
+<div id="hotbar"></div>
+
+<div id="info">
+  <div id="fps">FPS: --</div>
+  <div id="pos">Position: --</div>
+  <div id="chunks">Chunks: 0</div>
+</div>
+
+<div id="overlay">
+  <h1>⛏ Voxel Craft</h1>
+  <div class="sub">Click to play</div>
+  <div class="hint">WASD move · Space jump · Mouse look · Left-click break · Right-click place · 1-9 select block</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/three.module.min.js"
+  }
+}
+</script>
+<script type="module">
+  import { init } from './game.js';
+  init();
+</script>
+</body>
+</html>

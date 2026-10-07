@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 3,
+ "world": 3,
+ "ui": 7,
+ "notes": "The hotbar and crosshair are fine, but the terrain is a flat pale-gray expanse with black holes and missing faces, a single dark tree, a small patch of water, and blocky clouds, so it only loosely resembles Minecraft.",
+ "overall": 4.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0569108
+}

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%234a8f2e'/><rect x='0' y='0' width='16' height='5' fill='%236fbf4a'/><rect x='0' y='5' width='16' height='11' fill='%238a5f3d'/></svg>">
+<title>MineClone — a tiny Minecraft</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; height: 100%;
+    background: #000; font-family: "Courier New", monospace;
+    user-select: none; -webkit-user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 20px; height: 20px;
+    transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+    mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 9px; top: 3px; width: 2px; height: 14px; }
+  #crosshair::after { left: 3px; top: 9px; width: 14px; height: 2px; }
+
+  #hud {
+    position: fixed; left: 8px; top: 8px; z-index: 5;
+    color: #fff; font-size: 13px; line-height: 1.5;
+    text-shadow: 1px 1px 0 #000; pointer-events: none; white-space: pre;
+  }
+
+  #hotbar {
+    position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
+    display: flex; gap: 3px; z-index: 5;
+  }
+  .slot {
+    position: relative; width: 46px; height: 46px;
+    background: rgba(0,0,0,0.45);
+    border: 2px solid #6f6f6f;
+    display: flex; align-items: center; justify-content: center;
+    image-rendering: pixelated;
+  }
+  .slot.selected { border-color: #fff; background: rgba(255,255,255,0.12); }
+  .slot canvas { image-rendering: pixelated; }
+  .slot .num {
+    position: absolute; right: 2px; bottom: 0px;
+    color: #ddd; font-size: 10px; text-shadow: 1px 1px 0 #000;
+  }
+
+  #underwater {
+    position: fixed; inset: 0; background: #1a5f9e;
+    opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 4;
+  }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%);
+    color: #fff; font-size: 14px; text-shadow: 1px 1px 0 #000;
+    opacity: 0; transition: opacity 0.25s; pointer-events: none; z-index: 5;
+  }
+
+  #minimap {
+    position: fixed; right: 10px; top: 10px; z-index: 5;
+    width: 96px; height: 96px;
+    border: 2px solid rgba(255,255,255,0.55);
+    background: rgba(0,0,0,0.25);
+    image-rendering: pixelated;
+  }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 10;
+    background: rgba(10, 12, 18, 0.78);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #eee; text-align: center;
+  }
+  #overlay h1 {
+    font-size: 42px; letter-spacing: 4px; margin: 0 0 4px;
+    color: #7ec850; text-shadow: 3px 3px 0 #234018;
+  }
+  #overlay .sub { color: #9aa4b2; margin-bottom: 18px; font-size: 14px; }
+  #overlayMsg { color: #ffcf6e; margin-bottom: 10px; font-size: 15px; min-height: 18px; }
+  .panel {
+    background: rgba(0,0,0,0.5); border: 2px solid #444; padding: 14px 26px;
+    font-size: 14px; line-height: 1.9; text-align: left; margin-bottom: 22px;
+  }
+  .panel b { color: #ffd76e; }
+  .keys { display: inline-block; min-width: 84px; }
+  #playBtn {
+    font: bold 18px "Courier New", monospace; letter-spacing: 2px;
+    padding: 12px 42px; color: #fff; background: #3d7a35;
+    border: 3px solid #67b054; cursor: pointer; margin-bottom: 14px;
+  }
+  #playBtn:hover { background: #4b9440; }
+  #resetBtn {
+    font: 12px "Courier New", monospace; color: #999;
+    background: none; border: 1px solid #555; padding: 6px 14px; cursor: pointer;
+  }
+  #resetBtn:hover { color: #eee; border-color: #999; }
+  #seedInfo { color: #78849a; font-size: 12px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="crosshair"></div>
+<div id="hud"></div>
+<div id="underwater"></div>
+<div id="hotbar"></div>
+<div id="toast"></div>
+<canvas id="minimap" width="96" height="96"></canvas>
+
+<div id="overlay">
+  <h1>MINECLONE</h1>
+  <div class="sub">a tiny minecraft in your browser — no installs, no build step</div>
+  <div id="overlayMsg"></div>
+  <div class="panel">
+    <span class="keys"><b>W A S D</b></span> move &nbsp;·&nbsp; <span class="keys"><b>Mouse</b></span> look &nbsp;·&nbsp; <span class="keys"><b>Space</b></span> jump / swim up<br>
+    <span class="keys"><b>Left click</b></span> break block &nbsp;·&nbsp; <span class="keys"><b>Right click</b></span> place block<br>
+    <span class="keys"><b>1–9 / wheel</b></span> select block &nbsp;·&nbsp; <span class="keys"><b>Ctrl</b></span> sprint &nbsp;·&nbsp; <span class="keys"><b>F</b></span> toggle fly<br>
+    <span class="keys"><b>F + Space</b></span> fly up &nbsp;·&nbsp; <span class="keys"><b>F + Shift</b></span> fly down &nbsp;·&nbsp; <span class="keys"><b>R</b></span> respawn<br>
+    <span class="keys"><b>Esc</b></span> pause
+  </div>
+  <button id="playBtn">▶ PLAY</button><br>
+  <button id="resetBtn">reset world</button>
+  <div id="seedInfo"></div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

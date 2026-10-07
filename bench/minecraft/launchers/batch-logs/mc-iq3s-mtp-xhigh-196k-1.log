@@ -1,0 +1,4 @@
+[bench] cleared 42 leftover /tmp entries of bench
+[mc-iq3s-mtp-xhigh-196k-1-rameness-flashnext] start (context window 196608 x 1 slots, reasoning budget 5000)
+[mc-iq3s-mtp-xhigh-196k-1-rameness-flashnext] done in 81.6 min: score 85.7 (12/14), 160 requests, max context 176650/196608, compactions 1 (logged 1), exit 0
+results: /root/bench/results/minecraft/mc-iq3s-mtp-xhigh-196k-1/results.json

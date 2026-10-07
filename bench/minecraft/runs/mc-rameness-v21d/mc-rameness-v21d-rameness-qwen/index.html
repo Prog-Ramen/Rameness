@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voxelraft — a browser Minecraft clone</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; user-select: none; -webkit-user-select: none; }
+
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+  /* Crosshair */
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 20px; height: 20px;
+    transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
+
+  /* Top-left debug/info */
+  #hud {
+    position: fixed; left: 8px; top: 8px; color: #fff; font-size: 13px;
+    text-shadow: 1px 1px 0 #000; pointer-events: none; line-height: 1.5;
+  }
+  #hud .dim { opacity: 0.75; }
+
+  /* Toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%) translateY(8px);
+    color: #fff; font-size: 15px; text-shadow: 1px 1px 0 #000;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Hotbar */
+  #hotbar {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 4px; pointer-events: auto;
+  }
+  .slot {
+    position: relative; width: 52px; height: 52px;
+    background: rgba(0,0,0,0.45);
+    border: 2px solid #7f7f7f; border-bottom-width: 4px; border-radius: 3px;
+    cursor: pointer;
+  }
+  .slot img { width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
+  .slot.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+  .slotnum {
+    position: absolute; right: 3px; top: 1px; font-size: 10px; color: #ddd;
+    text-shadow: 1px 1px 0 #000; pointer-events: none;
+  }
+  #selectedName {
+    position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%);
+    color: #fff; font-size: 13px; text-shadow: 1px 1px 0 #000; pointer-events: none;
+  }
+
+  /* Water tint */
+  #waterOverlay {
+    position: fixed; inset: 0; background: rgba(20, 60, 160, 0.42);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+
+  /* Title / pause screen */
+  #title {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    background: rgba(10, 12, 16, 0.55); backdrop-filter: blur(2px);
+    color: #fff; text-align: center; cursor: pointer;
+  }
+  #title.hidden { display: none; }
+  #title h1 {
+    font-size: 56px; letter-spacing: 6px; font-weight: 800;
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.6);
+    font-family: monospace;
+  }
+  #title h1 span { color: #7ec850; }
+  #title .sub { color: #b9c2cc; font-size: 15px; }
+  #controls {
+    display: grid; grid-template-columns: auto auto; gap: 4px 18px;
+    background: rgba(0,0,0,0.45); border: 1px solid #444; border-radius: 6px;
+    padding: 14px 22px; font-size: 13.5px; text-align: left;
+  }
+  #controls b { color: #9fd67a; font-family: monospace; }
+  #playBtn {
+    font-size: 19px; font-weight: 700; padding: 10px 42px; cursor: pointer;
+    background: #4b6f3a; color: #fff; border: 2px solid #2e4524; border-radius: 4px;
+    letter-spacing: 1px;
+  }
+  #playBtn:hover { background: #5c8a48; }
+  #resetBtn {
+    font-size: 12px; color: #a8a8a8; background: none; border: none; cursor: pointer;
+    text-decoration: underline;
+  }
+  #resetBtn:hover { color: #e0e0e0; }
+</style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <div id="waterOverlay"></div>
+  <div id="crosshair"></div>
+
+  <div id="hud">
+    <div id="fps">FPS —</div>
+    <div id="coords" class="dim">—</div>
+    <div class="dim">Voxelraft</div>
+  </div>
+
+  <div id="selectedName"></div>
+  <div id="hotbar"></div>
+  <div id="toast"></div>
+
+  <div id="title">
+    <h1>VOXEL<span>RAFT</span></h1>
+    <div class="sub">A tiny Minecraft clone that runs entirely in your browser</div>
+    <div id="controls">
+      <b>W A S D</b><span>move</span>
+      <b>Mouse</b><span>look around</span>
+      <b>Left click</b><span>break block</span>
+      <b>Right click</b><span>place block</span>
+      <b>Middle click</b><span>pick block</span>
+      <b>1–9 / 0</b><span>select block (or scroll)</span>
+      <b>Space</b><span>jump / swim up</span>
+      <b>Shift</b><span>sprint</span>
+      <b>F</b><span>toggle fly</span>
+      <b>C / Ctrl</b><span>fly down</span>
+      <b>R</b><span>respawn</span>
+      <b>Q</b><span>reset world</span>
+      <b>Esc</b><span>pause</span>
+    </div>
+    <button id="playBtn">PLAY</button>
+    <div class="sub" id="playHint">Your changes are saved in this browser</div>
+    <button id="resetBtn">reset world (undo all changes)</button>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

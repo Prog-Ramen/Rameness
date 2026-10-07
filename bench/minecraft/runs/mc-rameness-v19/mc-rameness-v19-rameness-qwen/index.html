@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft — a tiny Minecraft clone</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="info">
+    <span id="pos">x 0 y 0 z 0</span>
+    <span id="fps">-- fps</span>
+    <span id="clock">day</span>
+  </div>
+</div>
+
+<div id="hotbar"></div>
+
+<div id="overlay" class="overlay hidden">
+  <div class="panel">
+    <h1>Blockcraft</h1>
+    <p class="sub">a tiny minecraft clone &mdash; procedural world, infinite chunks</p>
+    <p>Click to play. <b>Esc</b> releases the mouse.</p>
+    <table class="help">
+      <tr><td>W A S D</td><td>move</td></tr>
+      <tr><td>Mouse</td><td>look</td></tr>
+      <tr><td>Left click</td><td>break block</td></tr>
+      <tr><td>Right click</td><td>place block</td></tr>
+      <tr><td>Space</td><td>jump / fly up</td></tr>
+      <tr><td>Shift</td><td>sneak / fly down</td></tr>
+      <tr><td>1&ndash;9 / wheel</td><td>select block</td></tr>
+      <tr><td>F</td><td>toggle fly</td></tr>
+      <tr><td>R</td><td>new world</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="loading" class="overlay">
+  <div class="panel"><p>Generating world&hellip;</p></div>
+</div>
+
+<script src="js/noise.js"></script>
+<script src="js/atlas.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/render.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

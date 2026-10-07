@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a browser Minecraft</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="debug"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="block-select" class="hidden">
+  <div class="sel-title">Select block <span class="sel-hint">(1-9, scroll to change, Esc to close)</span></div>
+  <div id="block-grid"></div>
+</div>
+
+<div id="menu" class="hidden">
+  <div id="menu-box">
+    <h1>VOXELCRAFT</h1>
+    <p class="menu-sub">a tiny minecraft for your browser</p>
+    <div class="menu-buttons">
+      <button id="btn-play">Play</button>
+      <button id="btn-new">New world</button>
+    </div>
+    <div class="menu-keys">
+      <div><b>WASD</b> move &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint &nbsp; <b>S</b> descend</div>
+      <div><b>Left click</b> break &nbsp; <b>Right click</b> place &nbsp; <b>1-9 / scroll</b> select block</div>
+      <div><b>F</b> fly toggle &nbsp; <b>G</b> block palette &nbsp; <b>M</b> music &nbsp; <b>P</b> save &nbsp; <b>R</b> regenerate</div>
+      <div><b>Esc</b> release mouse</div>
+    </div>
+    <p class="menu-foot">world saves automatically to your browser (localStorage)</p>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="js/vox.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/interact.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

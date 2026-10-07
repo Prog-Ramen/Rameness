@@ -1,0 +1,142 @@
+{
+ "run": "mc-main-1-claude-code-occamy",
+ "harness": "claude-code",
+ "model": "occamy-1.0",
+ "model_label": "Occamy 1.0",
+ "server": "<lan-host>-8034",
+ "wall_seconds": 9000.0,
+ "timed_out": true,
+ "exit_code": 143,
+ "game_dir": ".",
+ "cost_usd": null,
+ "llm_requests": 69,
+ "llm_errors": 0,
+ "prompt_tokens_total": 5386826,
+ "cached_tokens_total": 1141897,
+ "completion_tokens_total": 78607,
+ "context_tokens_max": 128489,
+ "tool_calls_total": 77,
+ "llm_seconds_total": 8865.025,
+ "gen_tps_mean": 27.64,
+ "score": 64.3,
+ "passed": 9,
+ "fps": 9.5,
+ "loc": 1195,
+ "files": 1,
+ "block_count": null,
+ "page_errors": 2,
+ "checks": {
+  "index_html": true,
+  "page_loads": true,
+  "no_page_errors": true,
+  "clean_console": true,
+  "webgl_canvas": true,
+  "renders_scene": true,
+  "has_ui_overlay": true,
+  "walks": true,
+  "mouse_look": false,
+  "jumps": false,
+  "breaks_block": false,
+  "places_block": false,
+  "number_keys": true,
+  "fps_15": false
+ },
+ "score_detail": {
+  "checks": {
+   "index_html": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "page_loads": {
+    "pass": true,
+    "detail": "200",
+    "passes": "3/3"
+   },
+   "no_page_errors": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "clean_console": {
+    "pass": true,
+    "detail": "0 console errors",
+    "passes": "3/3"
+   },
+   "webgl_canvas": {
+    "pass": true,
+    "detail": "1280x800",
+    "passes": "3/3"
+   },
+   "renders_scene": {
+    "pass": true,
+    "detail": "239 colours, dominant 49%",
+    "passes": "3/3"
+   },
+   "has_ui_overlay": {
+    "pass": true,
+    "detail": "60 visible UI elements over the canvas",
+    "passes": "3/3"
+   },
+   "walks": {
+    "pass": true,
+    "detail": "best of WASD: change 7.3% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "mouse_look": {
+    "pass": false,
+    "detail": "change 0.0% vs idle 0.0%",
+    "passes": "0/3"
+   },
+   "jumps": {
+    "pass": false,
+    "detail": "peak 0.0%, settled 0.0%, idle 0.0%",
+    "passes": "0/3"
+   },
+   "breaks_block": {
+    "pass": false,
+    "detail": "crosshair change 0.0% vs idle 0.0% (aim 4)",
+    "passes": "0/3"
+   },
+   "places_block": {
+    "pass": false,
+    "detail": "crosshair change 0.0% vs idle 0.0% (aim 4)",
+    "passes": "0/3"
+   },
+   "number_keys": {
+    "pass": true,
+    "detail": "change 0.2% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "fps_15": {
+    "pass": false,
+    "detail": "9.8 fps (software WebGL)",
+    "passes": "0/3"
+   }
+  },
+  "fps": 9.5,
+  "page_errors": [
+   "chunk.setBlock is not a function",
+   "chunk.setBlock is not a function"
+  ],
+  "console_errors": 0,
+  "api": null,
+  "files": 1,
+  "loc": 1195,
+  "bytes": 39419,
+  "passed": 9,
+  "total": 14,
+  "score": 64.3,
+  "score_seconds": 85.4,
+  "score_runs": [
+   64.3,
+   64.3,
+   64.3
+  ]
+ },
+ "compactions": 0,
+ "context_window": 200192,
+ "slots": 2,
+ "context_utilization": 0.642,
+ "compactions_logged": 0
+}

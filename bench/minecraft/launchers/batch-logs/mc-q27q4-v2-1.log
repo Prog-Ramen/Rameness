@@ -1,0 +1,6 @@
+[bench] rameness copy is out of date; reinstalling
+[bench] cleared 19 leftover /tmp entries of bench
+[mc-q27q4-v2-1-rameness-q27q4] start (context window 262144 x 1 slots, reasoning budget 5000)
+[mc-q27q4-v2-1-rameness-q27q4] done in 104.5 min: score 100.0 (14/14), 178 requests, max context 242779/262144, compactions 0 (logged 1), exit 1
+results: /root/bench/results/minecraft/mc-q27q4-v2-1/results.json
+mc-q27q4-v2-1-rameness-q27q4: overall 5.5  (Textured blocky grass, dirt and trees under a blue sky, with a hotbar and crosshair, but the dirt walls have odd grass strips on their sides, the terrain is flat and maze-like, and there's no water and few block types.)

@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 6,
+ "world": 5,
+ "ui": 6,
+ "notes": "Blocky voxel look with decent textures and a crosshair/hotbar, but there's no terrain height variation visible, water in distance looks flat/oddly clipped, and no held-item/hand model or other HUD elements.",
+ "overall": 6.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0698404
+}

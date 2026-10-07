@@ -1,0 +1,4 @@
+[bench] rameness copy is out of date; reinstalling
+[mc-rameness-v22-rameness-qwen] start (context window 150000 x 1 slots, reasoning budget 5000)
+[mc-rameness-v22-rameness-qwen] done in 117.7 min: score 100.0 (14/14), 204 requests, max context 133544/150000, compactions 3 (logged 3), exit 0
+results: /root/bench/results/minecraft/mc-rameness-v22/results.json

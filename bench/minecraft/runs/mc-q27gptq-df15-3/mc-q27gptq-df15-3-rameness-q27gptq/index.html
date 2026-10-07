@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Minecraft (browser)</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <div id="loading">
+    <div class="logo">Minecraft<br /><span>browser edition</span></div>
+    <div id="loading-status">Generating world&hellip;</div>
+  </div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="debug" style="display:none"></div>
+    <div id="hotbar"></div>
+    <div id="toast"></div>
+    <div id="water-overlay"></div>
+    <div id="help">
+      <div class="panel">
+        <h1>Minecraft <span>(browser)</span></h1>
+        <p class="hint">Click to play &mdash; ESC to release the mouse.</p>
+        <table>
+          <tr><td>W A S D</td><td>Move</td></tr>
+          <tr><td>Space</td><td>Jump / swim up</td></tr>
+          <tr><td>Shift</td><td>Sprint</td></tr>
+          <tr><td>Mouse</td><td>Look around</td></tr>
+          <tr><td>Left click</td><td>Mine (hold)</td></tr>
+          <tr><td>Right click</td><td>Place block</td></tr>
+          <tr><td>Middle click</td><td>Pick block</td></tr>
+          <tr><td>1&ndash;0 / wheel</td><td>Select block</td></tr>
+          <tr><td>F</td><td>Toggle fly (C to go down)</td></tr>
+          <tr><td>T</td><td>Pause/resume day&ndash;night cycle</td></tr>
+          <tr><td>N</td><td>New world</td></tr>
+          <tr><td>M</td><td>Sound on/off</td></tr>
+          <tr><td>F3</td><td>Debug overlay</td></tr>
+        </table>
+        <p class="small">Seeded &amp; deterministic &mdash; use <code>?seed=123</code> in the URL.</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="browser/main.js"></script>
+</body>
+</html>

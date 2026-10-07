@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoxelCraft</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="crosshair"></div>
+
+  <div id="hotbar"></div>
+
+  <div id="info"></div>
+
+  <div id="overlay">
+    <div class="box">
+      <h1>VoxelCraft</h1>
+      <p>
+        A Minecraft-style clone running in your browser.<br>
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to move &middot;
+        <span class="key">Space</span> to jump &middot;
+        <span class="key">Mouse</span> to look<br>
+        <span class="key">Left Click</span> break blocks &middot;
+        <span class="key">Right Click</span> place blocks &middot;
+        <span class="key">1-9</span> select block type
+      </p>
+      <p>Click anywhere to start</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

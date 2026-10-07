@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 2,
+ "world": 0,
+ "ui": 3,
+ "notes": "The screenshot shows only a black title/instructions screen ('WebCraft', 'Click to play') with a stray crosshair. No voxel world, sky, hotbar or HUD is visible.",
+ "overall": 1.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.056749400000000005
+}

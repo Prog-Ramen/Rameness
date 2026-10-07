@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a browser Minecraft</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="underwater"></div>
+<div id="hud">
+  <div id="stats"></div>
+  <div id="crosshair"></div>
+  <div id="targetName"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="overlay">
+  <div class="panel">
+    <h1>Voxelcraft</h1>
+    <p class="sub">A Minecraft-style voxel world, 100% in your browser.</p>
+    <table class="keys">
+      <tr><td>Click</td><td>look / capture mouse</td></tr>
+      <tr><td>W A S D</td><td>move</td></tr>
+      <tr><td>Space</td><td>jump / fly up</td></tr>
+      <tr><td>Shift</td><td>fly down (in flight)</td></tr>
+      <tr><td>F</td><td>toggle fly mode</td></tr>
+      <tr><td>Left click</td><td>break block</td></tr>
+      <tr><td>Right click</td><td>place block</td></tr>
+      <tr><td>1–9 / wheel</td><td>pick block</td></tr>
+      <tr><td>T</td><td>toggle texture pack</td></tr>
+      <tr><td>Esc</td><td>release mouse (menu)</td></tr>
+    </table>
+    <div class="btnrow">
+      <button id="btnPlay">Play</button>
+      <button id="btnNew">New world</button>
+    </div>
+    <p id="worldInfo" class="sub"></p>
+  </div>
+</div>
+
+<script src="js/noise.js"></script>
+<script src="js/world.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

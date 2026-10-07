@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramen-craft — a browser Minecraft clone</title>
+<style>
+  :root {
+    --ui-font: "Courier New", ui-monospace, Menlo, Consolas, monospace;
+  }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #7fb7e6;
+    font-family: var(--ui-font);
+    -webkit-user-select: none; user-select: none;
+  }
+  #game { display: block; width: 100%; height: 100%; }
+
+  /* ---- overlay (start / pause) ---- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background:
+      linear-gradient(rgba(20, 24, 30, 0.55), rgba(20, 24, 30, 0.75)),
+      repeating-conic-gradient(#3b3b42 0% 25%, #34343b 0% 50%) 0 0 / 64px 64px;
+    color: #f2f2f2; text-align: center; cursor: pointer;
+  }
+  #overlay h1 {
+    font-size: 64px; letter-spacing: 4px; margin: 0 0 8px 0;
+    text-shadow: 4px 4px 0 #1b1b1f;
+    color: #9be25d;
+  }
+  #overlay .sub { font-size: 16px; color: #cfcfd6; margin-bottom: 28px; }
+  #overlay .panel {
+    background: rgba(0,0,0,0.45); border: 2px solid #555;
+    padding: 18px 30px; border-radius: 6px;
+    font-size: 15px; line-height: 1.9; text-align: left;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  #overlay .panel b { color: #ffd76e; font-weight: bold; }
+  #overlay .start {
+    margin-top: 26px; font-size: 20px; color: #fff;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  #overlay.hidden { display: none; }
+
+  /* ---- crosshair ---- */
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; z-index: 10;
+    width: 22px; height: 22px; transform: translate(-50%, -50%);
+    pointer-events: none; display: none; mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; display: none; }
+  #hud-top {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(0,0,0,0.45); color: #e8e8e8;
+    padding: 6px 12px; font-size: 13px; border-radius: 4px;
+    line-height: 1.5;
+  }
+  #hotbar {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; background: rgba(0,0,0,0.4);
+    padding: 5px; border-radius: 6px;
+  }
+  .slot {
+    position: relative; width: 52px; height: 52px;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid #777; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.5); background: rgba(255,255,255,0.18); }
+  .slot canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+  .slot span {
+    position: absolute; top: 1px; left: 3px; font-size: 10px; color: #ddd;
+  }
+  #slot-name {
+    position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 14px; text-shadow: 1px 1px 0 #000;
+  }
+
+  /* ---- underwater tint ---- */
+  #underwater-veil {
+    position: fixed; inset: 0; z-index: 9; display: none; pointer-events: none;
+    background: rgba(20, 60, 140, 0.28);
+  }
+
+  /* ---- loading ---- */
+  #loading {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    z-index: 30; color: #fff; font-size: 18px; text-shadow: 2px 2px 0 #000;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="underwater-veil"></div>
+  <div id="crosshair"></div>
+
+  <div id="hud">
+    <div id="hud-top">
+      <div><span id="fps">0 fps</span></div>
+      <div>XYZ <span id="pos">0 0 0</span></div>
+    </div>
+    <div id="slot-name"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="loading">Generating world…</div>
+
+  <div id="overlay">
+    <h1 id="overlay-title">RAMEN-CRAFT</h1>
+    <div class="sub">a voxel world in your browser — no build step, no install</div>
+    <div class="panel">
+      <b>Click</b> to lock the mouse and start<br>
+      <b>W A S D</b> move &nbsp;·&nbsp; <b>Space</b> jump / swim<br>
+      <b>Shift</b> sprint &nbsp;·&nbsp; <b>R</b> respawn<br>
+      <b>Left click</b> break block &nbsp;·&nbsp; <b>Right click</b> place block<br>
+      <b>1–9</b> or <b>mouse wheel</b> choose block &nbsp;·&nbsp; <b>Esc</b> pause
+    </div>
+    <div class="start hint">▶ Click anywhere to play</div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

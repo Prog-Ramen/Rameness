@@ -1,0 +1,144 @@
+{
+ "run": "mc-rameness-v21b-rameness-occamy",
+ "harness": "rameness",
+ "model": "occamy-1.0",
+ "model_label": "Occamy 1.0",
+ "server": "<lan-host>-8034",
+ "wall_seconds": 9000.0,
+ "timed_out": true,
+ "exit_code": -15,
+ "game_dir": ".",
+ "cost_usd": null,
+ "llm_requests": 147,
+ "llm_errors": 0,
+ "prompt_tokens_total": 8099186,
+ "cached_tokens_total": 8047348,
+ "completion_tokens_total": 90665,
+ "context_tokens_max": 118913,
+ "tool_calls_total": 148,
+ "compactions": 0,
+ "llm_seconds_total": 6496.95,
+ "gen_tps_mean": 19.99,
+ "context_window": 200192,
+ "slots": 1,
+ "reasoning_budget": null,
+ "context_utilization": 0.594,
+ "compactions_logged": 0,
+ "score": 21.4,
+ "passed": 3,
+ "fps": null,
+ "loc": 1282,
+ "files": 13,
+ "block_count": null,
+ "page_errors": 1,
+ "click_starts": true,
+ "checks": {
+  "index_html": true,
+  "page_loads": true,
+  "no_page_errors": false,
+  "clean_console": false,
+  "webgl_canvas": true,
+  "renders_scene": false,
+  "has_ui_overlay": false,
+  "walks": false,
+  "mouse_look": false,
+  "jumps": false,
+  "breaks_block": false,
+  "places_block": false,
+  "number_keys": false,
+  "fps_15": false
+ },
+ "score_detail": {
+  "checks": {
+   "index_html": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "page_loads": {
+    "pass": true,
+    "detail": "200",
+    "passes": "3/3"
+   },
+   "no_page_errors": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "clean_console": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "webgl_canvas": {
+    "pass": true,
+    "detail": "1280x800",
+    "passes": "3/3"
+   },
+   "renders_scene": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "has_ui_overlay": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "walks": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "mouse_look": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "jumps": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "breaks_block": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "places_block": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "number_keys": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   },
+   "fps_15": {
+    "pass": false,
+    "detail": "",
+    "passes": "0/3"
+   }
+  },
+  "fps": null,
+  "page_errors": [
+   "scorer: Page.screenshot: Timeout 30000ms exceeded.\nCall log:\n  - taking page screenshot\n  - waiting for fonts to load...\n  - fonts loaded\n"
+  ],
+  "console_errors": 0,
+  "api": null,
+  "files": 13,
+  "loc": 1282,
+  "bytes": 58152,
+  "click_starts": true,
+  "passed": 3,
+  "total": 14,
+  "score": 21.4,
+  "score_seconds": 73.9,
+  "score_runs": [
+   21.4,
+   21.4,
+   21.4
+  ]
+ }
+}

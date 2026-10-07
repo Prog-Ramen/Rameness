@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 1,
+ "ui": 4,
+ "notes": "Rendering is catastrophically broken with garbled triangulated geometry and shattered meshes, leaving only a crosshair and hotbar as recognizable Minecraft elements.",
+ "overall": 1.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0698504
+}

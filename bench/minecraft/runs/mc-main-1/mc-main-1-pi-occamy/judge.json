@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 1,
+ "world": 2,
+ "ui": 6,
+ "notes": "Hotbar and crosshair look correct but the world itself is a broken mess of dark, disconnected, unlit floating blocks with no coherent terrain surface.",
+ "overall": 3.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0205732
+}

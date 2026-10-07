@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 7,
+ "world": 3,
+ "ui": 7,
+ "notes": "The screenshot shows a flat sand beach beside shallow water, with a few mobs, clouds, a crosshair, and a textured hotbar. Terrain is sparse, with no trees or varied blocks in view, and the water looks flat and slightly odd.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.056906200000000004
+}

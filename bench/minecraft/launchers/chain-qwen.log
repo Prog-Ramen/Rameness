@@ -1,0 +1,3 @@
+[mc-main-1-claude-code-qwen] start
+[mc-main-1-claude-code-qwen] done in 150.0 min: score 85.7 (12/14), 46 requests, max context 112510, TIMED OUT
+results: /root/bench/results/minecraft/mc-main-1/results.json

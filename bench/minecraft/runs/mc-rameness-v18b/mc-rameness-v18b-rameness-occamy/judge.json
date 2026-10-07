@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "Screen is entirely black with only a faint crosshair visible, indicating the game failed to render any world or scene.",
+ "overall": 0.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0697156
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Blockcraft</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="topline">
+    <span id="pos"></span>
+    <span id="seed"></span>
+  </div>
+  <div id="crosshair"></div>
+  <div id="selected"></div>
+  <div id="hotbar"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="menu">
+  <div id="menu-box">
+    <h1>BLOCKCRAFT</h1>
+    <p class="tag">a tiny voxel world in your browser</p>
+    <div id="menu-controls">
+      <div><b>W A S D</b> move &nbsp; <b>Space</b> jump</div>
+      <div><b>Mouse</b> look &nbsp; <b>Scroll</b> / <b>1-8</b> select block</div>
+      <div><b>Left click</b> break &nbsp; <b>Right click</b> place</div>
+      <div><b>F</b> toggle fly &nbsp; <b>Esc</b> pause</div>
+    </div>
+    <div id="menu-status">loading…</div>
+    <button id="play">Click to play</button>
+  </div>
+</div>
+
+<div id="nogl" hidden>
+  <div>
+    <h1>No WebGL2</h1>
+    <p>This game needs a browser with WebGL2 enabled.</p>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

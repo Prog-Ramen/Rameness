@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 4,
+ "notes": "Terrain geometry is completely broken into garbled spiky triangles with no recognizable blocks or ground, only sky, crosshair, and hotbar are intact.",
+ "overall": 1.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0274878
+}

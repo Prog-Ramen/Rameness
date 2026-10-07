@@ -1,0 +1,57 @@
+[bench] rameness copy is out of date; reinstalling
+[bench] cleared 29 leftover /tmp entries of bench
+[mc-q27q4-v2-2-rameness-q27q4] start (context window 262144 x 1 slots, reasoning budget 5000)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49984)
+Traceback (most recent call last):
+  File "/root/projects/Rameness/bench/llmproxy.py", line 303, in _relay
+    resp = conn.getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 484, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 406, in do_POST
+    self._forward("POST")
+    ~~~~~~~~~~~~~^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 273, in _forward
+    self._relay(conn, method, path, body, headers, req, kind, t0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 305, in _relay
+    self.send_error(502, f"upstream: {e}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/server.py", line 551, in send_error
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+[mc-q27q4-v2-2-rameness-q27q4] done in 150.0 min: score 92.9 (13/14), 177 requests, max context 243683/262144, compactions 1 (logged 2), TIMED OUT
+results: /root/bench/results/minecraft/mc-q27q4-v2-2/results.json
+mc-q27q4-v2-2-rameness-q27q4: overall 5.5  (A forest of blocky textured trees, a grass field, a hotbar, a minimap and a crosshair are present, but the view is cramped by huge trunks and leaf blocks, with no water, no varied terrain and little visible distance.)

@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "Screenshot only shows the game's start menu screen with a black background, no actual gameplay or world rendered.",
+ "overall": 0.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0695236
+}

@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 5,
+ "world": 6,
+ "ui": 7,
+ "notes": "Blocky trees and terrain look Minecraft-like with a proper hotbar and crosshair, but there are odd thin black gaps/z-fighting between terrain steps and tree foliage clipping oddly.",
+ "overall": 6.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06981040000000001
+}

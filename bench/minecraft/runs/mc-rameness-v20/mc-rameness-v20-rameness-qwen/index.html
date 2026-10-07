@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockcraft — a tiny Minecraft clone</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="crosshair"></div>
+
+  <div id="hud">
+    <div id="fps">fps —</div>
+    <div id="pos">x —  y —  z —</div>
+    <div id="block-name">Grass</div>
+    <div id="seed-label"></div>
+  </div>
+
+  <div id="hotbar"></div>
+
+  <div id="overlay">
+    <div id="overlay-inner">
+      <h1 id="overlay-title">click to play</h1>
+      <p class="tagline">a tiny Minecraft clone — runs straight from files, no build step</p>
+      <table id="controls">
+        <tr><td>W A S D</td><td>move</td></tr>
+        <tr><td>Mouse</td><td>look around</td></tr>
+        <tr><td>Left click</td><td>break block</td></tr>
+        <tr><td>Right click</td><td>place block</td></tr>
+        <tr><td>Space</td><td>jump / swim up (in water)</td></tr>
+        <tr><td>Shift</td><td>sprint</td></tr>
+        <tr><td>F</td><td>toggle fly (Space up / Ctrl down)</td></tr>
+        <tr><td>1–9 / wheel</td><td>select block</td></tr>
+        <tr><td>Esc</td><td>release mouse</td></tr>
+      </table>
+      <p class="tip">terrain, caves, trees and water are generated procedurally — walk far enough and new chunks stream in. Type a seed below to revisit a world.</p>
+      <div id="seed-row">
+        <input id="seed" type="number" value="20260927" min="0" max="999999999"
+               onchange="this.blur()">
+        <button id="reset-btn" type="button" title="regenerate with this seed">new world</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="three.min.js"></script>
+  <script src="js/noise.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/mesher.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

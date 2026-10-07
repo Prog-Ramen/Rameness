@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 3,
+ "world": 1,
+ "ui": 6,
+ "notes": "Flat, featureless green plain with blurry fog and no trees, terrain variation, or visible block edges despite a proper hotbar and crosshair UI.",
+ "overall": 3.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0196756
+}

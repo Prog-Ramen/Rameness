@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 2,
+ "world": 2,
+ "ui": 6,
+ "notes": "Textured grass and dirt blocks and a hotbar are present, but the geometry is badly broken: chunks are missing, faces float in the void, and the scene is full of scattered fragments with no coherent terrain, water or trees.",
+ "overall": 3.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0568848
+}

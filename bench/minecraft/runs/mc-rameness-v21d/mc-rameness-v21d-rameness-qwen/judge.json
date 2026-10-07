@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 7,
+ "world": 6,
+ "ui": 6,
+ "notes": "Solid blocky voxel look with terraced terrain and trees, but no water/varied biomes visible and no visible hotbar selection highlight beyond slot 1 or health/hunger bars.",
+ "overall": 6.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0699856
+}

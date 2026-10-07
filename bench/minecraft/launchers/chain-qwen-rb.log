@@ -1,0 +1,7 @@
+[mc-qwen-rb5k-rameness-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)
+[mc-qwen-rb5k-rameness-qwen] done in 32.3 min: score 50.0 (7/14), 19 requests, max context 36840/184000, compactions 0 (logged 0), exit 0
+[mc-qwen-rb5k-pi-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)
+[mc-qwen-rb5k-pi-qwen] done in 89.0 min: score 64.3 (9/14), 76 requests, max context 132751/184000, compactions 0 (logged 0), exit 0
+[mc-qwen-rb5k-dsh-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)
+[mc-qwen-rb5k-dsh-qwen] done in 150.0 min: score 71.4 (10/14), 87 requests, max context 148437/184000, compactions 1 (logged 0), TIMED OUT
+[mc-qwen-rb5k-claude-code-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)

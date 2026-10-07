@@ -1,0 +1,3 @@
+[mc-q27-tnz-vision-1-rameness-q27tnz] start (context window 262144 x 1 slots)
+[mc-q27-tnz-vision-1-rameness-q27tnz] done in 73.2 min: score 100.0 (14/14), 177 requests, max context 146426/262144, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-q27-tnz-vision-1/results.json

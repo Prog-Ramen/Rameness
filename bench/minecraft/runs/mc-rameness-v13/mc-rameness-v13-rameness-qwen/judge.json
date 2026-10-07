@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 1,
+ "ui": 4,
+ "notes": "World geometry is completely broken into garbled black vertical shards with no recognizable blocks, only the hotbar and debug HUD text are legible.",
+ "overall": 1.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07742260000000001
+}

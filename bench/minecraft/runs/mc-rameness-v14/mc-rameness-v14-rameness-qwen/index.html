@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft Clone</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: "Segoe UI", system-ui, sans-serif; }
+  #game { position: absolute; inset: 0; }
+  #game canvas { image-rendering: pixelated; }
+
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 20px; height: 20px; pointer-events: none; z-index: 5;
+    mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair::after { left: 0; top: 9px; width: 20px; height: 2px; }
+
+  #hud {
+    position: absolute; left: 12px; bottom: 12px; color: #fff; font-size: 13px;
+    text-shadow: 1px 1px 2px #000; z-index: 5; pointer-events: none; line-height: 1.5;
+  }
+  #seed-label { opacity: 0.7; font-size: 12px; }
+
+  #hotbar {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 4px; z-index: 5; pointer-events: none;
+  }
+  .slot {
+    width: 48px; height: 48px; position: relative;
+    background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 3px; display: flex; align-items: center; justify-content: center;
+  }
+  .slot.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.8); }
+  .slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+  .slot-num {
+    position: absolute; top: 1px; left: 3px; font-size: 10px; color: #ddd;
+    text-shadow: 1px 1px 1px #000;
+  }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 10;
+    background: rgba(10, 14, 22, 0.82);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; text-align: center; cursor: pointer; user-select: none;
+  }
+  #overlay h1 {
+    font-size: 54px; letter-spacing: 6px; font-weight: 800;
+    text-shadow: 3px 3px 0 #333; margin-bottom: 18px;
+  }
+  #overlay .hint { font-size: 18px; margin-bottom: 14px; }
+  #overlay .cols {
+    display: flex; gap: 48px; text-align: left; font-size: 14px; line-height: 1.9;
+    background: rgba(255,255,255,0.06); padding: 16px 24px; border-radius: 6px;
+  }
+  #overlay .cols b { color: #ffd966; }
+  #overlay .footer { margin-top: 16px; opacity: 0.55; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="crosshair"></div>
+
+  <div id="hud">
+    <div id="pos">x 0 y 0 z 0</div>
+    <div id="fps">– fps</div>
+    <div><span id="clock">00:00</span> · <span id="seed-label"></span></div>
+  </div>
+
+  <div id="hotbar"></div>
+
+  <div id="overlay">
+    <h1>MINECRAFT CLONE</h1>
+    <div class="hint" id="overlay-title">Click to play</div>
+    <div id="overlay-sub"></div>
+    <div class="footer">Procedural terrain · chunk streaming · edits saved in your browser</div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

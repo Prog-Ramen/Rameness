@@ -1,0 +1,10 @@
+{
+ "minecraft": 4,
+ "rendering": 3,
+ "world": 4,
+ "ui": 7,
+ "notes": "The scene has voxel terrain, leaf-textured trees and a hotbar with hearts and a debug HUD. The ground is mostly dark or white and washed out, with a flat gray sky, stretched blocks and odd geometry, so it looks broken and only loosely like Minecraft.",
+ "overall": 4.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.056176000000000004
+}
