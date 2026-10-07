@@ -99,7 +99,9 @@ class RemoteRegistry:
                     self.revalidated.append(node_id or "<root>")
                 else:
                     ents = cached["entries"] if cached else []
-            except Exception:
+            except Exception as e:
+                if isinstance(e, TimeoutError) or "timed out" in str(e):
+                    self._straggler(node_id)                   # too slow: same as missing the level's deadline
                 ents = cached["entries"] if cached else []     # offline / not published: use what we have
         with self._lock:
             for e in ents:
@@ -127,7 +129,7 @@ class RemoteRegistry:
             except TimeoutError:
                 for f, n in futures.items():
                     if not f.done():
-                        self.stragglers.append(n or "<root>")
+                        self._straggler(n)
                         stale = self._stale(n)
                         if stale is not None:
                             with self._lock:
@@ -135,6 +137,11 @@ class RemoteRegistry:
             finally:
                 pool.shutdown(wait=False, cancel_futures=True)
         return {n: self._mem.get(n, []) for n in node_ids}
+
+    def _straggler(self, node_id: str) -> None:
+        with self._lock:
+            if (node_id or "<root>") not in self.stragglers:
+                self.stragglers.append(node_id or "<root>")
 
     def _stale(self, node_id: str) -> list[dict] | None:
         cache = self.cache_dir / "nodes" / f"{node_id or '_root'}.json"
