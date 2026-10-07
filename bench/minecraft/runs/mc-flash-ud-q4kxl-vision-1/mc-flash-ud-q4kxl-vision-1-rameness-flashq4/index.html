@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Voxelcraft &mdash; a browser voxel sandbox</title>
+<meta name="description" content="A Minecraft-style voxel sandbox that runs in the browser: infinite terrain, block breaking and placing, day/night cycle. No build step.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='8' fill='%235d9c40'/><rect y='8' width='16' height='8' fill='%2379553a'/></svg>">
+</head>
+<body>
+<div id="app">
+  <canvas id="game" aria-label="Voxel game viewport"></canvas>
+
+  <!-- ============================== HUD ============================== -->
+  <div id="hud" class="hidden">
+    <div id="crosshair" aria-hidden="true"></div>
+    <div id="water-overlay" aria-hidden="true"></div>
+    <div id="vignette" aria-hidden="true"></div>
+    <div id="damage" aria-hidden="true"></div>
+
+    <div id="hotbar" role="toolbar" aria-label="Hotbar"></div>
+    <div id="item-name"></div>
+    <div id="debug" class="mono"></div>
+    <div id="toast"></div>
+    <div id="touch-controls">
+      <button id="touch-jump" class="touch-btn" type="button">JUMP</button>
+      <button id="touch-break" class="touch-btn" type="button">MINE</button>
+      <button id="touch-place" class="touch-btn" type="button">PLACE</button>
+    </div>
+  </div>
+
+  <!-- ============================ Loading ============================ -->
+  <div id="loading" class="center-screen hidden">
+    <div class="panel">
+      <h1 class="pixel-title small">VOXELCRAFT</h1>
+      <p id="loading-text">Building the world&hellip;</p>
+      <div class="progress"><div id="loading-fill" class="progress-fill"></div></div>
+      <p id="loading-detail" class="muted mono"></p>
+    </div>
+  </div>
+
+  <!-- ============================ Main menu ========================== -->
+  <div id="menu-main" class="center-screen">
+    <div class="panel">
+      <h1 class="pixel-title">VOXELCRAFT</h1>
+      <p class="tagline">An infinite voxel world in your browser</p>
+
+      <label class="field">
+        <span>World seed</span>
+        <input id="seed-input" type="text" spellcheck="false" autocomplete="off" placeholder="random">
+      </label>
+
+      <div class="btn-col">
+        <button id="btn-play" class="btn primary" type="button">Play</button>
+        <button id="btn-continue" class="btn" type="button">Continue last world</button>
+        <button id="btn-settings" class="btn" type="button">Options&hellip;</button>
+        <button id="btn-controls" class="btn" type="button">Controls</button>
+      </div>
+
+      <p class="hint">Click the world to capture the mouse. <kbd>Esc</kbd> releases it.</p>
+    </div>
+  </div>
+
+  <!-- ============================ Pause menu ========================= -->
+  <div id="menu-pause" class="center-screen hidden">
+    <div class="panel">
+      <h2 class="pixel-title small">PAUSED</h2>
+      <div class="btn-col">
+        <button id="btn-resume" class="btn primary" type="button">Back to game</button>
+        <button id="btn-save" class="btn" type="button">Save world</button>
+        <button id="btn-settings-2" class="btn" type="button">Options&hellip;</button>
+        <button id="btn-controls-2" class="btn" type="button">Controls</button>
+        <button id="btn-newworld" class="btn danger" type="button">Delete world &amp; new seed</button>
+        <button id="btn-quit" class="btn" type="button">Main menu</button>
+      </div>
+      <p id="save-state" class="muted mono"></p>
+    </div>
+  </div>
+
+  <!-- ============================= Options =========================== -->
+  <div id="menu-settings" class="center-screen hidden">
+    <div class="panel wide">
+      <h2 class="pixel-title small">OPTIONS</h2>
+      <div class="settings-grid">
+        <label class="slider">
+          <span>Render distance <b id="val-distance">6</b> chunks</span>
+          <input id="opt-distance" type="range" min="2" max="12" step="1">
+        </label>
+        <label class="slider">
+          <span>Field of view <b id="val-fov">72</b>&deg;</span>
+          <input id="opt-fov" type="range" min="50" max="110" step="1">
+        </label>
+        <label class="slider">
+          <span>Mouse sensitivity <b id="val-sens">100</b>%</span>
+          <input id="opt-sens" type="range" min="20" max="300" step="5">
+        </label>
+        <label class="slider">
+          <span>Volume <b id="val-volume">70</b>%</span>
+          <input id="opt-volume" type="range" min="0" max="100" step="5">
+        </label>
+        <label class="slider">
+          <span>Day length <b id="val-daylen">10</b> min</span>
+          <input id="opt-daylen" type="range" min="0" max="40" step="1">
+        </label>
+        <label class="check">
+          <input id="opt-invert" type="checkbox">
+          <span>Invert mouse Y</span>
+        </label>
+        <label class="check">
+          <input id="opt-particles" type="checkbox" checked>
+          <span>Block particles</span>
+        </label>
+        <label class="check">
+          <input id="opt-fly" type="checkbox">
+          <span>Fly mode (noclip)</span>
+        </label>
+      </div>
+      <div class="btn-col">
+        <button id="btn-settings-done" class="btn primary" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= Controls ========================== -->
+  <div id="menu-controls" class="center-screen hidden">
+    <div class="panel wide">
+      <h2 class="pixel-title small">CONTROLS</h2>
+      <div class="keys">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span></div>
+        <div><kbd>Mouse</kbd><span>Look around</span></div>
+        <div><kbd>Left click</kbd><span>Mine a block (hold)</span></div>
+        <div><kbd>Right click</kbd><span>Place the selected block</span></div>
+        <div><kbd>Middle click</kbd><span>Pick the block you are looking at</span></div>
+        <div><kbd>Space</kbd><span>Jump / fly up</span></div>
+        <div><kbd>Shift</kbd><span>Sneak, or fly down</span></div>
+        <div><kbd>Ctrl</kbd><span>Sprint (or double-tap W)</span></div>
+        <div><kbd>1</kbd>&ndash;<kbd>9</kbd><span>Select hotbar slot</span></div>
+        <div><kbd>Wheel</kbd><span>Cycle hotbar</span></div>
+        <div><kbd>F</kbd><span>Toggle flying</span></div>
+        <div><kbd>T</kbd><span>Advance time to the next phase</span></div>
+        <div><kbd>R</kbd><span>Respawn on the surface</span></div>
+        <div><kbd>F3</kbd><span>Debug overlay</span></div>
+        <div><kbd>Esc</kbd><span>Pause menu</span></div>
+      </div>
+      <div class="btn-col">
+        <button id="btn-controls-done" class="btn primary" type="button">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ Inventory ========================== -->
+  <div id="menu-inventory" class="center-screen hidden">
+    <div class="panel wide">
+      <h2 class="pixel-title small">BLOCK PICKER</h2>
+      <p class="hint" style="margin-top:0">Click a block to put it in hotbar slot <b id="inv-slot">1</b>. Press <kbd>E</kbd> or <kbd>Esc</kbd> to close.</p>
+      <div id="inventory-grid"></div>
+      <div class="btn-col">
+        <button id="btn-inventory-done" class="btn primary" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ Fatal error ======================== -->
+  <div id="menu-error" class="center-screen hidden">
+    <div class="panel">
+      <h2 class="pixel-title small">OOPS</h2>
+      <p id="error-text" class="mono"></p>
+      <p class="hint">This game needs WebGL 2 (or 1) support in your browser.</p>
+      <div class="btn-col"><button id="btn-reload" class="btn primary" type="button">Reload</button></div>
+    </div>
+  </div>
+</div>
+
+<noscript><p style="color:#fff;padding:2rem;font-family:monospace">Voxelcraft needs JavaScript enabled.</p></noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

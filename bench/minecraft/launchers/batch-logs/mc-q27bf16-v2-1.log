@@ -1,0 +1,5 @@
+[bench] cleared 9 leftover /tmp entries of bench
+[mc-q27bf16-v2-1-rameness-q27bf16gg] start (context window 262144 x 1 slots, reasoning budget 5000)
+[mc-q27bf16-v2-1-rameness-q27bf16gg] done in 150.0 min: score 85.7 (12/14), 247 requests, max context 241615/262144, compactions 1 (logged 1), TIMED OUT
+results: /root/bench/results/minecraft/mc-q27bf16-v2-1/results.json
+mc-q27bf16-v2-1-rameness-q27bf16gg: overall 4.0  (The hotbar and crosshair are fine, but the terrain is a flat pale-gray expanse with black holes and missing faces, a single dark tree, a small patch of water, and blocky clouds, so it only loosely resembles Minecraft.)

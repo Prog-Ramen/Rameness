@@ -1,0 +1,4 @@
+[mc-q27-ud-q4km-vision-1-rameness-q27q4] start (context window 262144 x 1 slots, reasoning budget 5000)
+[bench] stopped 5 process(es) the run left running
+[mc-q27-ud-q4km-vision-1-rameness-q27q4] done in 107.2 min: score 100.0 (14/14), 263 requests, max context 238271/262144, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-q27-ud-q4km-vision-1/results.json

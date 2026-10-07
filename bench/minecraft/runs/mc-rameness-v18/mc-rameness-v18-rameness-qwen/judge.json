@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 6,
+ "notes": "Only empty sky, crosshair, and hotbar are visible with no terrain, blocks, or world geometry rendered.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07014240000000001
+}

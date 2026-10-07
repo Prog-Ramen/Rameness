@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 6,
+ "world": 4,
+ "ui": 6,
+ "notes": "Textured blocky grass, dirt and trees under a blue sky, with a hotbar and crosshair, but the dirt walls have odd grass strips on their sides, the terrain is flat and maze-like, and there's no water and few block types.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0567552
+}

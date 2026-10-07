@@ -1,0 +1,3 @@
+[mc-qwen-rb5k-rameness-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)
+[mc-qwen-rb5k-rameness-qwen] done in 73.2 min: score 64.3 (9/14), 122 requests, max context 66186/184000, compactions 1 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-qwen-rb5k/results.json

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VoxelCraft (Minecraft clone)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:8px;left:8px;color:#fff;font:14px/1.35 monospace;background:rgba(0,0,0,.45);padding:6px 10px;border-radius:4px;pointer-events:none;z-index:2;line-height:1.5}
+#cross{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);pointer-events:none;z-index:3}
+#cross::before,#cross::after{content:'';position:absolute;background:rgba(255,255,255,.9)}
+#cross::before{left:8px;top:1px;width:2px;height:16px}
+#cross::after{left:1px;top:8px;width:16px;height:2px}
+#blockbar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:4px;pointer-events:none;z-index:3}
+.slot{width:44px;height:44px;border:2px solid rgba(255,255,255,.28);border-radius:4px;display:flex;align-items:center;justify-content:center;font:10px monospace;color:#fff;background:rgba(0,0,0,.42)}
+.slot.active{border-color:#fff;background:rgba(255,255,255,.18)}
+#msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font:17px monospace;background:rgba(0,0,0,.65);padding:12px 22px;border-radius:6px;pointer-events:none;display:none;z-index:4;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cross"></div>
+<div id="hud"><div id="info"></div></div>
+<div id="blockbar"></div>
+<div id="msg"></div>
+<script>
+/* ============ 1. MATH ============ */
+const PI=Math.PI;
+function lerp(a,b,t){return a+(b-a)*t;}
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+
+class Mat4{
+  constructor(){this.m=new Float32Array(16);this.identity();}
+  identity(){this.m.fill(0);this.m[0]=this.m[5]=this.m[10]=this.m[15]=1;return this;}
+  perspective(fov,asp,near,far){
+    const f=1/Math.tan(fov/2),nf=1/(near-far);
+    this.m.fill(0);
+    this.m[0]=f/asp;this.m[5]=f;this.m[10]=(far+near)*nf;this.m[11]=-1;this.m[14]=2*far*near*nf;
+    return this;
+  }
+  lookAt(eye,target,up){
+    let zx=eye[0]-target[0],zy=eye[1]-target[1],zz=eye[2]-target[2];
+    let len=Math.sqrt(zx*zx+zy*zy+zz*zz)||1;
+    const fz=[zx/len,zy/len,zz/len];
+    let xx=up[1]*fz[2]-up[2]*fz[1],xy=up[2]*fz[0]-up[0]*fz[2],xz=up[0]*fz[1]-up[1]*fz[0];
+    len=Math.sqrt(xx*xx+xy*xy+xz*xz)||1;
+    const fx=[xx/len,xy/len,xz/len];
+    const fy=[fz[1]*fx[2]-fz[2]*fx[1],fz[2]*fx[0]-fz[0]*fx[2],fz[0]*fx[1]-fz[1]*fx[0]];
+    this.m[0]=fx[0];this.m[1]=fy[0];this.m[2]=fz[0];this.m[3]=0;
+    this.m[4]=fx[1];this.m[5]=fy[1];this.m[6]=fz[1];this.m[7]=0;
+    this.m[8]=fx[2];this.m[9]=fy[2];this.m[10]=fz[2];this.m[11]=0;
+    this.m[12]=-fx[0]*eye[0]-fx[1]*eye[1]-fx[2]*eye[2];
+    this.m[13]=-fy[0]*eye[0]-fy[1]*eye[1]-fy[2]*eye[2];
+    this.m[14]=-fz[0]*eye[0]-fz[1]*eye[1]-fz[2]*eye[2];
+    this.m[15]=1;
+    return this;
+  }
+  multiply(b){
+    const a=this.m,c=b.m,r=new Float32Array(16);
+    for(let i=0;i<4;i++)for(let j=0;j<4;j++){
+      r[j*4+i]=a[i]*c[j*4]+a[4+i]*c[j*4+1]+a[8+i]*c[j*4+2]+a[12+i]*c[j*4+3];
+    }
+    this.m=r;return this;
+  }
+}
+
+/* ============ 2. NOISE (simplex-ish 3D) ============ */
+function makeNoise(seed){
+  const perm=new Uint8Array(512);
+  {const p=new Uint8Array(256);for(let i=0;i<256;i++)p[i]=i;
+    let s=seed|0;for(let i=255;i>0;i--){s=(s*1103515+12345)&0x7fffffff;const j=s%(i+1);const t=p[i];p[i]=p[j];p[j]=t;}
+    for(let i=0;i<512;i++)perm[i]=p[i&255];}
+  function grad3(h,x,y,z){const q=h&15;return((q&8)?-x:x)+((q&4)?-y:y)+((q&2)?-z:z);}
+  return function(x,y,z){
+    const F3=1/3,G3=1/6;
+    const sx=x*F3,sy=y*F3,sz=z*F3;
+    const ix=Math.floor(x-sx+sz),iy=Math.floor(y-sy+sz),iz=Math.floor(z-sz+sx);
+    const wx=x-ix,wy=y-iy,wz=z-iz;
+    const i1=ix+iy+iz>=0?1:0,j1=iy+(i1<<1)>=0?1:0;
+    const x1=wx-i1,y1=wy-j1,z1=wz;
+    const i2=i1+j1,j2=j1+(i1<<1);
+    const x2=wx-i2,y2=wy-j2,z2=wz-i1-j2;
+    const i3=i1+j1+((j1|i1)<<1);
+    const x3=wx-i3,y3=wy-j1-((i1|j1)<<1),z3=wz-(i1|j1)-j1;
+    const t=.5-(ix*G3+iy*G3+iz*G3);
+    const a=.5-(x1*x1+y1*y1+z1*z1);
+    const b=.5-(x2*x2+y2*y2+z2*z2);
+    const c=.5-(x3*x3+y3*y3+z3*z3);
+    const g0=grad3(perm[ix+iy+iz],x1,y1,z1);
+    const g1=grad3(perm[ix+i2+iy+j2+iz+i1],x2,y2,z2);
+    const g2=grad3(perm[ix+i3+iy+j1+j2+iz],x3,y3,z3);
+    return 70*(a<0?0:a*a*a*g0+b<0?0:b*b*b*g1+c<0?0:c*c*c*g2)/(Math.abs(g0)+Math.abs(g1)+Math.abs(g2)+1);
+  }
+}
+
+/* ============ 3. BLOCK TYPES + TEXTURE ATLAS ============ */
+const B={AIR:0,GRASS:1,DIRT:2,STONE:3,LEAVES:4,SAND:5,WOOD:6,SNOW:7};
+const BNAMES={1:'Grass',2:'Dirt',3:'Stone',4:'Leaves',5:'Sand',6:'Wood',7:'Snow'};
+
+// Atlas: 8 cols x 4 rows of 16x16. Row 0 holds our 7 block-type cells.
+// col0 grass_top, col1 grass_side, col2 dirt, col3 stone, col4 leaves, col5 wood_side, col6 wood_top, col7 snow
+function buildAtlas(){
+  const W=16,H=16,COLS=8,ROWS=4;
+  const c=document.createElement('canvas');c.width=W*COLS;c.height=H*ROWS;
+  const x=c.getContext('2d');
+  const cells=[
+    [98,165,61],[98,140,47],[138,105,54],[130,130,130],
+    [42,126,42],[110,75,40],[220,200,130],[240,240,240]
+  ];
+  for(let col=0;col<COLS;col++){for(let row=0;row<ROWS;row++){
+    const idx=row*COLS+col;if(idx>=cells.length)break;
+    const [r,g,b]=cells[idx];
+    x.fillStyle=`rgb(${r},${g},${b})`;x.fillRect(col*W,row*H,W,H);
+    for(let i=0;i<90;i++){const nx=((Math.random()*W)|0),ny=((Math.random()*H)|0);
+      const v=(Math.random()*50-25)|0;
+      x.fillStyle=`rgb(${clamp(r+v,0,255)|0},${clamp(g+v,0,255)|0},${clamp(b+v,0,255)|0})`;
+      x.fillRect(nx,ny,3,3);}
+  }}
+  return c;
+}
+
+// Atlas [u0,v0,u1,v1] in [0,1] space for a block type & face.
+function atlasUV(type,face){
+  let col;
+  if(type===1){ // grass: top vs side/bottom differ
+    col=(face==='top')?0:1;
+  }else{
+    col=type-1; // dirt=2->2 ... snow=7->7
+  }
+  const row=Math.floor(col/8);col%=8;
+  return [col/8,row/4,(col+1)/8,(row+1)/4];
+}
+
+/* ============ 4. WEBGL ============ */
+const canvas=document.getElementById('c');
+const gl=canvas.getContext('webgl',{antialias:true,alpha:false});
+if(!gl){document.body.innerHTML='<h1 style="color:#fff;text-align:center;margin-top:35vh;font-family:monospace">WebGL required — use a modern browser.</h1>';throw 0;}
+
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=(window.innerWidth*dpr)|0;canvas.height=(window.innerHeight*dpr)|0;
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+window.addEventListener('resize',resize);resize();
+
+function compileShader(src,type){
+  const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(gl.getShaderInfoLog(s)){console.error(gl.getShaderInfoLog(s));}
+  return s;
+}
+function makeProgram(vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,compileShader(vs,gl.VERTEX_SHADER));
+  gl.attachShader(p,compileShader(fs,gl.FRAGMENT_SHADER));
+  gl.linkProgram(p);
+  if(gl.getProgramInfoLog(p)){console.error(gl.getProgramInfoLog(p));}
+  return p;
+}
+
+const MAINVS=`
+attribute vec3 aPos;
+attribute vec3 aNorm;
+attribute vec2 aUv;
+uniform mat4 uProj;
+uniform mat4 uView;
+varying vec3 vNorm;
+varying vec3 vWorld;
+varying vec2 vUv;
+void main(){
+  vWorld = aPos;
+  vNorm = mat3(uView) * aNorm;
+  vUv = aUv;
+  gl_Position = uProj * (uView * vec4(aPos, 1.0));
+}`;
+
+const MAINFS=`
+precision mediump float;
+varying vec3 vNorm;
+varying vec3 vWorld;
+varying vec2 vUv;
+uniform sampler2D uAtlas;
+uniform vec3 uSunDir;
+uniform float uFogCol[3];
+uniform float uFogNear;
+uniform float uFogFar;
+void main(){
+  vec4 tex = texture2D(uAtlas, vUv);
+  vec3 n = normalize(vNorm);
+  float diff = max(dot(n, uSunDir), 0.0)*0.45 + 0.55;
+  vec3 col = tex.rgb * diff;
+  float d = length(vWorld);
+  float fog = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
+  col = mix(col, vec3(uFogCol[0], uFogCol[1], uFogCol[2]), fog);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const HLVS=`
+attribute vec3 aPos;
+uniform mat4 uProj;
+uniform mat4 uView;
+uniform mat4 uModel;
+void main(){
+  gl_Position = uProj * (uView * (uModel * vec4(aPos, 1.0)));
+}`;
+
+const HLFS=`
+precision mediump float;
+void main(){
+  gl_FragColor = vec4(0.0, 0.0, 0.0, 0.35);
+}`;
+
+/* ============ 5. CHUNK + MESHING ============ */
+const CX=16,CY=80,CZ=16;
+
+function chunkKey(cx,cz){return (cx+400).toString()+','+(cz+400).toString();}
+
+class Chunk{
+  constructor(cx,cz){this.cx=cx;this.cz=cz;this.data=new Uint8Array(CX*CY*CZ);this.dirty=true;this.mesh=null;this.key=chunkKey(cx,cz);}
+  idx(x,y,z){return x+y*CX+z*CX*CY;}
+  setBlock(x,y,z,v){if(x>=0&&x<CX&&y>=0&&y<CY&&z>=0&&z<CZ){this.data[this.idx(x,y,z)]=v;this.dirty=true;}}
+  getBlock(x,y,z){if(x<0||x>=CX||y<0||y>=CY||z<0||z>=CZ)return B.AIR;return this.data[this.idx(x,y,z)];}
+}
+
+// Face definitions: unit cube at origin. Each = normal + 4 quad verts (tl,tr,br,bl) + uv quad.
+const FACES=[
+  {n:[0,1,0],v:[[-.5,.5,-.5],[.5,.5,-.5],[.5,.5,.5],[-.5,.5,.5]]},        // top (+y)
+  {n:[0,-1,0],v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,-.5,-.5],[-.5,-.5,-.5]},        // bottom (-y)
+  {n:[0,0,-1],v:[[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5],[.5,-.5,-.5]},      // south (-z)
+  {n:[0,0,1],v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]}             // north (+z)
+];
+
+function buildMesh(chunk){
+  const pos=[],norm=[],uv=[];const idx=[];let vi=0;
+  function addV(x,y,z,nx,ny,nz,u0,v0,u1,v1){
+    pos.push(x,y,z);norm.push(nx,ny,nz);
+    // quad as two triangles (fan): tl,tr,br,bl + back to tl
+    const u=[u0,v0,u1,v0,u1,v1,u0,v1];
+    for(let i=0;i<8;i+=2)uv.push(u[i],u[i+1]);
+    idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
+    vi+=4;
+  }
+  for(let x=0;x<CX;x++){for(let y=0;y<CY;y++){for(let z=0;z<CZ;z++){
+    const b=chunk.data[chunk.idx(x,y,z)];if(b===B.AIR)continue;
+    for(const f of FACES){
+      const nx=x+f.n[0], ny=y+f.n[1], nz=z+f.n[2];
+      const bx=nx|0, by=ny|0, bz=nz|0;
+      // Outside chunk bounds -> exposed to air; neighbor chunk renders its own side.
+      if(bx<0||bx>=CX||by<0||by>=CY||bz<0||bz>=CZ){
+        const au=atlasUV(b,f.n[1]>0?'top':'side');
+        for(let i=0;i<4;i++)addV(f.v[i][0]+x,f.v[i][1]+y,f.v[i][2]+z,f.n[0],f.n[1],f.n[2],au[0],au[1],au[2],au[3]);
+        continue;
+      }
+      if(chunk.data[chunk.idx(bx,by,bz)]!==B.AIR)continue;
+      const au=atlasUV(b,f.n[1]>0?'top':'side');
+      for(let i=0;i<4;i++)addV(f.v[i][0]+x,f.v[i][1]+y,f.v[i][2]+z,f.n[0],f.n[1],f.n[2],au[0],au[1],au[2],au[3]);
+    }
+  }}}
+  if(vi===0)return null;
+  const mk=(d,t)=>{const b=gl.createBuffer();gl.bindBuffer(t,b);gl.bufferData(t,d,gl.STATIC_DRAW);return b;};
+  return {
+    vcount:vi,posBuf:mk(new Float32Array(pos),gl.ARRAY_BUFFER),
+    normBuf:mk(new Float32Array(norm),gl.ARRAY_BUFFER),
+    uvBuf:mk(new Float32Array(uv),gl.ARRAY_BUFFER),
+    idxBuf:mk(new Uint16Array(idx),gl.ELEMENT_ARRAY_BUFFER),idxCount:idx.length
+  };
+}
+
+/* ============ 6. WORLD ============ */
+const chunks=new Map();
+const noiseH=makeNoise(1),noiseT=makeNoise(2),noiseM=makeNoise(3);
+
+function chunkCoord(v,cell){return v>=0?Math.floor(v/cell):Math.ceil(v/cell)-1;}
+
+function getChunk(wx,wz){
+  const cx=chunkCoord(wx,CX),cz=chunkCoord(wz,CZ);
+  return chunks.get(chunkKey(cx,cz))||null;
+}
+
+function ensureChunk(cx,cz){
+  const key=chunkKey(cx,cz);
+  let ch=chunks.get(key);
+  if(ch)return ch;
+  ch=new Chunk(cx,cz);
+  for(let x=0;x<CX;x++){for(let z=0;z<CZ;z++){
+    const wx=cx*CX+x,wz=cz*CZ+z;
+    const h1=noiseH(wx*.005,wz*.005,0)*28;
+    const h2=noiseH(wx*.03,wz*.03,.5)*6;
+    const temp=noiseT(wx*.01,wz*.01,1)*.5+.5;
+    const moisture=noiseM(wx*.015,wz*.015,2)*.5+.5;
+    let height=Math.floor(h1+h2+8);
+    height=Math.max(2,Math.min(CY-4,height));
+    let topBlock=B.GRASS,subBlock=B.DIRT;
+    if(temp>.6){topBlock=B.SAND;subBlock=B.SAND;}                // desert
+    else if(temp<.35&&moisture>.6){topBlock=B.SNOW;subBlock=B.DIRT;} // tundra
+    else if(temp<.35&&moisture<.35){topBlock=B.DIRT;}
+    for(let y=0;y<height;y++){
+      ch.setBlock(x,y,z,subBlock);
+      if(y===height-1)ch.setBlock(x,y,z,topBlock);
+    }
+  }}
+  chunks.set(key,ch);
+  return ch;
+}
+
+function worldGetBlock(wx,wy,wz){
+  if(wy<0||wy>=CY)return B.AIR;
+  const ch=getChunk(wx,wz);if(!ch)return B.AIR;
+  const x=((wx-ch.cx*CX)%CX+CX)%CX;
+  const z=((wz-ch.cz*CZ)%CZ+CZ)%CZ;
+  return ch.getBlock(x,wy,z);
+}
+
+function worldSetBlock(wx,wy,wz,v){
+  if(wy<0||wy>=CY)return false;
+  const ch=getChunk(wx,wz);if(!ch)return false;
+  const x=((wx-ch.cx*CX)%CX+CX)%CX;
+  const z=((wz-ch.cz*CZ)%CZ+CZ)%CZ;
+  ch.setBlock(x,wy,z,v);
+  markNeighborsDirty(ch.cx,ch.cz);
+  return true;
+}
+
+// Rebuild a chunk's GPU mesh from its block data.
+function rebuildChunkMesh(ch){ch.mesh=buildMesh(ch);ch.dirty=false;}
+
+// Mark this chunk + its 4 cardinal neighbors dirty (chunk-border face culling).
+function markNeighborsDirty(cx,cz){
+  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+  for(const [dx,dz] of dirs){
+    const key=chunkKey(cx+dx,cz+dz);
+    const ch=chunks.get(key);
+    if(ch)ch.dirty=true;
+  }
+}
+
+/* ============ 7. PLAYER + PHYSICS ============ */
+const player={pos:[0,40,0],vel:[0,0,0],onGround:false,yaw:0,pitch:0,width:.3,height:1.8,eyeHeight:1.62};
+
+function collides(ax,ay,az,bw,bh){
+  const x0=Math.floor(ax-bw/2),x1=Math.floor(ax+bw/2-.001);
+  const y0=Math.floor(ay),y1=Math.floor(ay+bh-.001);
+  const z0=Math.floor(az-bw/2),z1=Math.floor(az+bw/2-.001);
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++){
+    if(worldGetBlock(x,y,z)!==B.AIR)return true;
+  }
+  return false;
+}
+
+function updatePlayer(dt){
+  dt=Math.min(dt,.05);
+  const sin=Math.sin(player.yaw),cos=Math.cos(player.yaw);
+  const fwd=[-sin,0,-cos], right=[cos,0,-sin];
+  let mx=0,mz=0;
+  if(keys['KeyW']||keys['ArrowUp']){mx+=fwd[0];mz+=fwd[2];}
+  if(keys['KeyS']||keys['ArrowDown']){mx-=fwd[0];mz-=fwd[2];}
+  if(keys['KeyA']||keys['ArrowLeft']){mx-=right[0];mz-=right[2];}
+  if(keys['KeyD']||keys['ArrowRight']){mx+=right[0];mz+=right[2];}
+  const len=Math.sqrt(mx*mx+mz*mz)||1;
+  mx/=len;mz/=len;
+  const speed=keys['ShiftLeft']||keys['ShiftRight']?.15:.08;
+  player.vel[0]=lerp(player.vel[0],mx*speed,.2);
+  player.vel[2]=lerp(player.vel[2],mz*speed,.2);
+  player.vel[1]-=.02; // gravity
+  if(keys['Space']&&player.onGround){player.vel[1]=.17;player.onGround=false;}
+
+  // move X
+  if(!collides(player.pos[0]+player.vel[0],player.pos[1],player.pos[2],player.width,player.height)){
+    player.pos[0]+=player.vel[0];
+  }else{player.vel[0]=0;}
+  // move Z
+  if(!collides(player.pos[0],player.pos[1],player.pos[2]+player.vel[2],player.width,player.height)){
+    player.pos[2]+=player.vel[2];
+  }else{player.vel[2]=0;}
+  // move Y
+  const ny=player.pos[1]+player.vel[1];
+  if(player.vel[1]<0){
+    if(collides(player.pos[0],ny,player.pos[2],player.width,player.height)){
+      player.pos[1]=Math.floor(ny)+1-.0001;
+      player.vel[1]=0;player.onGround=true;
+    }else{player.pos[1]=ny;player.onGround=false;}
+  }else{
+    if(collides(player.pos[0],ny+player.height,player.pos[2],player.width,player.height)){
+      player.vel[1]=0;
+    }else{player.pos[1]=ny;player.onGround=false;}
+  }
+  if(player.pos[1]<-10){player.pos[1]=45;player.vel[1]=0;}
+}
+
+/* ============ 8. RAYCAST + BLOCK INTERACT ============ */
+function floor(v){return v<0?Math.ceil(v)-1:Math.floor(v);}
+
+function raycast(maxDist){
+  const dir=[Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),Math.cos(player.yaw)*Math.cos(player.pitch)];
+  let l=Math.sqrt(dir[0]*dir[0]+dir[1]*dir[1]+dir[2]*dir[2])||1;
+  dir[0]/=l;dir[1]/=l;dir[2]/=l;
+  const ox=player.pos[0],oy=player.pos[1]+player.eyeHeight,oz=player.pos[2];
+  let prevX=floor(ox),prevY=floor(oy),prevZ=floor(oz);
+  const step=.03;let x=ox,y=oy,z=oz;
+  for(let i=0;i<Math.ceil(maxDist/step);i++){
+    x+=dir[0]*step;y+=dir[1]*step;z+=dir[2]*step;
+    const bx=floor(x),by=floor(y),bz=floor(z);
+    const b=worldGetBlock(bx,by,bz);
+    if(b!==B.AIR){return {hit:true,block:{x:bx,y:by,z:bz,type:b},place:{x:prevX,y:prevY,z:prevZ}};}
+    prevX=bx;prevY=by;prevZ=bz;
+  }
+  return {hit:false};
+}
+
+function breakBlock(){
+  const r=raycast(6);
+  if(r.hit){worldSetBlock(r.hit.block.x,r.hit.block.y,r.hit.block.z,B.AIR);}
+}
+
+function placeBlock(){
+  const r=raycast(6);
+  if(r.hit&&r.hit.place){
+    const p=r.hit.place;
+    const px0=Math.floor(player.pos[0]-player.width/2),px1=Math.floor(player.pos[0]+player.width/2-.001);
+    const py0=Math.floor(player.pos[1]),py1=Math.floor(player.pos[1]+player.height-.001);
+    const pz0=Math.floor(player.pos[2]-player.width/2),pz1=Math.floor(player.pos[2]+player.width/2-.001);
+    if(p.x>=px0&&p.x<=px1&&p.y>=py0&&p.y<=py1&&p.z>=pz0&&p.z<=pz1)return;
+    worldSetBlock(p.x,p.y,p.z,selectedBlock);
+  }
+}
+
+/* ============ 9. INPUT ============ */
+const keys={};
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code>='Digit1'&&e.code<='Digit7'){
+    selectedBlock=+e.code.replace('Digit','');
+    updateHotbar();
+  }
+  if(e.code==='KeyB'){breakBlock();}
+  if(e.code==='KeyP'){placeBlock();}
+});
+window.addEventListener('keyup',e=>{keys[e.code]=false;});
+
+canvas.addEventListener('click',()=>{canvas.requestPointerLock();});
+document.addEventListener('pointerlockchange',()=>{
+  const msg=document.getElementById('msg');
+  if(document.pointerLockElement===canvas){msg.style.display='none';}
+  else{msg.style.display='block';msg.textContent='Click to resume control';setTimeout(()=>msg.style.display='none',1200);}
+});
+document.addEventListener('mousemove',e=>{
+  if(document.pointerLockElement!==canvas)return;
+  player.yaw+=e.movementX*.002;
+  player.pitch-=e.movementY*.002;
+  player.pitch=clamp(player.pitch,-PI/2+.01,PI/2-.01);
+});
+
+let selectedBlock=1;
+window.addEventListener('wheel',e=>{
+  if(e.deltaY>0)selectedBlock=(selectedBlock%7)+1;
+  else selectedBlock=(selectedBlock-2+7)%7+1;
+  updateHotbar();
+},{passive:true});
+
+/* ============ 10. UI + HOTBAR ============ */
+const hotbar=document.getElementById('blockbar');
+function buildHotbar(){
+  hotbar.innerHTML='';
+  for(let i=1;i<=7;i++){
+    const s=document.createElement('div');s.className='slot'+(i===selectedBlock?' active':'');
+    s.textContent=i+' '+BNAMES[i];hotbar.appendChild(s);
+  }
+}
+function updateHotbar(){
+  const slots=hotbar.querySelectorAll('.slot');
+  slots.forEach((s,i)=>{s.className='slot'+(i+1===selectedBlock?' active':'');});
+}
+buildHotbar();
+
+/* ============ 11. RENDER ============ */
+const mainProg=makeProgram(MAINVS,MAINFS);
+let hlProg=makeProgram(HLVS,HLFS);
+const atlasCanvas=buildAtlas();
+let atlasTex=gl.createTexture();
+
+function initAtlasTexture(){
+  gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCanvas);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+}
+
+const proj=new Mat4(),view=new Mat4();
+
+// Highlight box geometry: 6 faces * 4 verts = 24 verts with per-face normals, slightly inset.
+const HL_SIZE=.49;
+const hlData=(function(){
+  const pos=[],norm=[];
+  const faces=[
+    {n:[0,1,0],v:[[-.5,.5,-.5],[.5,.5,-.5],[.5,.5,.5],[-.5,.5,.5]]},
+    {n:[0,-1,0],v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,-.5,-.5],[-.5,-.5,-.5]},
+    {n:[0,0,-1],v:[[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5],[.5,-.5,-.5]},
+    {n:[0,0,1],v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]}
+  ];
+</script>
+</body>
+</html>

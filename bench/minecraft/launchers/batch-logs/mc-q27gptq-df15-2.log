@@ -1,0 +1,6 @@
+[bench] rameness copy is out of date; reinstalling
+[bench] cleared 9 leftover /tmp entries of bench
+[mc-q27gptq-df15-2-rameness-q27gptq] start (context window 262144 x 1 slots)
+[mc-q27gptq-df15-2-rameness-q27gptq] done in 14.5 min: score 0.0 (0/14), 59 requests, max context 56443/262144, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-q27gptq-df15-2/results.json
+mc-q27gptq-df15-2-rameness-q27gptq: overall 0  (no build to render)

@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 3,
+ "notes": "The world geometry is entirely unrendered black faces/holes with only sky and a hotbar visible, making it unplayable and unrecognizable as Minecraft.",
+ "overall": 1.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06988559999999999
+}

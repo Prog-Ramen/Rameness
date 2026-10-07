@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft &mdash; a browser Minecraft clone</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- crosshair -->
+  <div id="crosshair" aria-hidden="true"><span></span><i id="dig"></i></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="stats" class="panel"></div>
+    <div id="toast"></div>
+    <div id="hearts"></div>
+    <div id="hotbar"></div>
+    <div id="hint">click to grab the mouse &middot; <kbd>Esc</kbd> for menu</div>
+  </div>
+
+  <!-- start / pause overlay -->
+  <div id="overlay">
+    <div class="card">
+      <h1>Voxelcraft</h1>
+      <p class="sub">An infinite voxel world, generated in your browser.</p>
+
+      <label class="field">
+        <span>World seed</span>
+        <input id="seed" type="text" spellcheck="false" autocomplete="off">
+      </label>
+
+      <div class="row">
+        <label class="field small">
+          <span>Render distance</span>
+          <select id="renderDistance">
+            <option value="4">4 chunks</option>
+            <option value="6">6 chunks</option>
+            <option value="8" selected>8 chunks</option>
+            <option value="10">10 chunks</option>
+            <option value="12">12 chunks</option>
+          </select>
+        </label>
+        <label class="field small">
+          <span>Mode</span>
+          <select id="mode">
+            <option value="survival" selected>Survival (gather &amp; build)</option>
+            <option value="creative">Creative (fly, infinite blocks)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="buttons">
+        <button id="play" class="primary">Play</button>
+        <button id="newworld">New world</button>
+      </div>
+
+      <div class="keys">
+        <h2>Controls</h2>
+        <table>
+          <tr><td><kbd>W A S D</kbd></td><td>move</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>jump &middot; double-tap to fly (creative)</td></tr>
+          <tr><td><kbd>Shift</kbd></td><td>sneak (slower, will not walk off edges)</td></tr>
+          <tr><td><kbd>Ctrl</kbd> / <kbd>E</kbd></td><td>sprint</td></tr>
+          <tr><td><kbd>Mouse</kbd></td><td>look around</td></tr>
+          <tr><td><kbd>Left click</kbd></td><td>break block</td></tr>
+          <tr><td><kbd>Right click</kbd></td><td>place block</td></tr>
+          <tr><td><kbd>Middle click</kbd></td><td>pick block</td></tr>
+          <tr><td><kbd>1</kbd>&ndash;<kbd>9</kbd> / wheel</td><td>select hotbar slot</td></tr>
+          <tr><td><kbd>F</kbd></td><td>toggle day / night</td></tr>
+          <tr><td><kbd>F3</kbd></td><td>toggle debug info</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>pause menu</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="card"><h1>JavaScript required</h1>
+      <p class="sub">Voxelcraft is a WebGL game; please enable JavaScript.</p></div>
+  </noscript>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/core/utils.js"></script>
+<script src="src/core/noise.js"></script>
+<script src="src/core/blocks.js"></script>
+<script src="src/world/world.js"></script>
+<script src="src/world/worldgen.js"></script>
+<script src="src/world/mesher.js"></script>
+<script src="src/world/chunktask.js"></script>
+<script src="src/world/raycast.js"></script>
+<script src="src/render/sky.js"></script>
+<script src="src/render/chunks.js"></script>
+<script src="src/game/input.js"></script>
+<script src="src/game/player.js"></script>
+<script src="src/ui/hud.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

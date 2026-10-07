@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blockcraft — a Minecraft clone</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Blockcraft 3D view"></canvas>
+
+<div id="hud">
+  <div id="underwater"></div>
+  <div id="crosshair"><span></span><span></span></div>
+  <div id="block-label"></div>
+  <div id="hotbar"></div>
+  <div id="debug"></div>
+  <div id="fly-badge">FLYING</div>
+</div>
+
+<div id="title" class="overlay">
+  <div class="panel">
+    <h1>Block<span>craft</span></h1>
+    <p class="tag">a tiny Minecraft, right in your browser</p>
+    <label for="seed">world seed</label>
+    <input id="seed" type="text" placeholder="random" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <button id="btn-play" class="primary">Play</button>
+      <button id="btn-continue" class="ghost">Continue</button>
+      <button id="btn-new" class="ghost">New world</button>
+    </div>
+    <p class="hint" id="save-hint"></p>
+    <div class="controls">
+      <div><b>WASD</b> move &nbsp; <b>mouse</b> look &nbsp; <b>LMB</b> break &nbsp; <b>RMB</b> place &nbsp; <b>MMB</b> pick</div>
+      <div><b>Space</b> jump (double-tap: fly) &nbsp; <b>Shift</b> descend &nbsp; <b>Ctrl</b> sprint &nbsp; <b>1–9</b>/<b>wheel</b> select</div>
+      <div><b>F</b> toggle fly &nbsp; <b>M</b> mute &nbsp; <b>F3</b> stats &nbsp; <b>Esc</b> pause</div>
+    </div>
+  </div>
+</div>
+
+<div id="paused" class="overlay hidden">
+  <div class="panel">
+    <h2>Paused</h2>
+    <div class="row col">
+      <button id="btn-resume" class="primary">Resume</button>
+      <button id="btn-quit" class="ghost">Save &amp; quit to title</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

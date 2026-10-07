@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 5,
+ "world": 3,
+ "ui": 6,
+ "notes": "Blocky terrain with hotbar and crosshair but textures look stretched/blurry, terrain has odd stepped terracing artifacts, and there are no trees, water, or other world features visible.",
+ "overall": 4.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07066040000000001
+}

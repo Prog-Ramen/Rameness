@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 1,
+ "ui": 5,
+ "notes": "The world is essentially unrendered (flat untextured gray plane with jagged z-fighting edges and stray blue slivers), showing only a HUD/hotbar that looks correct while the actual voxel scene is broken.",
+ "overall": 2.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0698304
+}

@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 5,
+ "world": 5,
+ "ui": 8,
+ "notes": "Textured voxel blocks, a hotbar and a debug HUD are present, but the camera sits inside or among dense, oversized trees. The leaf canopy is a noisy, garbled mass, the view is mostly obstructed, and there is no water or varied terrain in sight.",
+ "overall": 6.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0567744
+}

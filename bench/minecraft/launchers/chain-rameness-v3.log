@@ -1,0 +1,6 @@
+[bench] rameness copy is out of date; reinstalling
+[mc-rameness-v3-rameness-occamy] start (context window 200192 x 2 slots)
+[mc-rameness-v3-rameness-qwen] start (context window 184000 x 2 slots, reasoning budget 5000)
+[mc-rameness-v3-rameness-occamy] done in 15.7 min: score 64.3 (9/14), 30 requests, max context 29459/200192, compactions 0 (logged 0), exit 0
+[mc-rameness-v3-rameness-qwen] done in 150.0 min: score 85.7 (12/14), 122 requests, max context 100979/184000, compactions 0 (logged 0), TIMED OUT
+results: /root/bench/results/minecraft/mc-rameness-v3/results.json

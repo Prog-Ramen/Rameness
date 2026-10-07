@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 2,
+ "notes": "Only sky and an empty hotbar HUD are rendered; no terrain, blocks, or world geometry are visible at all.",
+ "overall": 0.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0198944
+}

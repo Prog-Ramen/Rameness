@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 0,
+ "notes": "Screenshot only shows the pre-game start menu with no rendered world, blocks, or HUD visible.",
+ "overall": 0.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0696524
+}

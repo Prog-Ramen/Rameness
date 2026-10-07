@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 6,
+ "world": 4,
+ "ui": 7,
+ "notes": "Convincing Minecraft-style grass/dirt textures, flowers and hotbar, but the camera is clipped into a hillside and a huge leaf wall, so there's little visible sky or distance, and the 'Terrain still generating' message is showing.",
+ "overall": 6.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.056588
+}

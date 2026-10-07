@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 5,
+ "world": 5,
+ "ui": 6,
+ "notes": "Recognizable blocky voxel style with hotbar and debug HUD, but sandy terrain lacks textures/variation, tree billboards look flat/ghostly, and terrain layering shows odd stepped cliffs.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0700856
+}

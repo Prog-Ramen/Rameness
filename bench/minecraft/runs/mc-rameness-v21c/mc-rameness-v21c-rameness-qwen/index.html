@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a tiny Minecraft clone</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #000;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #game {
+    position: fixed; inset: 0; width: 100vw; height: 100vh;
+    display: block; cursor: crosshair; image-rendering: pixelated;
+  }
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 20px; height: 20px;
+    transform: translate(-50%, -50%); pointer-events: none;
+    mix-blend-mode: difference; opacity: 0.9;
+  }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
+
+  #stats {
+    position: fixed; top: 10px; left: 10px; color: #fff; font-size: 13px;
+    text-shadow: 0 1px 2px #000; pointer-events: none; font-family: monospace;
+  }
+
+  #blockName {
+    position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 15px; text-shadow: 0 1px 3px #000;
+    pointer-events: none; opacity: 0.9;
+  }
+
+  #hotbar {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 5px; pointer-events: auto;
+  }
+  .slot {
+    position: relative; width: 52px; height: 52px; border-radius: 6px;
+    background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.28);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot.active { border-color: #fff; background: rgba(255,255,255,0.14); }
+  .slot canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+  .slot span {
+    position: absolute; top: 1px; left: 4px; color: #ddd; font-size: 10px;
+    text-shadow: 0 1px 1px #000;
+  }
+
+  #toast {
+    position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.55); color: #fff; padding: 6px 14px;
+    border-radius: 8px; font-size: 13px; display: none; pointer-events: none;
+    white-space: nowrap; z-index: 5;
+  }
+
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: rgba(8, 10, 16, 0.72);
+    backdrop-filter: blur(2px); z-index: 10;
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(30,34,44,0.96), rgba(20,23,30,0.96));
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 14px;
+    padding: 34px 42px; text-align: center; color: #eee; max-width: 560px;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  }
+  .panel h1 {
+    margin: 0 0 4px; font-size: 42px; letter-spacing: 2px;
+    color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  }
+  .panel .sub { color: #9aa4b5; margin-bottom: 20px; font-size: 14px; }
+  .btn {
+    display: block; width: 100%; margin: 8px 0; padding: 12px 16px;
+    font-size: 16px; font-weight: 600; color: #fff; cursor: pointer;
+    background: linear-gradient(180deg, #4a8f3c, #35702b);
+    border: 2px solid rgba(255,255,255,0.25); border-radius: 8px;
+  }
+  .btn:hover { filter: brightness(1.12); }
+  .btn.secondary { background: linear-gradient(180deg, #4a5568, #38414f); }
+  .seedrow { display: flex; gap: 8px; margin: 14px 0; }
+  .seedrow input {
+    flex: 1; padding: 10px 12px; font-size: 14px; color: #fff;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 6px; outline: none;
+  }
+  .controls {
+    margin-top: 22px; font-size: 13px; color: #b9c2d0;
+    display: grid; grid-template-columns: auto auto; gap: 5px 14px;
+    text-align: left; justify-content: center;
+  }
+  .controls b { color: #fff; font-weight: 600; }
+  #paused { background: rgba(5,6,10,0.55); }
+  #paused .panel { max-width: 380px; }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="crosshair"></div>
+  <div id="stats"></div>
+  <div id="blockName"></div>
+  <div id="hotbar"></div>
+  <div id="toast"></div>
+
+  <div class="overlay" id="menu">
+    <div class="panel">
+      <h1>VOXELCRAFT</h1>
+      <p class="sub">A tiny Minecraft clone · no build step · runs anywhere</p>
+      <button class="btn" id="resumeBtn" style="display:none">Resume</button>
+      <button class="btn" id="continueBtn" style="display:none">Continue</button>
+      <button class="btn" id="playBtn">Play</button>
+      <div class="seedrow">
+        <input id="seedInput" type="text" placeholder="world seed" spellcheck="false">
+        <button class="btn secondary" id="newBtn" style="width:auto; padding:10px 18px">New World</button>
+      </div>
+      <div class="controls">
+        <b>W A S D</b><span>move</span>
+        <b>Mouse</b><span>look around</span>
+        <b>Left click</b><span>break block (hold to keep digging)</span>
+        <b>Right click</b><span>place block</span>
+        <b>1–9 / wheel</b><span>select block</span>
+        <b>Middle click</b><span>pick targeted block</span>
+        <b>Space</b><span>jump / swim up</span>
+        <b>Shift</b><span>sprint</span>
+        <b>F</b><span>toggle fly</span>
+        <b>C</b><span>fly down</span>
+        <b>R</b><span>respawn</span>
+        <b>Esc</b><span>pause</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

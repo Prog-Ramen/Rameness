@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 2,
+ "world": 3,
+ "ui": 6,
+ "notes": "Floating disconnected chunks with huge holes, garbled tree/leaf geometry, and no coherent ground plane make it barely resemble a stable voxel world, though the hotbar and debug HUD are clean.",
+ "overall": 3.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0708456
+}

@@ -1,0 +1,56 @@
+[bench] cleared 14 leftover /tmp entries of bench
+[mc-exl3-505t-r1-rameness-exl3-505] start (context window 196608 x 1 slots, reasoning budget 5000)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56574)
+Traceback (most recent call last):
+  File "/root/projects/Rameness/bench/llmproxy.py", line 306, in _relay
+    resp = conn.getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 484, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 409, in do_POST
+    self._forward("POST")
+    ~~~~~~~~~~~~~^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 276, in _forward
+    self._relay(conn, method, path, body, headers, req, kind, t0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 308, in _relay
+    self.send_error(502, f"upstream: {e}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/server.py", line 551, in send_error
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+[mc-exl3-505t-r1-rameness-exl3-505] done in 150.0 min: score 85.7 (12/14), 206 requests, max context 178280/196608, compactions 4 (logged 3), TIMED OUT
+results: /root/bench/results/minecraft/mc-exl3-505t-r1/results.json
+mc-exl3-505t-r1-rameness-exl3-505: overall 5.5  (The screenshot shows a flat sand beach beside shallow water, with a few mobs, clouds, a crosshair, and a textured hotbar. Terrain is sparse, with no trees or varied blocks in view, and the water looks flat and slightly odd.)

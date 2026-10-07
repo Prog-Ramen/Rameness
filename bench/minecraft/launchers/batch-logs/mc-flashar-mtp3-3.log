@@ -1,0 +1,5 @@
+[mc-flashar-mtp3-3-rameness-flashar] start (context window 262144 x 1 slots, reasoning budget 5000)
+[bench] stopped 8 process(es) the run left running
+[mc-flashar-mtp3-3-rameness-flashar] done in 150.0 min: score 92.9 (13/14), 489 requests, max context 231611/262144, compactions 2 (logged 0), TIMED OUT
+results: /root/bench/results/minecraft/mc-flashar-mtp3-3/results.json
+mc-flashar-mtp3-3-rameness-flashar: overall 7.5  (Convincing Minecraft-style grass/dirt terrain with textured trees, sky, a hand-held block, a hotbar, hearts and a crosshair. The view is close to the ground, so the world looks fairly limited, with no water or varied blocks visible, and the debug text overlay is cluttered.)

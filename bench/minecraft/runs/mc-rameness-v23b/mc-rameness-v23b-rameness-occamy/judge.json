@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 0,
+ "ui": 3,
+ "notes": "Scene is almost entirely a flat black untextured ground mass with sky, no visible voxel blocks, terrain detail, or textures\u2014looks broken; only the hotbar and debug HUD indicate it's meant to be Minecraft-like.",
+ "overall": 1.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0701624
+}

@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 8,
+ "world": 6,
+ "ui": 8,
+ "notes": "Textured blocky voxel terrain with water, sand, grass and a numbered hotbar looks convincingly Minecraft-like, but the sky is a flat gray-blue with no clouds or sun, and trees are sparse, so the world is fairly plain.",
+ "overall": 7.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0565016
+}

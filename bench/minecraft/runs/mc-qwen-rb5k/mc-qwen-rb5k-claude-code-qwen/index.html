@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxelcraft — a tiny Minecraft clone</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- Heads-up display -->
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="vignette"></div>
+  <div id="hud-top">
+    <span id="fps" class="hud-stat"></span>
+    <span id="pos" class="hud-stat"></span>
+    <span id="time" class="hud-stat"></span>
+  </div>
+  <div id="hotbar"></div>
+  <div id="block-name"></div>
+</div>
+
+<!-- Overlay: start / paused / help -->
+<div id="overlay" class="visible">
+  <div class="panel">
+    <h1>Voxelcraft</h1>
+    <p class="sub">a tiny Minecraft clone &middot; 100% in your browser &middot; no build step</p>
+    <table class="keys">
+      <tr><td><b>W A S D</b></td><td>move</td><td><b>Space</b></td><td>jump</td></tr>
+      <tr><td><b>Mouse</b></td><td>look around</td><td><b>Ctrl / double-tap W</b></td><td>sprint</td></tr>
+      <tr><td><b>Left click</b></td><td>break block</td><td><b>Right click</b></td><td>place block</td></tr>
+      <tr><td><b>1 &ndash; 9 / wheel</b></td><td>pick block</td><td><b>Esc</b></td><td>pause &amp; this menu</td></tr>
+    </table>
+    <button id="play-btn">▶ Play</button>
+    <p id="gen-status" class="sub">generating world…</p>
+  </div>
+</div>
+
+<div id="loading" class="visible"><div class="spinner"></div><div>generating world…</div></div>
+<div id="error" class="hidden"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

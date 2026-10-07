@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoxelCraft</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+  canvas { display: block; }
+
+  #crosshair {
+    position: fixed; top: 50%; left: 50%;
+    width: 24px; height: 24px;
+    transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 10;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,.85);
+  }
+  #crosshair::before { top: 10px; left: 2px; width: 2px; height: 20px; }
+  #crosshair::after  { top: 2px; left: 10px; width: 20px; height: 2px; }
+
+  #hotbar {
+    position: fixed; bottom: 16px; left: 50%;
+    transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 4px;
+  }
+  .slot {
+    width: 52px; height: 52px;
+    border: 2px solid #555; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative;
+  }
+  .slot.active { border-color: #fff; }
+  .slot .key {
+    position: absolute; top: 2px; left: 4px;
+    font-size: 11px; color: #ccc;
+  }
+  .slot .name { font-size: 10px; color: #fff; }
+
+  #block-preview {
+    position: fixed; bottom: 76px; left: 50%;
+    transform: translateX(-50%); z-index: 10;
+    color: #fff; font-size: 13px;
+    text-shadow: 0 1px 2px #000;
+  }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.7); color: #fff;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 48px; margin-bottom: 8px; letter-spacing: 2px; }
+  #overlay .sub { font-size: 14px; color: #aaa; margin-bottom: 24px; }
+  #overlay .start {
+    padding: 10px 32px; font-size: 16px; cursor: pointer;
+    background: #4a7c2e; color: #fff; border: none; border-radius: 4px;
+  }
+  #overlay .start:hover { background: #5a9c3e; }
+  #overlay .controls {
+    margin-top: 24px; font-size: 12px; color: #888; text-align: center; line-height: 1.8;
+  }
+
+  #debug {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    font-size: 11px; color: #fff; background: rgba(0,0,0,.4);
+    padding: 4px 8px; border-radius: 3px; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div id="crosshair"></div>
+
+<div id="hotbar">
+  <div class="slot active" data-type="grass"><span class="key">1</span><span class="name">Grass</span></div>
+  <div class="slot" data-type="dirt"><span class="key">2</span><span class="name">Dirt</span></div>
+  <div class="slot" data-type="stone"><span class="key">3</span><span class="name">Stone</span></div>
+  <div class="slot" data-type="wood"><span class="key">4</span><span class="name">Wood</span></div>
+  <div class="slot" data-type="sand"><span class="key">5</span><span class="name">Sand</span></div>
+  <div class="slot" data-type="leaves"><span class="key">6</span><span class="name">Leaves</span></div>
+</div>
+<div id="block-preview">Grass</div>
+
+<div id="debug"></div>
+
+<div id="overlay">
+  <h1>VOXELCRAFT</h1>
+  <div class="sub">A tiny Minecraft clone in your browser</div>
+  <button class="start" id="startBtn">Click to Play</button>
+  <div class="controls">
+    WASD — Move &nbsp;|&nbsp; Space — Jump &nbsp;|&nbsp; Mouse — Look<br>
+    Left Click — Break block &nbsp;|&nbsp; Right Click — Place block<br>
+    1–6 — Select block type &nbsp;|&nbsp; Scroll — Cycle block type
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>

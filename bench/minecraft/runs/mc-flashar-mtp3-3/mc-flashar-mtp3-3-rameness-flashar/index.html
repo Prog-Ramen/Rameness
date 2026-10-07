@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Infinite Blocks — a Minecraft-style voxel sandbox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="err"></div>
+
+<noscript><p style="color:#fff;padding:20px">This game needs JavaScript and WebGL.</p></noscript>
+
+<!-- three.js r149 (non-module build), vendored locally: no CDN, no build step -->
+<script src="vendor/three.min.js"></script>
+
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/chunks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/player.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/viewmodel.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+
+<div id="boot">
+  <h1>Infinite Blocks</h1>
+  <p>A voxel sandbox in your browser. No install, no build.</p>
+  <p class="hint">Click to capture the mouse &middot; <b>WASD</b> move &middot; <b>Space</b> jump &middot;
+    <b>left click</b> break &middot; <b>right click</b> place &middot; <b>C</b> crafting &middot; <b>F</b> fly &middot; <b>Esc</b> menu</p>
+  <p id="bootmsg">Loading world…</p>
+</div>
+
+<script>
+(function () {
+  var boot = document.getElementById('boot');
+  var msg = document.getElementById('bootmsg');
+  var err = document.getElementById('err');
+  var t0 = performance.now();
+  var iv = setInterval(function () {
+    if (window.gameReady) {
+      clearInterval(iv);
+      boot.classList.add('hidden');
+      setTimeout(function () { boot.style.display = 'none'; }, 400);
+    } else if (window.gameError) {
+      clearInterval(iv);
+      msg.textContent = 'Startup failed: ' + window.gameError;
+      err.textContent = window.gameError;
+    } else if (performance.now() - t0 > 8000) {
+      clearInterval(iv);
+      msg.textContent = 'Still loading… WebGL may be unavailable in this browser.';
+    }
+  }, 120);
+  // any click on the boot overlay starts audio + pointer lock
+  boot.addEventListener('click', function () {
+    if (window.game && window.game.audio) { window.game.audio.init(); window.game.audio.resume(); }
+    if (window.game) window.game.lockPointer(true);
+  });
+})();
+</script>
+</body>
+</html>

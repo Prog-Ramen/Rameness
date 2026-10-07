@@ -1,0 +1,55 @@
+[bench] rameness copy is out of date; reinstalling
+[mc-rameness-v13-rameness-qwen] start (context window 100000 x 1 slots, reasoning budget 5000)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 52418)
+Traceback (most recent call last):
+  File "/root/projects/Rameness/bench/llmproxy.py", line 265, in _relay
+    resp = conn.getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1459, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/server.py", line 484, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 365, in do_POST
+    self._forward("POST")
+    ~~~~~~~~~~~~~^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 235, in _forward
+    self._relay(conn, method, path, body, headers, req, kind, t0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/projects/Rameness/bench/llmproxy.py", line 267, in _relay
+    self.send_error(502, f"upstream: {e}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/http/server.py", line 551, in send_error
+    self.wfile.write(body)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+[mc-rameness-v13-rameness-qwen] done in 150.0 min: score 78.6 (11/14), 385 requests, max context 82031/100000, compactions 9 (logged 14), TIMED OUT
+results: /root/bench/results/minecraft/mc-rameness-v13/results.json

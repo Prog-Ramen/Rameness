@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft Clone</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <div id="info"></div>
+  <div id="hotbar"></div>
+  <div id="selectedName"></div>
+  <div id="hint">Esc releases the mouse</div>
+</div>
+
+<!-- Start / pause overlay -->
+<div id="overlay">
+  <div id="panel">
+    <h1>MINECRAFT CLONE</h1>
+    <p class="sub">Infinite voxel world &middot; no build step &middot; pure WebGL</p>
+    <div id="controls">
+      <table>
+        <tr><td>Move</td><td>W A S D</td></tr>
+        <tr><td>Jump / Fly up</td><td>Space</td></tr>
+        <tr><td>Sprint / Fly down</td><td>Shift</td></tr>
+        <tr><td>Look</td><td>Mouse</td></tr>
+        <tr><td>Break block</td><td>Left click</td></tr>
+        <tr><td>Place block</td><td>Right click</td></tr>
+        <tr><td>Toggle fly</td><td>F</td></tr>
+        <tr><td>Select block</td><td>1-9 / mouse wheel</td></tr>
+      </table>
+    </div>
+    <div id="status">Generating world…</div>
+    <button id="playBtn">Click to Play</button>
+  </div>
+</div>
+
+<script src="js/noise.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/render.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

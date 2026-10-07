@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 5,
+ "world": 4,
+ "ui": 7,
+ "notes": "Blocky voxel terrain with grass/dirt textures and a hotbar/crosshair/debug HUD, but the view is mostly obstructed by an oversized foliage block and terracing looks unnaturally stepped with limited visible variety.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0700534
+}

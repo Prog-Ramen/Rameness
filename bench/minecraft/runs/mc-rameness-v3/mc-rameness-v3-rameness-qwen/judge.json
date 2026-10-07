@@ -1,0 +1,10 @@
+{
+ "minecraft": 2,
+ "rendering": 1,
+ "world": 2,
+ "ui": 6,
+ "notes": "Terrain renders as broken jagged triangular spikes instead of proper voxel blocks, making the world nearly unrecognizable as Minecraft despite a clean hotbar/HUD.",
+ "overall": 2.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07035040000000001
+}

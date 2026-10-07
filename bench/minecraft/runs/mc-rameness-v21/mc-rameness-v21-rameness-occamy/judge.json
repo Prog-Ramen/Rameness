@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 1,
+ "ui": 4,
+ "notes": "The scene shows only a dark unlit/loading state with a click-to-play menu overlay, no visible blocky world or textures are rendered.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0695704
+}

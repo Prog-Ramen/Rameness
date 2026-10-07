@@ -1,0 +1,4 @@
+[mc-swift15-q4km-vision-1-rameness-swift15] start (context window 262144 x 1 slots, reasoning budget 5000)
+[bench] stopped 1 process(es) the run left running
+[mc-swift15-q4km-vision-1-rameness-swift15] done in 73.1 min: score 92.9 (13/14), 152 requests, max context 172654/262144, compactions 0 (logged 0), exit 1
+results: /root/bench/results/minecraft/mc-swift15-q4km-vision-1/results.json

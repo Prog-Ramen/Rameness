@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 3,
+ "notes": "No world geometry is rendered at all\u2014just sky, a debug HUD, and a hotbar; the scene is completely broken/empty.",
+ "overall": 1.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0696568
+}

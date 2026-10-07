@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 0,
+ "ui": 5,
+ "notes": "Camera shows only empty sky with a tiny triangle of terrain in the corner, so essentially no world geometry is rendered despite a functional hotbar/HUD.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06967040000000001
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Blocky — a tiny Minecraft clone</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="hotbar"></div>
+  <div id="debug"></div>
+  <div id="hint">Sprint: hold <b>Shift</b> &nbsp;•&nbsp; Walk: <b>WASD</b> &nbsp;•&nbsp; Jump: <b>Space</b>
+    <br>Left click: break &nbsp;•&nbsp; Right click: place &nbsp;•&nbsp; Pick block: <b>Middle click</b>
+    <br><span id="worldname"></span></div>
+</div>
+
+<div id="blockname"></div>
+
+<div id="start" class="overlay">
+  <h1>BLOCKY</h1>
+  <p class="sub">a tiny minecraft clone that lives in your browser</p>
+  <div class="panel">
+    <p>Click to play. <b>ESC</b> pauses.</p>
+    <p>Everything you dig and build is saved in this browser.</p>
+    <table class="keys">
+      <tr><td>W A S D</td><td>move</td></tr>
+      <tr><td>Space</td><td>jump / swim up</td></tr>
+      <tr><td>Shift</td><td>sprint</td></tr>
+      <tr><td>Left click</td><td>break block</td></tr>
+      <tr><td>Right click</td><td>place block</td></tr>
+      <tr><td>Middle click</td><td>pick block type</td></tr>
+      <tr><td>1 – 9</td><td>select hotbar slot</td></tr>
+      <tr><td>G</td><td>toggle flight (creative)</td></tr>
+      <tr><td>N</td><td>new world (resets edits)</td></tr>
+    </table>
+  </div>
+  <div class="row">
+    <select id="worldselect"></select>
+    <button id="newworld">New world</button>
+    <button id="startbtn">Play</button>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h2>Paused</h2>
+  <p>Click to resume</p>
+</div>
+
+<div id="loading"><div id="loadmsg">generating world…</div></div>
+
+<script src="js/voxel.js"></script>
+<script src="js/util.js"></script>
+<script src="js/world.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/mesh.js"></script>
+<script src="js/render.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

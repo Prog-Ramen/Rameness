@@ -1,0 +1,4 @@
+[mc-rameness-v21-rameness-qwen] start (context window 150000 x 1 slots, reasoning budget 5000)
+[bench] stopped 1 process(es) the run left running
+[mc-rameness-v21-rameness-qwen] done in 124.3 min: score 100.0 (14/14), 210 requests, max context 130944/150000, compactions 4 (logged 4), exit 0
+results: /root/bench/results/minecraft/mc-rameness-v21/results.json
