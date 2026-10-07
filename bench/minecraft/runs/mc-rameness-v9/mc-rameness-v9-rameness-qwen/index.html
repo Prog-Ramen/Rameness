@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blockcraft — a tiny Minecraft in the browser</title>
+<style>
+  :root { --bar-bg: rgba(0,0,0,.55); --bar-border: rgba(255,255,255,.25); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
+    font-family: "Lucida Console", Monaco, Consolas, monospace; user-select: none; }
+  #c { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+  /* ---------- HUD ---------- */
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 20px; height: 20px;
+    transform: translate(-50%,-50%); pointer-events: none; mix-blend-mode: difference; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 9px; top: 0; width: 2px; height: 20px; }
+  #crosshair::after  { left: 0; top: 9px; width: 20px; height: 2px; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #hotbar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; gap: 3px; padding: 4px; background: var(--bar-bg);
+    border: 2px solid var(--bar-border); border-radius: 6px; pointer-events: auto; }
+  #hotbar .slot { width: 52px; height: 52px; position: relative; background: rgba(0,0,0,.35);
+    border: 2px solid rgba(255,255,255,.18); border-radius: 4px; }
+  #hotbar .slot.sel { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); }
+  #hotbar .slot canvas { position: absolute; left: 9px; top: 7px; image-rendering: pixelated; }
+  #hotbar .slot .num { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #ccc; }
+  #hotbar .slot .name { position: absolute; left: 0; right: 0; top: -18px; text-align: center;
+    font-size: 12px; color: #fff; text-shadow: 1px 1px 0 #000; opacity: 0; transition: opacity .15s; }
+  #hotbar .slot.sel .name { opacity: 1; }
+
+  #stats { position: absolute; left: 10px; top: 10px; font-size: 12px; line-height: 1.5;
+    color: #fff; text-shadow: 1px 1px 0 #000; white-space: pre; display: none; }
+
+  /* ---------- overlays ---------- */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(10,12,24,.82); z-index: 10; }
+  .panel { width: min(560px, 92vw); padding: 28px 34px; color: #ddd; text-align: center;
+    background: #161a2a; border: 2px solid #3a4266; border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .panel h1 { font-size: 34px; letter-spacing: 6px; color: #fff; margin-bottom: 4px;
+    text-shadow: 0 3px 0 #274186; }
+  .panel .sub { font-size: 12px; color: #8b93b8; margin-bottom: 18px; }
+  .panel .controls { text-align: left; display: inline-block; font-size: 13px;
+    line-height: 1.9; margin-bottom: 18px; }
+  .panel .controls b { display: inline-block; min-width: 108px; color: #fff; }
+  .btn { display: inline-block; margin-top: 6px; padding: 12px 34px; font: inherit; font-size: 16px;
+    letter-spacing: 2px; color: #fff; background: #2e7d32; border: 2px solid #66bb6a;
+    border-radius: 6px; cursor: pointer; }
+  .btn:hover { background: #388e3c; }
+  .btn.ghost { background: #26304e; border-color: #4a5680; font-size: 13px; padding: 9px 20px; }
+  .row { margin-top: 14px; font-size: 12px; color: #8b93b8; }
+  .row button { font: inherit; background: transparent; border: none; color: #7fa8ff; cursor: pointer; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="stats"></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="start" class="overlay">
+  <div class="panel">
+    <h1>BLOCKCRAFT</h1>
+    <div class="sub">a tiny minecraft, built from scratch — no libraries, no build step</div>
+    <div class="controls">
+      <b>W A S D</b> move&nbsp;&nbsp;&nbsp;<b>mouse</b> look<br>
+      <b>space</b> jump&nbsp;&nbsp;&nbsp;<b>ctrl</b> sprint / fly fast<br>
+      <b>left click</b> break block&nbsp;&nbsp;&nbsp;<b>right click</b> place block<br>
+      <b>1 – 9 / wheel</b> pick block&nbsp;&nbsp;&nbsp;<b>f</b> toggle fly<br>
+      <b>t</b> toggle time&nbsp;&nbsp;&nbsp;<b>r</b> respawn&nbsp;&nbsp;&nbsp;<b>f3</b> debug info<br>
+      <b>esc</b> release mouse
+    </div><br>
+    <button id="playBtn" class="btn">PLAY</button>
+    <div class="row">
+      seed: <button id="seedBtn">new seed</button>
+      &nbsp;·&nbsp; world: 128 × 64 × 128 &nbsp;·&nbsp; edits are saved in your browser
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel">
+    <h1>PAUSED</h1>
+    <div class="sub">mouse released — click to grab it again</div><br>
+    <button id="resumeBtn" class="btn">RESUME</button>
+  </div>
+</div>
+
+<div id="err" class="overlay hidden">
+  <div class="panel"><h1>😕 oops</h1><pre id="errMsg" style="text-align:left;font-size:12px;max-height:50vh;overflow:auto"></pre></div>
+</div>
+
+<script src="engine.js"></script>
+</body>
+</html>

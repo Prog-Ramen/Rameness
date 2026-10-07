@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4          # the syntax-check SOP's JS/TS/HTML checks
+        with:
+          node-version: "22"
+      - name: System tools used by the tests (sessions, git, C toolchain)
+        run: sudo apt-get update && sudo apt-get install -y tmux screen git build-essential
+      - name: Install
+        run: python -m pip install -e .
+      - name: "Unit tests (offline: lexical decisions, scripted model)"
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          python -m unittest discover -s tests -v

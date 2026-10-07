@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Voxelcraft &mdash; a browser Minecraft clone</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%237a5233'/><rect y='0' width='16' height='6' fill='%2357a04a'/></svg>">
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<!-- ============ heads-up display ============ -->
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+
+  <div id="hotbar"></div>
+
+  <div id="debug" class="panel">
+    <div><span class="k">FPS</span><span id="d-fps">-</span></div>
+    <div><span class="k">XYZ</span><span id="d-pos">-</span></div>
+    <div><span class="k">Chunk</span><span id="d-chunk">-</span></div>
+    <div><span class="k">Biome</span><span id="d-biome">-</span></div>
+    <div><span class="k">Facing</span><span id="d-facing">-</span></div>
+    <div><span class="k">Looking</span><span id="d-target">-</span></div>
+    <div><span class="k">Chunks</span><span id="d-chunks">-</span></div>
+    <div><span class="k">Mesh</span><span id="d-mesh">-</span></div>
+    <div><span class="k">Workers</span><span id="d-workers">-</span></div>
+    <div><span class="k">Mode</span><span id="d-mode">-</span></div>
+  </div>
+
+  <div id="info">
+    <b id="click-hint">Click to play</b> &middot; WASD move &middot; Space jump &middot; Shift sneak &middot;
+    Ctrl sprint &middot; F fly &middot; LMB break &middot; RMB place &middot; 1-9 block &middot;
+    E inventory &middot; M map &middot; F3 debug &middot; Esc menu
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<!-- ============ minimap ============ -->
+<div id="mapwrap" class="hidden">
+  <canvas id="map" width="256" height="256"></canvas>
+  <div id="maplabel">Map (M)</div>
+</div>
+
+<!-- ============ inventory ============ -->
+<div id="inventory" class="overlay-ui hidden">
+  <h2>Select Block</h2>
+  <div id="inv-grid"></div>
+  <p class="hint">Click a block to put it in hotbar slot <span id="inv-slot">1</span> &middot; <kbd>E</kbd> to close</p>
+</div>
+
+<!-- ============ pause / title screen ============ -->
+<div id="menu" class="screen">
+  <div class="dialog">
+    <h1 class="title">VOXELCRAFT</h1>
+    <p class="sub">An infinite voxel world &mdash; no build step, no libraries.</p>
+
+    <div class="row">
+      <button id="btn-play" class="big">Play</button>
+    </div>
+
+    <div class="row seeds">
+      <label for="seed-input">World seed</label>
+      <input id="seed-input" type="text" spellcheck="false" placeholder="random">
+      <button id="btn-new">New world</button>
+    </div>
+
+    <div class="row settings">
+      <label>Render distance <span id="v-rd">8</span>
+        <input id="s-rd" type="range" min="2" max="14" step="1">
+      </label>
+      <label>Field of view <span id="v-fov">72</span>
+        <input id="s-fov" type="range" min="50" max="110" step="1">
+      </label>
+      <label>Mouse sensitivity <span id="v-sens">1.0</span>
+        <input id="s-sens" type="range" min="0.2" max="3" step="0.1">
+      </label>
+      <label>Sound
+        <select id="s-sound"><option value="1">On</option><option value="0">Off</option></select>
+      </label>
+    </div>
+
+    <div class="row buttons">
+      <button id="btn-save">Save world</button>
+      <button id="btn-reset">Delete save</button>
+      <button id="btn-fullscreen">Fullscreen</button>
+    </div>
+
+    <div class="help">
+      <h3>Controls</h3>
+      <ul>
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp; <kbd>Ctrl</kbd> sprint &nbsp; <kbd>Shift</kbd> sneak</li>
+        <li><kbd>Space</kbd> jump / swim up &nbsp; <kbd>F</kbd> toggle fly &nbsp; <kbd>R</kbd> respawn</li>
+        <li><kbd>LMB</kbd> break block &nbsp; <kbd>RMB</kbd> place block &nbsp; <kbd>MMB</kbd> pick block</li>
+        <li><kbd>1</kbd>&hellip;<kbd>9</kbd>, <kbd>Q</kbd> or wheel: choose block &nbsp; <kbd>E</kbd> inventory</li>
+        <li><kbd>M</kbd> minimap &nbsp; <kbd>F1</kbd>/<kbd>F3</kbd> debug info &nbsp; <kbd>F5</kbd> screenshot &nbsp; <kbd>Esc</kbd> menu</li>
+      </ul>
+      <p class="note">Served over <code>http://</code> the game also saves your world and
+        settings to this browser automatically.</p>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="screen hidden">
+  <div class="dialog center">
+    <h1 class="title small">Generating world&hellip;</h1>
+    <div class="bar"><div id="bar-fill"></div></div>
+    <p id="loading-text">Warming up terrain workers</p>
+  </div>
+</div>
+
+<script>
+  // Plain script on purpose: it still runs when ES modules cannot load, so a
+  // blocked file:// page explains itself instead of showing a silent menu.
+  window.voxelcraftBootProblem = function (message) {
+    var dialog = document.querySelector('#menu .dialog');
+    if (!dialog || document.getElementById('boot-problem')) return;
+    var box = document.createElement('div');
+    box.className = 'help';
+    box.id = 'boot-problem';
+    var h = document.createElement('h3');
+    h.textContent = 'The game could not start';
+    var p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = message;
+    box.append(h, p);
+    dialog.appendChild(box);
+    var loading = document.getElementById('loading');
+    if (loading) loading.classList.add('hidden');
+  };
+
+  window.voxelcraftModuleFailed = function (src) {
+    if (location.protocol === 'file:') {
+      window.voxelcraftBootProblem(
+        'Browsers refuse to load ES modules and workers from file:// pages. ' +
+        'Serve this folder over HTTP instead, for example:  ' +
+        'python3 -m http.server 8000   then open   http://localhost:8000/');
+    } else {
+      window.voxelcraftBootProblem('Could not load ' + src + ' - check that the js/ folder is next to index.html.');
+    }
+  };
+
+  if (!window.WebGL2RenderingContext) {
+    window.voxelcraftBootProblem('This browser has no WebGL2. Try a recent Chrome, Edge, Firefox or Safari.');
+  }
+</script>
+<script type="module" src="js/main.js" onerror="window.voxelcraftModuleFailed(this.src)"></script>
+<noscript><p style="color:#fff;padding:2rem">This game needs JavaScript and WebGL2.</p></noscript>
+</body>
+</html>

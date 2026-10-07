@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebCraft</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="underwater" class="hidden"></div>
+  <div id="crosshair"></div>
+  <pre id="debug" class="hidden"></pre>
+  <div id="blockname"></div>
+  <div id="hotbar"></div>
+
+  <div id="inventory" class="hidden">
+    <div class="panel">
+      <h2>Blocks</h2>
+      <div id="invgrid"></div>
+      <p class="hint">Click a block to put it in the selected hotbar slot. Press <kbd>E</kbd> to close.</p>
+    </div>
+  </div>
+
+  <div id="menu">
+    <div class="panel">
+      <h1>WebCraft</h1>
+      <button id="play">Play</button>
+      <div class="settings">
+        <label>Render distance: <b id="rdval"></b> chunks
+          <input id="rd" type="range" min="3" max="16" step="1"></label>
+        <label>Field of view: <b id="fovval"></b>&deg;
+          <input id="fov" type="range" min="50" max="110" step="1"></label>
+        <label>Mouse sensitivity: <b id="sensval"></b>
+          <input id="sens" type="range" min="0.2" max="3" step="0.1"></label>
+      </div>
+      <table class="controls">
+        <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Move</td></tr>
+        <tr><td><kbd>Space</kbd></td><td>Jump / swim / fly up</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>Sprint / fly down</td></tr>
+        <tr><td><kbd>F</kbd> or double <kbd>Space</kbd></td><td>Toggle flying</td></tr>
+        <tr><td>Left click</td><td>Break block</td></tr>
+        <tr><td>Right click</td><td>Place block</td></tr>
+        <tr><td>Middle click</td><td>Pick block</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>9</kbd> / wheel</td><td>Select hotbar slot</td></tr>
+        <tr><td><kbd>E</kbd></td><td>Block inventory</td></tr>
+        <tr><td><kbd>F3</kbd></td><td>Debug info</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+      </table>
+      <button id="newworld" class="secondary">New World</button>
+      <p class="hint">Your world is saved automatically in this browser.</p>
+    </div>
+  </div>
+
+  <div id="error" class="hidden"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

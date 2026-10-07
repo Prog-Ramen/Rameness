@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 7,
+ "world": 5,
+ "ui": 8,
+ "notes": "Convincing Minecraft-style grass and dirt blocks with textures, trees, sky, hotbar and debug HUD, but the terrain is flat with no water, little block variety, and the overlapping leaf canopies look a bit messy.",
+ "overall": 6.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0568994
+}

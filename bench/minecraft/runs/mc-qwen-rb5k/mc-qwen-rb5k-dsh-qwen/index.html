@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockcraft — a Minecraft clone in the browser</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="debug"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="overlay" class="hidden">
+    <div class="panel">
+      <h1>BLOCKCRAFT</h1>
+      <p class="tag">a tiny Minecraft clone &mdash; vanilla JS + WebGL, no build step</p>
+      <div class="cols">
+        <div>
+          <h2>Look &amp; move</h2>
+          <ul>
+            <li><b>Mouse</b> &mdash; look around</li>
+            <li><b>W A S D</b> &mdash; move</li>
+            <li><b>Space</b> &mdash; jump / swim up</li>
+            <li><b>Shift</b> &mdash; sneak (slow)</li>
+            <li><b>F</b> &mdash; toggle flight</li>
+            <li><b>Double-space</b> &mdash; also toggles flight</li>
+          </ul>
+        </div>
+        <div>
+          <h2>Build</h2>
+          <ul>
+            <li><b>Left click</b> &mdash; break block</li>
+            <li><b>Right click</b> &mdash; place block</li>
+            <li><b>1&ndash;9 / wheel</b> &mdash; select block</li>
+            <li><b>P</b> &mdash; save world</li>
+            <li><b>Esc</b> &mdash; release mouse</li>
+          </ul>
+        </div>
+      </div>
+      <p class="tip">The world is procedural &mdash; add <code>?seed=1234</code> to the URL to explore a different one.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

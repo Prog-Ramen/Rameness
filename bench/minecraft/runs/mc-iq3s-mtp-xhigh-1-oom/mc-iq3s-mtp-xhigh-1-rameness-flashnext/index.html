@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Voxelcraft &mdash; a browser voxel world</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='8' fill='%236aa84f'/><rect y='8' width='16' height='8' fill='%23795548'/></svg>">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <!-- in-game HUD -->
+  <div id="hud">
+    <div id="crosshair"><span class="h"></span><span class="v"></span></div>
+    <div id="debug"></div>
+    <div id="hotbar"></div>
+    <div id="mode-tag"></div>
+    <div id="toast"></div>
+    <div id="underwater"></div>
+    <div id="damage"></div>
+    <div id="loading">
+      <div class="panel">
+        <div class="title">Generating world</div>
+        <div class="bar"><div class="fill"></div></div>
+        <div class="what">waking the chunks&hellip;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- start screen -->
+  <div id="start" class="overlay">
+    <div class="panel wide">
+      <h1>Voxelcraft</h1>
+      <p class="sub">An infinite block world, drawn live in your browser.</p>
+      <div class="row">
+        <label for="seed">Seed</label>
+        <input id="seed" type="text" value="sunlit-plain" spellcheck="false" autocomplete="off">
+        <button id="btn-random">Random</button>
+      </div>
+      <div class="row">
+        <label for="dist">View distance</label>
+        <select id="dist">
+          <option value="3">Short (3)</option>
+          <option value="5" selected>Normal (5)</option>
+          <option value="8">Far (8)</option>
+        </select>
+        <label class="chk"><input id="mousesens" type="range" min="0.4" max="2.4" step="0.1" value="1"> sensitivity</label>
+      </div>
+      <button id="btn-play" class="big">Play</button>
+      <div class="controls">
+        <div><b>WASD</b> move &middot; <b>Space</b> jump / fly up &middot; <b>Shift</b> sprint &middot; <b>Ctrl</b> or <b>C</b> sneak</div>
+        <div><b>Left click</b> break (hold) &middot; <b>Right click</b> place &middot; <b>Wheel</b> / <b>1-9</b> pick item &middot; <b>R</b> pick block</div>
+        <div><b>E</b> inventory &middot; <b>F</b> walk / fly &middot; <b>T</b> skip time &middot; <b>F3</b> debug &middot; <b>Esc</b> menu &middot; <b>U</b> save</div>
+      </div>
+      <div id="start-note" class="note"></div>
+    </div>
+  </div>
+
+  <!-- pause menu -->
+  <div id="pause" class="overlay gone">
+    <div class="panel">
+      <h2>Paused</h2>
+      <button id="btn-resume" class="big">Resume</button>
+      <div class="row tight">
+        <button id="btn-save">Save world</button>
+        <button id="btn-new">New world</button>
+      </div>
+      <div class="row tight">
+        <label class="chk"><input id="chk-sound" type="checkbox" checked> sound</label>
+        <label class="chk"><input id="chk-bob" type="checkbox" checked> view bobbing</label>
+        <label class="chk"><input id="chk-clouds" type="checkbox" checked> clouds</label>
+      </div>
+      <div class="hint">Progress is saved in this browser (localStorage). Seed: <span id="pause-seed"></span></div>
+    </div>
+  </div>
+
+  <!-- inventory -->
+  <div id="inventory" class="overlay gone">
+    <div class="panel wide">
+      <h2>Blocks</h2>
+      <p class="sub">Click a block to put it in the selected hotbar slot.</p>
+      <div class="grid"></div>
+      <div class="hint">E or Esc to close</div>
+    </div>
+  </div>
+
+  <noscript><div class="overlay"><div class="panel"><h2>JavaScript required</h2>
+  <p class="sub">This game runs entirely in JavaScript and WebGL.</p></div></div></noscript>
+</div>
+
+<script type="module" src="js/main.js"></script>
+<script>
+  // if the module fails to load (for example when opened straight from disk),
+  // tell the user what to do instead of showing a blank page
+  setTimeout(function () {
+    if (!window.__voxelReady) {
+      var n = document.getElementById('start-note');
+      if (n) n.textContent = 'The game module did not start. Serve this folder over http (for example: python3 -m http.server) and open it at http://localhost:8000/ - ES modules are blocked on file:// URLs.';
+    }
+  }, 4000);
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 1,
+ "world": 2,
+ "ui": 6,
+ "notes": "Camera appears stuck inside a garbled, flattened mass of green/brown noise with no coherent block geometry or sky, though hotbar, crosshair, and debug HUD render correctly.",
+ "overall": 3.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0714856
+}

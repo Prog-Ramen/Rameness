@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 6,
+ "notes": "Screen is entirely black with no visible voxel world, only the HUD, crosshair, and hotbar rendered.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0778678
+}

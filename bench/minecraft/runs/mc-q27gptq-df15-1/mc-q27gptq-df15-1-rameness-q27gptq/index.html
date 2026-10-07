@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebCraft — Minecraft in your browser</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #000; font-family: "Segoe UI", system-ui, sans-serif; }
+  canvas { display: block; }
+  #hud { position: fixed; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+  #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 18px; height: 18px; mix-blend-mode: difference; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after  { left: 0; top: 8px; width: 18px; height: 2px; }
+  #info { position: absolute; left: 8px; top: 8px; color: #fff; font-size: 12px; line-height: 1.5;
+    text-shadow: 0 1px 2px rgba(0,0,0,.8); background: rgba(0,0,0,.25); padding: 6px 10px;
+    border-radius: 4px; white-space: pre; }
+  #hotbar { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    display: flex; gap: 2px; pointer-events: none; }
+  .slot { width: 52px; height: 52px; border: 2px solid rgba(0,0,0,.55); background: rgba(0,0,0,.35);
+    display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+  .slot.sel { border-color: #fff; background: rgba(255,255,255,.15); }
+  .slot canvas { image-rendering: pixelated; width: 36px; height: 36px; }
+  .slot .lbl { position: absolute; bottom: 2px; font-size: 9px; color: #fff; text-shadow: 0 1px 1px #000; }
+  #overlay { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.45); color: #fff;
+    pointer-events: auto; text-align: center; }
+  #overlay h1 { font-size: 34px; margin: 0 0 6px; text-shadow: 2px 2px 0 rgba(0,0,0,.6); letter-spacing: 1px; }
+  #overlay .keys { font-size: 13px; line-height: 1.7; margin-top: 14px; color: #ddd;
+    background: rgba(0,0,0,.45); padding: 10px 18px; border-radius: 6px; white-space: pre; }
+  #overlay button { margin-top: 16px; font-size: 18px; padding: 10px 28px; cursor: pointer;
+    background: #5a9e3d; color: #fff; border: 2px solid rgba(0,0,0,.4); border-radius: 4px; }
+  #overlay button:hover { background: #66b248; }
+  #toast { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); color: #fff;
+    font-size: 13px; text-shadow: 0 1px 2px #000; opacity: 0; transition: opacity .4s; white-space: pre; }
+</style>
+</head>
+<body>
+<canvas id="hud">
+  <svg width="0" height="0"></svg>
+</canvas>
+<div id="ui">
+  <div id="crosshair"></div>
+  <div id="info"></div>
+  <div id="hotbar"></div>
+  <div id="toast"></div>
+</div>
+<div id="overlay">
+  <h1>WebCraft</h1>
+  <div class="keys">
+    Mouse look &nbsp;&middot;&nbsp; W A S D move &nbsp;&middot;&nbsp; Space jump / fly up
+    Shift fly down &nbsp;&middot;&nbsp; F toggle flight &nbsp;&middot;&nbsp; R respawn
+    1&ndash;6 pick block &nbsp;&middot;&nbsp; Left click break &nbsp;&middot;&nbsp; Right click place
+    G regenerate &nbsp;&middot;&nbsp; P save &nbsp;&middot;&nbsp; O load &nbsp;&middot;&nbsp; Esc menu
+  </div>
+  <button id="play">Click to play</button>
+</div>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module">
+  import { main } from "./src/main.js";
+  main({ canvas: document.getElementById("gl") || null });
+</script>
+</body>
+</html>

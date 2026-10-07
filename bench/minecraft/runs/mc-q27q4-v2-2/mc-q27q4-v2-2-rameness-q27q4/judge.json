@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 6,
+ "world": 4,
+ "ui": 7,
+ "notes": "A forest of blocky textured trees, a grass field, a hotbar, a minimap and a crosshair are present, but the view is cramped by huge trunks and leaf blocks, with no water, no varied terrain and little visible distance.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0567352
+}

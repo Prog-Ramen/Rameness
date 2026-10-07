@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 5,
+ "world": 4,
+ "ui": 7,
+ "notes": "Blocky sand and water terrain with a Minecraft-style hotbar, crosshair and clouds. The water is washed out and has odd translucent layering, and the world is mostly sand with only a few distant trees.",
+ "overall": 5.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.05673220000000001
+}

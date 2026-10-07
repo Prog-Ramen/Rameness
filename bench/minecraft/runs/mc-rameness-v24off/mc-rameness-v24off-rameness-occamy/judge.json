@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 0,
+ "ui": 2,
+ "notes": "Only a black title screen with a 'Click to Play' button is shown, with no world, blocks, or in-game HUD visible.",
+ "overall": 1.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.04981540000000001
+}

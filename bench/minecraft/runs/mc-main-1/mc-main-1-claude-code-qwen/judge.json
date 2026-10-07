@@ -1,0 +1,10 @@
+{
+ "minecraft": 4,
+ "rendering": 3,
+ "world": 3,
+ "ui": 5,
+ "notes": "Terrain renders as disconnected floating chunk islands with stray black quad artifacts and no visible crosshair, though a tidy hotbar and blocky Minecraft-style textures are present.",
+ "overall": 3.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0215156
+}

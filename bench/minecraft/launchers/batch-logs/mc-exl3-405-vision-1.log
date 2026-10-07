@@ -1,0 +1,32 @@
+[bench] cleared 53 leftover /tmp entries of bench
+[mc-exl3-405-vision-1-rameness-exl3-405] start (context window 196608 x 1 slots, reasoning budget 5000)
+[bench] stopped 2 process(es) the run left running
+[mc-exl3-405-vision-1-rameness-exl3-405] done in 150.0 min: score 85.7 (12/14), 302 requests, max context 176638/196608, compactions 3 (logged 3), TIMED OUT
+results: /root/bench/results/minecraft/mc-exl3-405-vision-1/results.json
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/projects/Rameness/bench/minecraft/judge.py", line 70, in <module>
+    main()
+    ~~~~^^
+  File "/root/projects/Rameness/bench/minecraft/judge.py", line 58, in main
+    j = judge(d / "screenshot.png", a.model)
+  File "/root/projects/Rameness/bench/minecraft/judge.py", line 35, in judge
+    r = subprocess.run(["claude", "-p", "--model", model, "--output-format", "json", "--allowedTools=Read",
+                        RUBRIC.format(path=shot)], capture_output=True, text=True, timeout=300, cwd=shot.parent)
+  File "/usr/lib/python3.14/subprocess.py", line 555, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 1990, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'claude'

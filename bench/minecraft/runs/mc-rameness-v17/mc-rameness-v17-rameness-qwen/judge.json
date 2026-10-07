@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 1,
+ "ui": 5,
+ "notes": "World geometry renders as broken black silhouettes with jagged z-fighting triangles and no visible block textures, leaving only the sky and hotbar intact.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0779132
+}

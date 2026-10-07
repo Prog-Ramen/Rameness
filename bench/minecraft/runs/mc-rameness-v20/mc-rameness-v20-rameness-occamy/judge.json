@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 4,
+ "notes": "Only sky, debug HUD, hotbar and crosshair render; no terrain, blocks, or geometry of any kind are visible.",
+ "overall": 1.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06974240000000001
+}

@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 0,
+ "ui": 5,
+ "notes": "Only sky, crosshair, hotbar, and health bar are visible; no terrain, blocks, or world geometry actually rendered, just faint stray wireframe lines.",
+ "overall": 1.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0778094
+}

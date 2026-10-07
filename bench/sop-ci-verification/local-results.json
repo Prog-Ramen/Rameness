@@ -1,0 +1,65 @@
+{
+  "sop": "data.jsonl_audit",
+  "head": "d2cb3447c57773064b538d7608627f50474e799d",
+  "mode": "Known, reviewed JSONL SOP through the trusted local runner; Docker and live GitHub outcome are unverified",
+  "tests": [
+    {
+      "test": 0,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 1,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 2,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 3,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 4,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 5,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 6,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 7,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 8,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 9,
+      "passed": true,
+      "file_assertions": []
+    },
+    {
+      "test": 10,
+      "passed": true,
+      "file_assertions": [
+        "audit-report.json"
+      ]
+    }
+  ],
+  "passed": true
+}

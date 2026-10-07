@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voxelcraft &mdash; a Minecraft-like sandbox in the browser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="A browser voxel sandbox: mine and place blocks in an infinite
+seeded world. No build step, no dependencies beyond a vendored matrix library.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- The 3D view. Everything else is drawn over it with plain HTML and CSS. -->
+<canvas id="view" width="1280" height="720">
+  <p>Your browser could not show this canvas.</p>
+</canvas>
+
+<!-- HUD: drawn as DOM so it stays crisp and needs no second render pass. -->
+<div id="hud">
+  <div id="crosshair"><span class="ch-v"></span><span class="ch-h"></span></div>
+  <div id="debug" class="mono"></div>
+  <div id="water-hint">underwater</div>
+  <div id="fly-hint">flying</div>
+  <div id="hotbar"></div>
+  <div id="toast"></div>
+</div>
+
+<!-- Start / pause screen. Doubles as the place where a startup failure is explained. -->
+<div id="overlay">
+  <div class="panel">
+    <h1>Voxelcraft</h1>
+    <p class="tagline">A block world in your browser. Dig, build, explore.</p>
+
+    <div id="start-buttons">
+      <button id="start-btn" class="primary">Click to play</button>
+      <button id="resume-btn" class="primary hidden">Resume</button>
+      <button id="save-btn">Save now</button>
+    </div>
+
+    <p id="lock-note" class="note"></p>
+
+    <div id="help">
+      <h2>Controls</h2>
+      <dl>
+        <dt>W A S D</dt><dd>walk (arrow keys work too)</dd>
+        <dt>Mouse</dt><dd>look around &mdash; click the world to capture the mouse;
+          if your browser refuses that, drag instead</dd>
+        <dt>Left click / hold</dt><dd>break the block under the crosshair</dd>
+        <dt>Right click / hold</dt><dd>place the held block</dd>
+        <dt>Middle click</dt><dd>pick the block you are looking at</dd>
+        <dt>1 &hellip; 9, mouse wheel</dt><dd>choose a block</dd>
+        <dt>Space</dt><dd>jump, swim up, fly up (when flying)</dd>
+        <dt>C or Ctrl</dt><dd>descend (when flying)</dd>
+        <dt>Shift</dt><dd>sprint</dd>
+        <dt>F</dt><dd>toggle flying</dd>
+        <dt>T</dt><dd>advance the time of day</dd>
+        <dt>R</dt><dd>level the view</dd>
+        <dt>G or F3</dt><dd>show or hide the debug readout</dd>
+        <dt>M</dt><dd>sound on or off</dd>
+        <dt>P</dt><dd>save</dd>
+        <dt>Page Up / Page Down</dt><dd>view distance</dd>
+        <dt>Tab</dt><dd>show or hide this list</dd>
+        <dt>Esc</dt><dd>menu</dd>
+      </dl>
+      <p class="fine">Blocks are one metre each. Bedrock cannot be broken. Your building is
+        saved in this browser, so coming back later restores the world you left.</p>
+    </div>
+
+    <div class="settings">
+      <h2>Settings</h2>
+      <label>View distance <output id="dist-out"></output>
+        <input id="dist-range" type="range" min="48" max="176" step="16" value="104">
+      </label>
+      <label>Field of view <output id="fov-out"></output>
+        <input id="fov-range" type="range" min="40" max="110" step="1" value="72">
+      </label>
+      <label>Mouse sensitivity <output id="sens-out"></output>
+        <input id="sens-range" type="range" min="0.0005" max="0.01" step="0.0005" value="0.0027">
+      </label>
+      <button id="sound-toggle">sound: on</button>
+    </div>
+
+    <div class="world-settings">
+      <h2>New world</h2>
+      <p>Current seed: <span id="seed-out" class="mono"></span></p>
+      <label>Seed
+        <input id="seed-input" type="text" inputmode="numeric" placeholder="leave empty for random">
+      </label>
+      <button id="random-seed">Random seed</button>
+      <button id="new-world">Generate a new world</button>
+      <p class="fine">Making a new world discards your current building.</p>
+    </div>
+
+    <div id="fatal" class="hidden"></div>
+  </div>
+</div>
+
+<noscript><p class="noscript">This game needs JavaScript turned on.</p></noscript>
+
+<!-- Vendored, not generated: gl-matrix for the maths, nothing else. Loaded first so the
+     modules below can capture mat4/vec3 at load time. -->
+<script src="lib/gl-matrix.min.js"></script>
+
+<!-- Load order matters: config defines every constant other modules read at load time,
+     and light.js must come before world.js because the world holds a light reference. -->
+<script src="src/config.js"></script>
+<script src="src/noise.js"></script>
+<script src="src/blocks.js"></script>
+<script src="src/glm.js"></script>
+<script src="src/light.js"></script>
+<script src="src/world.js"></script>
+<script src="src/mesher.js"></script>
+<script src="src/raycast.js"></script>
+<script src="src/textures.js"></script>
+<script src="src/clouds.js"></script>
+<script src="src/player.js"></script>
+<script src="src/renderer.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/save.js"></script>
+<script src="src/game.js"></script>
+<script src="src/boot.js"></script>
+
+</body>
+</html>

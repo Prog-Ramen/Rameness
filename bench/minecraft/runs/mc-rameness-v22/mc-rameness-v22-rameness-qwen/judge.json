@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 6,
+ "world": 6,
+ "ui": 6,
+ "notes": "Decent voxel terrain with trees, water, and a hotbar, but repeated-texture cliff banding, a floating gray block, and no visible crosshair or health/hunger HUD hurt the effect.",
+ "overall": 6.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0700054
+}

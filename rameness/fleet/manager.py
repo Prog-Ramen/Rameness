@@ -25,6 +25,7 @@ import re
 import sys
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from .. import config as config_mod
@@ -96,35 +97,52 @@ QUESTION_CLASS = {
 }
 
 INTAKE = [
-    Option("delegate", "fix add implement change update write rename bug feature file function test single focused task"),
+    Option("delegate", "fix add implement change update write rename bug feature file function test single focused task",
+           desc="A single focused task one agent can do directly."),
     Option("decompose", "build system project app platform multiple several parts components and also then plus "
-                        "end to end migrate across modules frontend backend pipeline full"),
+                        "end to end migrate across modules frontend backend pipeline full",
+           desc="A large task with several parts that should be split into sub-tasks for multiple agents."),
     Option("research", "investigate research find out compare evaluate analyze why explore report survey options "
-                       "audit review understand benchmark"),
-    Option("clarify", "something stuff thing it that help improve better do make"),
+                       "audit review understand benchmark",
+           desc="A question to investigate, compare or analyze and report on, rather than something to build."),
+    Option("clarify", "something stuff thing it that help improve better do make",
+           desc="The request is too vague to act on; ask the director what they want first."),
 ]
 ROLE = [
-    Option("associate", "small focused single file function fix test one step quick"),
-    Option("lead", "large multi part subsystem several components service feature set module migration project"),
+    Option("associate", "small focused single file function fix test one step quick",
+           desc="One agent can do this alone: it is small and focused."),
+    Option("lead", "large multi part subsystem several components service feature set module migration project",
+           desc="It is large enough that a lead should manage sub-agents for its parts."),
 ]
 FAILURE = [
-    Option("retry", "timeout flaky network transient rate limit connection interrupted killed lost"),
-    Option("stronger", "wrong incorrect confused could not failed tests reasoning complex hard gave up max turns loop"),
-    Option("fork", "stuck approach alternative different strategy dead end"),
-    Option("escalate", "permission denied credentials access approval unclear requirement ambiguous decision"),
-    Option("abandon", "impossible not applicable duplicate obsolete cancelled"),
+    Option("retry", "timeout flaky network transient rate limit connection interrupted killed lost",
+           desc="The failure looks transient (timeout, network, rate limit); retry the same way."),
+    Option("stronger", "wrong incorrect confused could not failed tests reasoning complex hard gave up max turns loop",
+           desc="The agent was not capable enough (wrong result, failing tests, gave up); retry with a stronger model."),
+    Option("fork", "stuck approach alternative different strategy dead end",
+           desc="The approach hit a dead end; try alternative approaches in parallel."),
+    Option("escalate", "permission denied credentials access approval unclear requirement ambiguous decision",
+           desc="It needs something only the director can give: permission, credentials, or a decision on unclear requirements."),
+    Option("abandon", "impossible not applicable duplicate obsolete cancelled",
+           desc="The task is impossible, obsolete or a duplicate; stop working on it."),
 ]
 STALL = [
-    Option("nudge", "waiting idle prompt input quiet no output"),
-    Option("wait", "building compiling downloading installing training long running tests progress"),
-    Option("restart", "hung frozen stuck deadlock crashed"),
-    Option("escalate", "blocked needs approval credentials"),
+    Option("nudge", "waiting idle prompt input quiet no output",
+           desc="The agent seems idle or waiting for input; send it a nudge."),
+    Option("wait", "building compiling downloading installing training long running tests progress",
+           desc="The agent is busy with a long-running step (building, installing, running tests); keep waiting."),
+    Option("restart", "hung frozen stuck deadlock crashed",
+           desc="The agent is hung or crashed; restart it."),
+    Option("escalate", "blocked needs approval credentials",
+           desc="The agent is blocked on an approval or credentials only the director can provide."),
 ]
 QUESTION = [
     Option("answer", "which file where how default convention naming format technical detail library version "
-                     "path command test framework style"),
+                     "path command test framework style",
+           desc="A technical question the manager can answer itself (files, conventions, commands, libraries)."),
     Option("escalate", "approve permission cost budget delete production deploy credentials secret merge publish "
-                       "priority preference business product decision scope pay legal"),
+                       "priority preference business product decision scope pay legal",
+           desc="A question the director must answer: approvals, cost, destructive or production actions, secrets, priorities or product decisions."),
 ]
 
 DECOMPOSE_SYSTEM = """You are the manager of a team of AI agents. Break the request into the smallest set of
@@ -541,7 +559,8 @@ class Fleet:
         if not idle:
             return None
         opts = [Option(a["id"], f"{a['title']} {a['task'][:300]}") for a in idle[-8:]] + [
-            Option("new", "unrelated new different separate fresh task")]
+            Option("new", "unrelated new different separate fresh task",
+                   desc="This is a new, unrelated task, not a follow-up to any agent's recent work.")]
         chosen, _ = self.decide(self.manager["id"], "Is this a follow-up for an agent that just finished related work?",
                                 text, opts, "new", payload=payload)
         if chosen is None:
@@ -550,7 +569,7 @@ class Fleet:
 
     def _role(self, a: dict) -> str | None:
         prior = {"large": (0.6, 1.5), "small": (1.4, 0.6)}.get(a["meta"].get("size", ""), (1, 1))
-        opts = [Option(o.id, o.text, p) for o, p in zip(ROLE, prior)]
+        opts = [replace(o, prior=p) for o, p in zip(ROLE, prior)]
         chosen, _ = self.decide(a["id"], "Should one agent do this, or should a lead manage sub-agents for it?",
                                 a["task"], opts, "associate")
         return chosen
@@ -581,9 +600,11 @@ class Fleet:
         chosen, probs = self.decide(a["id"], "Is the best approach uncertain enough to try alternatives in parallel?",
                                     a["task"], [Option("fork", "optimize performance speed faster experiment try "
                                                        "approaches alternatives compare best uncertain tune algorithm "
-                                                       "design explore prototype benchmark"),
+                                                       "design explore prototype benchmark",
+                                                       desc="The best approach is uncertain (optimization, experiments, design choices); try several in parallel."),
                                                 Option("single", "simple straightforward fix rename add update "
-                                                       "documented small typo config write test")], "single")
+                                                       "documented small typo config write test",
+                                                       desc="The approach is clear; one attempt is enough.")], "single")
         if chosen is None:
             return None
         if (chosen != "fork" or probs.get("fork", 0) < self.cfg["fork_threshold"]
@@ -811,8 +832,9 @@ class Fleet:
                 self._stalled(a, b.read(h, 30))
 
     def _stalled(self, a: dict, tail: str) -> None:
+        # the decision summary: what the agent is doing and the last thing it printed
         action, _ = self.decide(a["id"], "This agent has produced no output for a while. What now?",
-                                f"{a['task'][:300]}\n{tail}", STALL, "wait")
+                                f"Task: {a['title']}\nLast output:\n{tail[-800:]}", STALL, "wait")
         if action is None:
             return
         self.store.update_agent(a["id"], meta={**a["meta"], "stall_handled_at": time.time()})
@@ -859,7 +881,7 @@ class Fleet:
                                 ["retry", "abandon", "<instructions>"], kind="failure")
             return
         action, _ = self.decide(a["id"], "An agent failed. What should the manager do?",
-                                f"{a['task'][:300]}\nError: {(a['result'] or '')[-600:]}", FAILURE, "retry")
+                                f"Task: {a['title']}\nError: {(a['result'] or '')[-600:]}", FAILURE, "retry")
         if action is None:
             if not a["meta"].get("failure_pending"):
                 self.store.update_agent(a["id"], meta={**a["meta"], "failure_pending": True})
@@ -928,8 +950,10 @@ class Fleet:
         if self.autonomy in ("autopilot", "godmode"):
             verdict, _ = self.decide(a["id"], "Should this finished work be merged?",
                                      f"{a['title']} {(a['result'] or '')[-400:]}",
-                                     [Option("merge", "done complete tests pass verified finished works"),
-                                      Option("keep branch", "partial incomplete unverified experimental failing risky")],
+                                     [Option("merge", "done complete tests pass verified finished works",
+                                             desc="The work is complete and verified (tests pass); merge it."),
+                                      Option("keep branch", "partial incomplete unverified experimental failing risky",
+                                             desc="The work is partial, unverified, failing or risky; keep it on its branch for review.")],
                                      "keep branch")
             self._apply_merge_answer(a, verdict or "keep branch")
             self.store.event(a["id"], "merge-decision", f"JEV ({self.autonomy}): {verdict}")

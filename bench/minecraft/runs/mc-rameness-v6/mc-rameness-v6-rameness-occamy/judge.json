@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 1,
+ "world": 0,
+ "ui": 3,
+ "notes": "Only a sky gradient and hotbar/crosshair are visible, with no terrain, blocks, or world geometry rendered at all.",
+ "overall": 1.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06956040000000001
+}

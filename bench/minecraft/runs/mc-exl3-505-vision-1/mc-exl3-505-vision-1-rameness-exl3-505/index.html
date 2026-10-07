@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Blockcraft &mdash; a browser voxel sandbox</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%237c5836'/><rect y='0' width='16' height='5' fill='%2357a13a'/></svg>">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- ============ HUD ============ -->
+<div id="hud" class="hidden">
+  <div id="crosshair" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+
+  <div id="target-tip"></div>
+
+  <div id="hud-bottom">
+    <div id="stats-bars">
+      <div id="health" class="bar-row" title="Health"></div>
+      <div id="air" class="bar-row hidden" title="Breath"></div>
+    </div>
+    <div id="hotbar"></div>
+    <div id="hotbar-label"></div>
+  </div>
+
+  <div id="debug" class="hidden"></div>
+  <div id="subtitle"></div>
+  <div id="damage-flash"></div>
+  <div id="water-overlay"></div>
+</div>
+
+<!-- ============ Loading ============ -->
+<div id="loading">
+  <div class="load-inner">
+    <div class="title">BLOCKCRAFT</div>
+    <div class="load-bar"><div id="load-fill"></div></div>
+    <div id="load-text">Building terrain&hellip;</div>
+  </div>
+</div>
+
+<!-- ============ Start menu ============ -->
+<div id="menu-start" class="menu hidden">
+  <div class="panel">
+    <h1 class="game-title">BLOCKCRAFT</h1>
+    <p class="tagline">an infinite voxel world in your browser</p>
+
+    <label class="field">
+      <span>World seed</span>
+      <div class="row">
+        <input id="seed-input" type="text" spellcheck="false" placeholder="leave empty for a random world">
+        <button id="btn-reroll" class="btn small" title="Random seed">&#8635;</button>
+      </div>
+    </label>
+
+    <div class="row btns">
+      <button id="btn-play" class="btn primary">Play</button>
+      <button id="btn-new" class="btn">New world</button>
+    </div>
+
+    <div class="row btns">
+      <button id="btn-settings" class="btn">Settings</button>
+      <button id="btn-help" class="btn">Controls</button>
+    </div>
+
+    <p class="foot">Click the world to capture the mouse &middot; <kbd>Esc</kbd> to release it</p>
+  </div>
+</div>
+
+<!-- ============ Pause menu ============ -->
+<div id="menu-pause" class="menu hidden">
+  <div class="panel">
+    <h2>Game paused</h2>
+    <div class="col btns">
+      <button id="btn-resume" class="btn primary">Back to game</button>
+      <button id="btn-save" class="btn">Save world</button>
+      <button id="btn-settings2" class="btn">Settings</button>
+      <button id="btn-help2" class="btn">Controls</button>
+      <button id="btn-quit" class="btn danger">Main menu</button>
+    </div>
+    <p class="foot" id="pause-foot"></p>
+  </div>
+</div>
+
+<!-- ============ Settings ============ -->
+<div id="menu-settings" class="menu hidden">
+  <div class="panel">
+    <h2>Settings</h2>
+    <div class="col">
+      <label class="slider"><span>Render distance <b id="v-dist">6</b> chunks</span>
+        <input id="s-dist" type="range" min="2" max="12" step="1" value="6"></label>
+      <label class="slider"><span>Field of view <b id="v-fov">72</b>&deg;</span>
+        <input id="s-fov" type="range" min="55" max="110" step="1" value="72"></label>
+      <label class="slider"><span>Mouse sensitivity <b id="v-sens">100</b>%</span>
+        <input id="s-sens" type="range" min="20" max="300" step="5" value="100"></label>
+      <label class="slider"><span>Resolution scale <b id="v-scale">100</b>%</span>
+        <input id="s-scale" type="range" min="50" max="150" step="10" value="100"></label>
+      <label class="slider"><span>Sound volume <b id="v-vol">60</b>%</span>
+        <input id="s-vol" type="range" min="0" max="100" step="5" value="60"></label>
+      <label class="check"><input id="c-bob" type="checkbox" checked> View bobbing</label>
+      <label class="check"><input id="c-smooth" type="checkbox" checked> Smooth lighting</label>
+      <label class="check"><input id="c-mip" type="checkbox" checked> Texture mipmapping</label>
+      <label class="check"><input id="c-clouds" type="checkbox" checked> Clouds</label>
+      <label class="check"><input id="c-auto" type="checkbox" checked> Autosave every 30s</label>
+    </div>
+    <div class="row btns"><button id="btn-close-settings" class="btn primary">Done</button></div>
+  </div>
+</div>
+
+<!-- ============ Controls ============ -->
+<div id="menu-help" class="menu hidden">
+  <div class="panel wide">
+    <h2>Controls</h2>
+    <div class="cols">
+      <table class="keys">
+        <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Move</td></tr>
+        <tr><td><kbd>Space</kbd></td><td>Jump / swim up / fly up</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>Sneak (slow, can't walk off edges)</td></tr>
+        <tr><td><kbd>Ctrl</kbd> / <kbd>Alt</kbd></td><td>Sprint</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Toggle flying (double-tap <kbd>Space</kbd> too)</td></tr>
+        <tr><td><kbd>E</kbd> / <kbd>1</kbd>&hellip;<kbd>9</kbd></td><td>Creative inventory / hotbar slot</td></tr>
+        <tr><td><kbd>Mouse wheel</kbd></td><td>Cycle hotbar</td></tr>
+      </table>
+      <table class="keys">
+        <tr><td><kbd>Left click</kbd></td><td>Mine block (hold to keep mining)</td></tr>
+        <tr><td><kbd>Right click</kbd></td><td>Place block / interact</td></tr>
+        <tr><td><kbd>Middle click</kbd></td><td>Pick block into hand</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Time: day &rarr; night &rarr; noon</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Respawn at spawn point</td></tr>
+        <tr><td><kbd>F3</kbd></td><td>Debug overlay</td></tr>
+        <tr><td><kbd>F5</kbd></td><td>Save world</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Pause / release mouse</td></tr>
+      </table>
+    </div>
+    <p class="foot">Survival bits: fall damage is real, deep water drowns you, and bedrock is unbreakable.
+      Everything else in the terrain can be mined &mdash; it goes into your inventory and can be placed back.</p>
+    <div class="row btns"><button id="btn-close-help" class="btn primary">Close</button></div>
+  </div>
+</div>
+
+<!-- ============ Creative inventory ============ -->
+<div id="inventory" class="hidden">
+  <div class="inv-panel">
+    <h3>Creative inventory</h3>
+    <div id="inv-grid"></div>
+    <p class="foot">Click a block to put it in the selected hotbar slot &middot; <kbd>E</kbd> to close</p>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+<noscript><p style="color:#fff;padding:2rem;font-family:monospace">This game needs JavaScript and WebGL.</p></noscript>
+</body>
+</html>

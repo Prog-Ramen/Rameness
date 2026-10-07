@@ -1,0 +1,10 @@
+{
+ "minecraft": 2,
+ "rendering": 2,
+ "world": 0,
+ "ui": 7,
+ "notes": "The screenshot shows only a flat blue sky with no terrain, blocks or world visible, though the HUD, crosshair and textured hotbar are present and tidy.",
+ "overall": 2.75,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.049998600000000004
+}

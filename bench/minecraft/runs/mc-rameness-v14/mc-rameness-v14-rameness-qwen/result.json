@@ -1,0 +1,141 @@
+{
+ "run": "mc-rameness-v14-rameness-qwen",
+ "harness": "rameness",
+ "model": "qwen3.8-27b",
+ "model_label": "Qwen3.8-27B IQ3_S",
+ "server": "local-8033",
+ "wall_seconds": 9000.0,
+ "timed_out": true,
+ "exit_code": -15,
+ "game_dir": ".",
+ "cost_usd": null,
+ "llm_requests": 292,
+ "llm_errors": 0,
+ "prompt_tokens_total": 18070573,
+ "cached_tokens_total": 17467942,
+ "completion_tokens_total": 232822,
+ "context_tokens_max": 81706,
+ "tool_calls_total": 314,
+ "compactions": 7,
+ "llm_seconds_total": 6527.24,
+ "gen_tps_mean": 39.08,
+ "context_window": 100000,
+ "slots": 1,
+ "reasoning_budget": 5000,
+ "context_utilization": 0.817,
+ "compactions_logged": 11,
+ "score": 100.0,
+ "passed": 14,
+ "fps": 30.4,
+ "loc": 54563,
+ "files": 11,
+ "block_count": null,
+ "page_errors": 0,
+ "checks": {
+  "index_html": true,
+  "page_loads": true,
+  "no_page_errors": true,
+  "clean_console": true,
+  "webgl_canvas": true,
+  "renders_scene": true,
+  "has_ui_overlay": true,
+  "walks": true,
+  "mouse_look": true,
+  "jumps": true,
+  "breaks_block": true,
+  "places_block": true,
+  "number_keys": true,
+  "fps_15": true
+ },
+ "score_detail": {
+  "checks": {
+   "index_html": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "page_loads": {
+    "pass": true,
+    "detail": "200",
+    "passes": "3/3"
+   },
+   "no_page_errors": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "clean_console": {
+    "pass": true,
+    "detail": "0 console errors",
+    "passes": "3/3"
+   },
+   "webgl_canvas": {
+    "pass": true,
+    "detail": "1280x800",
+    "passes": "3/3"
+   },
+   "renders_scene": {
+    "pass": true,
+    "detail": "249 colours, dominant 26%",
+    "passes": "3/3"
+   },
+   "has_ui_overlay": {
+    "pass": true,
+    "detail": "25 visible UI elements over the canvas",
+    "passes": "3/3"
+   },
+   "walks": {
+    "pass": true,
+    "detail": "best of WASD: change 26.5% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "mouse_look": {
+    "pass": true,
+    "detail": "change 37.0% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "jumps": {
+    "pass": true,
+    "detail": "peak 12.9%, settled 0.0%, idle 0.0%",
+    "passes": "3/3"
+   },
+   "breaks_block": {
+    "pass": true,
+    "detail": "crosshair change 9.6% vs idle 0.0% (aim 2)",
+    "passes": "3/3"
+   },
+   "places_block": {
+    "pass": true,
+    "detail": "crosshair change 39.2% vs idle 0.0% (aim 1)",
+    "passes": "3/3"
+   },
+   "number_keys": {
+    "pass": true,
+    "detail": "change 0.2% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "fps_15": {
+    "pass": true,
+    "detail": "30.3 fps (software WebGL)",
+    "passes": "3/3"
+   }
+  },
+  "fps": 30.4,
+  "page_errors": [],
+  "console_errors": 0,
+  "api": null,
+  "files": 11,
+  "loc": 54563,
+  "bytes": 1322436,
+  "start_button": "Click to play \u00a0\u00b7\u00a0 Esc to pause",
+  "passed": 14,
+  "total": 14,
+  "score": 100.0,
+  "score_seconds": 38.7,
+  "score_runs": [
+   100.0,
+   100.0,
+   100.0
+  ]
+ }
+}

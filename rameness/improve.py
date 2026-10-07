@@ -11,7 +11,7 @@ Improvement paths, from cheapest to richest:
    ``w = exp(lr * (wins - misses))`` clipped to [0.5, 2], rebuilt from all feedback.
 2. ``propose(llm)`` - a model reads the misdecisions for a question and proposes
    extra cue text per option. Proposals are reviewed and applied by a human.
-3. ``export()``     - a labelled JSONL training set for fine-tuning an open-source JEV.
+3. ``export()``     - a labelled JSONL training set for fine-tuning Laya on your own decisions.
 
 Both 1 and 2 land in ``jev_tuning.json``, which the running JEV hot-reloads.
 """

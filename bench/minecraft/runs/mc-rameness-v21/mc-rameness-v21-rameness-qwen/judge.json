@@ -1,0 +1,10 @@
+{
+ "minecraft": 7,
+ "rendering": 6,
+ "world": 6,
+ "ui": 7,
+ "notes": "Solid blocky terrain, trees, and water with hotbar/crosshair/debug HUD, but a stray floating triangular geometry glitch near the player breaks the clean voxel look.",
+ "overall": 6.5,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.07074040000000001
+}

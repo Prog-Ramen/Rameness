@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 0,
+ "ui": 3,
+ "notes": "The world is completely broken/invisible (just sky and a thin line of tree-tip sprites), leaving only the hotbar and debug HUD as evidence of a Minecraft-like game.",
+ "overall": 1.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0697304
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voxelcraft — a tiny Minecraft in the browser</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="gl"></canvas>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="top-left">
+      <div id="fps">-- fps</div>
+      <div id="coords"></div>
+    </div>
+    <div id="sel-name">Grass</div>
+    <div id="hotbar"></div>
+    <div id="hint"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel">
+      <h1>Voxelcraft</h1>
+      <p class="tag">A tiny Minecraft clone that runs entirely in your browser — no install, no build step.</p>
+      <ul>
+        <li><b>Click the world</b> to capture the mouse and start playing</li>
+        <li><b>W A S D</b> move &nbsp;·&nbsp; <b>Mouse</b> look</li>
+        <li><b>Space</b> jump / swim &nbsp;·&nbsp; <b>Ctrl</b> sprint (fly fast) &nbsp;·&nbsp; <b>Shift</b> sneak (fly down)</li>
+        <li><b>F</b> toggle fly mode</li>
+        <li><b>Left click</b> break block &nbsp;·&nbsp; <b>Right click</b> place block</li>
+        <li><b>1–9, 0 / wheel</b> pick block from hotbar</li>
+        <li><b>Esc</b> release the mouse</li>
+      </ul>
+      <p class="note">Your edits are saved in this browser (localStorage) and survive a reload.
+      The world is generated procedurally — caves, water, sand, and trees included.</p>
+      <div id="overlay-title" hidden></div>
+    </div>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/textures.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

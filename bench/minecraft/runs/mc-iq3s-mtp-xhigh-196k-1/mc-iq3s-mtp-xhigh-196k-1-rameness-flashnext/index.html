@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Voxelcraft &mdash; a browser Minecraft clone</title>
+<link rel="icon" href="textures/atlas.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="viewport">
+  <canvas id="game"></canvas>
+
+  <!-- in-game overlay: crosshair, hotbar, status, debug read-outs -->
+  <div id="hud" class="hidden">
+    <div id="crosshair" aria-hidden="true"></div>
+    <div id="water-tint"></div>
+    <div id="hurt-flash"></div>
+    <div id="stats" class="panel">
+      <div><b>Voxelcraft</b> <span class="dim">F3 hides this</span></div>
+      <div>XYZ <span id="s-pos"></span> &nbsp; facing <span id="s-face"></span></div>
+      <div>chunk <span id="s-chunk"></span> &nbsp; loaded <span id="s-chunks"></span></div>
+      <div>tris <span id="s-tris"></span> &nbsp; meshes/s <span id="s-built"></span></div>
+      <div>fps <span id="s-fps"></span> &nbsp; ms <span id="s-ms"></span></div>
+      <div>time <span id="s-time"></span> &nbsp; sun <span id="s-sun"></span></div>
+      <div id="s-target"></div>
+      <div class="dim">WASD move &middot; Space jump &middot; Ctrl sprint &middot; Shift sneak<br>
+        double-Space fly &middot; LMB dig &middot; RMB place &middot; MMB pick &middot; 1-9 wheel select<br>
+        T time&nbsp;forward &middot; G gap/walk-up &middot; P pause &middot; Esc release mouse</div>
+    </div>
+    <div id="status">
+      <div id="hearts"></div>
+      <div id="bubbles"></div>
+    </div>
+    <div id="hotbar"></div>
+    <div id="toasts"></div>
+  </div>
+
+  <!-- loading -->
+  <div id="loading" class="center-screen hidden">
+    <div class="card">
+      <h1>Generating world&hellip;</h1>
+      <div class="bar"><div id="load-bar"></div></div>
+      <div id="load-text" class="dim">warming up chunks</div>
+    </div>
+  </div>
+
+  <!-- start screen -->
+  <div id="start" class="center-screen">
+    <div class="card">
+      <h1 class="title">VOXELCRAFT</h1>
+      <p class="dim">A Minecraft-style voxel sandbox that runs straight from static files &mdash;
+        no build step, no bundler.</p>
+      <div class="row">
+        <label for="seed">Seed</label>
+        <input id="seed" type="text" placeholder="leave empty for random">
+        <button id="btn-random" class="ghost" title="random seed">&#8635;</button>
+      </div>
+      <div class="row buttons">
+        <button id="btn-play" class="primary">Play</button>
+        <button id="btn-continue">Continue saved world</button>
+      </div>
+      <div id="start-note" class="dim"></div>
+      <div class="help">
+        <h2>Controls</h2>
+        <table>
+          <tr><td>Mouse</td><td>look around (click the world to capture the mouse)</td></tr>
+          <tr><td>W A S D</td><td>move &middot; Shift sneak &middot; Ctrl sprint</td></tr>
+          <tr><td>Space</td><td>jump &middot; double-tap to toggle flying</td></tr>
+          <tr><td>Left mouse</td><td>dig the targeted block (hold it)</td></tr>
+          <tr><td>Right mouse</td><td>place the selected block</td></tr>
+          <tr><td>Middle mouse</td><td>pick the targeted block</td></tr>
+          <tr><td>1&ndash;9 / wheel</td><td>choose a hotbar slot</td></tr>
+          <tr><td>T</td><td>advance time of day</td></tr>
+          <tr><td>F3 / P / Esc</td><td>debug panel &middot; pause menu</td></tr>
+        </table>
+        <p class="dim">Progress saves automatically to this browser. Dig deep, build tall, mind the drop.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- pause / settings -->
+  <div id="pause" class="center-screen hidden">
+    <div class="card">
+      <h1>Paused</h1>
+      <div class="settings">
+        <label>Render distance <output id="o-dist"></output>
+          <input id="r-dist" type="range" min="2" max="12" step="1"></label>
+        <label>Field of view <output id="o-fov"></output>
+          <input id="r-fov" type="range" min="55" max="110" step="1"></label>
+        <label>Mouse sensitivity <output id="o-sens"></output>
+          <input id="r-sens" type="range" min="0.2" max="3" step="0.05"></label>
+        <label>Volume <output id="o-vol"></output>
+          <input id="r-vol" type="range" min="0" max="1" step="0.05"></label>
+        <label>Day length <output id="o-day"></output>
+          <input id="r-day" type="range" min="60" max="2400" step="30"></label>
+        <label class="check"><input id="r-sound" type="checkbox"> Sound effects</label>
+        <label class="check"><input id="r-fancy" type="checkbox"> Clouds, sun &amp; stars</label>
+      </div>
+      <div class="row buttons">
+        <button id="btn-resume" class="primary">Resume</button>
+        <button id="btn-save">Save now</button>
+        <button id="btn-new" class="danger">New world</button>
+      </div>
+      <div id="pause-note" class="dim"></div>
+    </div>
+  </div>
+
+  <!-- death -->
+  <div id="death" class="center-screen hidden">
+    <div class="card">
+      <h1 class="danger-text">You died!</h1>
+      <div id="death-cause" class="dim"></div>
+      <div class="row buttons"><button id="btn-respawn" class="primary">Respawn</button></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

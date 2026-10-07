@@ -1,0 +1,10 @@
+{
+ "minecraft": 0,
+ "rendering": 0,
+ "world": 0,
+ "ui": 1,
+ "notes": "Only the start menu screen is shown with no actual game world rendered (FPS: 0), so nothing can be graded for the game itself.",
+ "overall": 0.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.06955040000000001
+}

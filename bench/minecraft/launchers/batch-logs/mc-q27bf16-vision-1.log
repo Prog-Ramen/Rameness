@@ -1,0 +1,5 @@
+[bench] cleared 24 leftover /tmp entries of bench
+[mc-q27bf16-vision-1-rameness-q27bf16] start (context window 80000 x 1 slots, reasoning budget 5000)
+[bench] stopped 1 process(es) the run left running
+[mc-q27bf16-vision-1-rameness-q27bf16] done in 114.0 min: score 100.0 (14/14), 238 requests, max context 51112/80000, compactions 8 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-q27bf16-vision-1/results.json

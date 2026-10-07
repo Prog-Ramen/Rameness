@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Blockcraft — a tiny Minecraft in the browser</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a0d18; font-family: 'Segoe UI', system-ui, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; color: #fff; user-select: none; }
+
+  .crosshair {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font: 700 22px/1 monospace; color: rgba(255,255,255,.85);
+    text-shadow: 0 0 3px rgba(0,0,0,.8);
+  }
+
+  .hotbar {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px;
+    background: rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.25); border-radius: 6px;
+  }
+  .slot {
+    width: 52px; height: 52px; position: relative;
+    background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.28); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot.selected { border-color: #fff; background: rgba(255,255,255,.22); box-shadow: 0 0 8px rgba(255,255,255,.5); }
+  .slot canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+  .slotname { position: absolute; top: 1px; left: 3px; font: 700 10px monospace; color: #ddd; text-shadow: 0 1px 2px #000; }
+  .hotbar-name {
+    position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%);
+    font: 600 14px/1 'Segoe UI', sans-serif; text-shadow: 0 1px 3px #000; letter-spacing: .4px;
+  }
+
+  .toasts { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .toast {
+    background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 6px; font-size: 14px;
+    transition: opacity .35s; border: 1px solid rgba(255,255,255,.2);
+  }
+
+  .debug {
+    position: absolute; left: 10px; top: 10px; margin: 0;
+    font: 12px/1.45 ui-monospace, Consolas, monospace; color: #eef;
+    text-shadow: 0 1px 2px #000; background: rgba(0,0,0,.25); padding: 6px 8px; border-radius: 4px;
+    white-space: pre;
+  }
+
+  .water-overlay { position: absolute; inset: 0; background: rgba(20,60,160,.35); }
+
+  .menu { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,8,18,.55); pointer-events: auto; }
+  .menu-box {
+    background: rgba(10,14,26,.92); border: 1px solid rgba(255,255,255,.18);
+    padding: 34px 44px; border-radius: 12px; text-align: center;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6); max-width: 560px;
+  }
+  .title { margin: 0; font-size: 44px; letter-spacing: 6px; font-weight: 800;
+    background: linear-gradient(180deg, #bfe26b, #5aa52c 55%, #3c7a1d);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 3px 0 rgba(0,0,0,.35); }
+  .subtitle { margin: 6px 0 18px; color: #9fb0d8; font-size: 14px; }
+  .controls {
+    text-align: left; display: inline-block; font: 12.5px/1.7 ui-monospace, Consolas, monospace;
+    color: #cdd8f5; background: rgba(255,255,255,.05); padding: 12px 18px; border-radius: 8px;
+  }
+  .seed-row { margin: 18px 0 6px; }
+  .seed-input {
+    width: 240px; padding: 9px 12px; font-size: 14px; color: #eaf;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.3); border-radius: 6px; outline: none;
+  }
+  .seed-input:focus { border-color: #8fd0ff; }
+  .menu-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .btn {
+    pointer-events: auto; cursor: pointer; font: 600 15px 'Segoe UI', sans-serif; color: #dfe6ff;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+    padding: 10px 22px; border-radius: 8px; transition: background .15s, transform .05s;
+  }
+  .btn:hover { background: rgba(255,255,255,.2); }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: linear-gradient(180deg,#69b53c,#3f8a20); border-color: #7ecb52; color: #fff; }
+  .btn.primary:hover { background: linear-gradient(180deg,#79c54a,#4a9c29); }
+  .save-state { margin-top: 16px; font-size: 12.5px; color: #9fb0d8; }
+  .tip { margin-top: 10px; font-size: 12px; color: #ffd97a; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"></div>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

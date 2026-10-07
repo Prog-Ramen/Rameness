@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 6,
+ "world": 5,
+ "ui": 8,
+ "notes": "It has a recognizable blocky voxel look with textured trees, a hotbar and a crosshair. The giant trees and the flat, smeared grass make it look odd, and the terrain variety and water are limited. Some tree faces are very dark.",
+ "overall": 6.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0562554
+}

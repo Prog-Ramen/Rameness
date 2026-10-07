@@ -1,0 +1,10 @@
+{
+ "minecraft": 3,
+ "rendering": 2,
+ "world": 2,
+ "ui": 6,
+ "notes": "Terrain geometry is badly broken with thin flat shards and stretched polygons floating in a void, only the hotbar/crosshair UI resembles Minecraft.",
+ "overall": 3.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0697236
+}

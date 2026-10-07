@@ -1,0 +1,140 @@
+{
+ "run": "mc-main-1-claude-code-claude",
+ "harness": "claude-code",
+ "model": "claude-opus-5-5",
+ "model_label": "Claude Opus 5.5",
+ "server": "anthropic",
+ "wall_seconds": 819.8,
+ "timed_out": false,
+ "exit_code": 0,
+ "game_dir": ".",
+ "cost_usd": 3.4464830000000006,
+ "llm_requests": 26,
+ "llm_errors": 0,
+ "prompt_tokens_total": 2600842,
+ "cached_tokens_total": 2446875,
+ "completion_tokens_total": 86279,
+ "context_tokens_max": 128550,
+ "tool_calls_total": 34,
+ "llm_seconds_total": 762.777,
+ "gen_tps_mean": 179.78,
+ "score": 100.0,
+ "passed": 14,
+ "fps": 35.6,
+ "loc": 1729,
+ "files": 10,
+ "block_count": null,
+ "page_errors": 0,
+ "checks": {
+  "index_html": true,
+  "page_loads": true,
+  "no_page_errors": true,
+  "clean_console": true,
+  "webgl_canvas": true,
+  "renders_scene": true,
+  "has_ui_overlay": true,
+  "walks": true,
+  "mouse_look": true,
+  "jumps": true,
+  "breaks_block": true,
+  "places_block": true,
+  "number_keys": true,
+  "fps_15": true
+ },
+ "score_detail": {
+  "checks": {
+   "index_html": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "page_loads": {
+    "pass": true,
+    "detail": "200",
+    "passes": "3/3"
+   },
+   "no_page_errors": {
+    "pass": true,
+    "detail": "",
+    "passes": "3/3"
+   },
+   "clean_console": {
+    "pass": true,
+    "detail": "0 console errors",
+    "passes": "3/3"
+   },
+   "webgl_canvas": {
+    "pass": true,
+    "detail": "1280x800",
+    "passes": "3/3"
+   },
+   "renders_scene": {
+    "pass": true,
+    "detail": "251 colours, dominant 35%",
+    "passes": "3/3"
+   },
+   "has_ui_overlay": {
+    "pass": true,
+    "detail": "19 visible UI elements over the canvas",
+    "passes": "3/3"
+   },
+   "walks": {
+    "pass": true,
+    "detail": "best of WASD: change 55.7% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "mouse_look": {
+    "pass": true,
+    "detail": "change 60.0% vs idle 0.1%",
+    "passes": "3/3"
+   },
+   "jumps": {
+    "pass": true,
+    "detail": "peak 37.6%, settled 0.0%, idle 0.0%",
+    "passes": "3/3"
+   },
+   "breaks_block": {
+    "pass": true,
+    "detail": "crosshair change 7.0% vs idle 0.0% (aim 2)",
+    "passes": "3/3"
+   },
+   "places_block": {
+    "pass": true,
+    "detail": "crosshair change 92.1% vs idle 0.0% (aim 1)",
+    "passes": "3/3"
+   },
+   "number_keys": {
+    "pass": true,
+    "detail": "change 0.3% vs idle 0.0%",
+    "passes": "3/3"
+   },
+   "fps_15": {
+    "pass": true,
+    "detail": "33.5 fps (software WebGL)",
+    "passes": "3/3"
+   }
+  },
+  "fps": 35.6,
+  "page_errors": [],
+  "console_errors": 0,
+  "api": null,
+  "files": 10,
+  "loc": 1729,
+  "bytes": 62643,
+  "start_button": "Play",
+  "passed": 14,
+  "total": 14,
+  "score": 100.0,
+  "score_seconds": 40.5,
+  "score_runs": [
+   100.0,
+   100.0,
+   100.0
+  ]
+ },
+ "compactions": 0,
+ "context_window": 200000,
+ "slots": null,
+ "context_utilization": 0.643,
+ "compactions_logged": 0
+}

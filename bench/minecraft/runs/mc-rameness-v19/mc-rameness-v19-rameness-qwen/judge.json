@@ -1,0 +1,10 @@
+{
+ "minecraft": 6,
+ "rendering": 3,
+ "world": 5,
+ "ui": 7,
+ "notes": "Recognizable blocky Minecraft-style forest with hotbar and debug HUD, but littered with garbled triangular black rendering artifacts and oddly shaped leaf/trunk geometry.",
+ "overall": 5.25,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0730224
+}

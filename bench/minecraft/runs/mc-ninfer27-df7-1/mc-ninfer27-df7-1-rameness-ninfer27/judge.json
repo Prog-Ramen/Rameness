@@ -1,0 +1,10 @@
+{
+ "minecraft": 5,
+ "rendering": 4,
+ "world": 4,
+ "ui": 7,
+ "notes": "Voxel forest with textured grass, logs and a hotbar, minimap and crosshair, but the oversized trunks and leaf blocks clip the camera, faces look broken or missing, and the sky shows through gaps. The terrain is flat and shows no water.",
+ "overall": 5.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0569148
+}

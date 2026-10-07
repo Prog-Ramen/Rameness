@@ -1,0 +1,5 @@
+[bench] rameness copy is out of date; reinstalling
+[mc-rameness-v20-rameness-occamy] start (context window 200192 x 1 slots)
+[bench] stopped 1 process(es) the run left running
+[mc-rameness-v20-rameness-occamy] done in 90.2 min: score 42.9 (6/14), 106 requests, max context 108287/200192, compactions 0 (logged 0), exit 0
+results: /root/bench/results/minecraft/mc-rameness-v20/results.json

@@ -1,0 +1,10 @@
+{
+ "minecraft": 1,
+ "rendering": 0,
+ "world": 1,
+ "ui": 6,
+ "notes": "The 3D scene is almost entirely broken into black regions with garbled dark triangular shards and no recognizable terrain, blocks, or sky, though the hotbar and debug HUD are intact and legible.",
+ "overall": 2.0,
+ "judge_model": "sonnet",
+ "judge_cost_usd": 0.0735806
+}

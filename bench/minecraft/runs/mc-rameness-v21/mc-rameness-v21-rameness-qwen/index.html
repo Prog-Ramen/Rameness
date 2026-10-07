@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blockcraft — a tiny Minecraft in the browser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+               background: #0b0e13; font-family: "Segoe UI", system-ui, sans-serif; }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+  .hidden { display: none !important; }
+
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: difference;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: #fff;
+  }
+  #crosshair::before { left: 10px; top: 2px; width: 2px; height: 18px; }
+  #crosshair::after  { left: 2px; top: 10px; width: 18px; height: 2px; }
+
+  #debug {
+    position: absolute; left: 10px; top: 10px; color: #fff; font-size: 12px;
+    font-family: ui-monospace, monospace; text-shadow: 0 1px 2px rgba(0,0,0,.8);
+    line-height: 1.5; pointer-events: none; white-space: pre-line;
+  }
+
+  #hotbar {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 6px;
+    background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.25); border-radius: 6px;
+  }
+  .slot {
+    position: relative; width: 48px; height: 48px; border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 4px; background: rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .slot.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.6); background: rgba(255,255,255,0.12); }
+  .slot canvas { image-rendering: pixelated; }
+  .slotnum { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #ddd; text-shadow: 0 1px 1px #000; }
+
+  #slot-name {
+    position: absolute; left: 50%; bottom: 80px; transform: translateX(-50%);
+    color: #fff; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.9); pointer-events: none;
+  }
+
+  #underwater {
+    position: absolute; inset: 0; background: rgba(20, 60, 160, 0.35);
+    pointer-events: none; opacity: 0; transition: opacity 0.25s;
+  }
+
+  #overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: rgba(8, 10, 16, 0.62); color: #fff; text-align: center;
+    backdrop-filter: blur(2px);
+  }
+  #overlay h1 { margin: 0; font-size: 44px; letter-spacing: 2px;
+                text-shadow: 0 3px 0 #2a5c1e, 0 5px 12px rgba(0,0,0,.6); }
+  #overlay p  { margin: 0; font-size: 14px; color: #cfd6e0; line-height: 1.7; }
+  #overlay .keys {
+    display: grid; grid-template-columns: auto auto; gap: 4px 14px;
+    font-size: 13px; text-align: left; color: #cfd6e0;
+  }
+  #overlay .keys b { color: #fff; text-align: right; font-weight: 600; }
+  #play-btn, #reset-btn {
+    font-size: 16px; padding: 10px 26px; border: 2px solid rgba(255,255,255,0.5);
+    background: rgba(46, 110, 46, 0.9); color: #fff; border-radius: 6px; cursor: pointer;
+  }
+  #play-btn:hover { background: rgba(60, 140, 60, 0.95); }
+  #reset-btn { font-size: 12px; padding: 6px 14px; background: rgba(120, 40, 40, 0.8); }
+  #reset-btn:hover { background: rgba(150, 55, 55, 0.9); }
+
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(8,10,16,0.85); color: #fff; font-size: 18px; letter-spacing: 1px;
+  }
+  #loading .bar { width: 260px; height: 8px; margin-top: 14px; background: #222; border-radius: 4px; overflow: hidden; }
+  #loading .fill { height: 100%; width: 0%; background: #57c25a; transition: width 0.2s; }
+
+  #saved {
+    position: absolute; right: 12px; top: 12px; color: #9fe8a0; font-size: 12px;
+    font-family: ui-monospace, monospace; text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="underwater"></div>
+<div id="crosshair"></div>
+<div id="debug"></div>
+<div id="saved" class="hidden">&#10003; world saved</div>
+<div id="slot-name">Grass</div>
+<div id="hotbar"></div>
+
+<div id="loading">
+  <div style="text-align:center">
+    Generating world…
+    <div class="bar"><div class="fill" id="load-fill"></div></div>
+  </div>
+</div>
+
+<div id="overlay" class="hidden">
+  <h1>BLOCKCRAFT</h1>
+  <p>A tiny Minecraft clone — procedural terrain, water, trees, caves. Your edits are saved locally.</p>
+  <div class="keys">
+    <b>W A S D</b><span>move</span>
+    <b>Mouse</b><span>look around</span>
+    <b>Space</b><span>jump / swim up</span>
+    <b>Double-tap W</b><span>sprint</span>
+    <b>Left click</b><span>break block</span>
+    <b>Right click</b><span>place block</span>
+    <b>1–9 / wheel</b><span>choose block</span>
+    <b>Esc</b><span>pause</span>
+  </div>
+  <button id="play-btn">Play</button>
+  <button id="reset-btn">Reset world (new terrain)</button>
+</div>
+
+<script src="three.min.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/player.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
