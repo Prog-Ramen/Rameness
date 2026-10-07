@@ -653,22 +653,39 @@ followed, and whether each change reached them is in [docs/iterations.md](docs/i
 run records are in [bench/minecraft/runs](bench/minecraft/runs/README.md). Run-to-run variance is
 large (identical code has scored 35.7% and 78.6%), so these are indications, not a leaderboard.
 
-From the bench's Grafana dashboard:
+The best three runs of each model, ordered by score and then by visual grade (Claude Code + Opus
+is the reference; every other run is Rameness):
 
-| | |
-|---|---|
-| ![Behaviour score per run](docs/images/grafana-score.png) | ![Visual grade per run](docs/images/grafana-visual.png) |
+```mermaid
+%%{init: {"xyChart": {"showDataLabel": true}, "themeVariables": {"xyChart": {"plotColorPalette": "#3b82f6"}}}}%%
+xychart-beta horizontal
+    title "Behaviour score (%), top 3 runs per model"
+    x-axis ["Opus 5.5 (Claude Code)", "27B UD-Q4_K_M", "27B GPTQ (vLLM)", "27B IQ3_S (v21d)", "Flash-Next AutoRound 3bpw", "Flash-Next IQ3_S", "Flash-Next UD-Q4_K_XL", "occamy (v7)", "occamy (v24offb)", "occamy (v21s)"]
+    y-axis "Checks passed (%)" 0 --> 100
+    bar [100, 100, 100, 100, 92.9, 92.9, 92.9, 85.7, 78.6, 78.6]
+```
 
-Context per request in two long runs: Flash-Next AutoRound (green, compacting near its 262k window)
-and the 27B on ninfer (yellow, reaching 236k):
+```mermaid
+%%{init: {"xyChart": {"showDataLabel": true}, "themeVariables": {"xyChart": {"plotColorPalette": "#3b82f6"}}}}%%
+xychart-beta horizontal
+    title "Visual grade (/10), same runs"
+    x-axis ["Opus 5.5 (Claude Code)", "27B UD-Q4_K_M", "27B GPTQ (vLLM)", "27B IQ3_S (v21d)", "Flash-Next AutoRound 3bpw", "Flash-Next IQ3_S", "Flash-Next UD-Q4_K_XL", "occamy (v7)", "occamy (v24offb)", "occamy (v21s)"]
+    y-axis "Claude judge (/10)" 0 --> 10
+    bar [7.25, 7.25, 6.75, 6.5, 7.5, 6.0, 6.0, 4.5, 3.0, 2.0]
+```
 
-![Context per request](docs/images/grafana-context.png)
+A dense 27B slows down as its context grows, because it reads its whole KV cache at every step.
+Flash-Next's sparse attention reads a fixed 2,048 tokens, and held about 150 tokens/s from 1k to
+160k tokens of context in the speed tests.
 
-Generation speed of the 27B run as its context grew: about 105 tokens/s at 30k, about 50 at 230k.
-A dense model reads its whole KV cache every step; Flash-Next's sparse attention reads a fixed
-2,048 tokens, and held about 150 tokens/s from 1k to 160k in the speed tests.
-
-![Generation speed of the 27B run](docs/images/grafana-gen-speed.png)
+```mermaid
+%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#e8590c"}}}}%%
+xychart-beta
+    title "27B decode speed as the context grows (ninfer run, median tok/s)"
+    x-axis "Context (k tokens)" ["0-25", "25-50", "50-75", "75-100", "100-125", "125-150", "150-175", "175-200", "200-225", "225-250"]
+    y-axis "tokens/s" 0 --> 140
+    line [98, 124, 95, 104, 79, 75, 72, 64, 72, 52]
+```
 
 ## Status
 
