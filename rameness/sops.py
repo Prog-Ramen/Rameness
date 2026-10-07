@@ -60,6 +60,8 @@ class SOP:
     origin: dict = field(default_factory=dict)
     visibility: str = "private"        # private | shareable (JEV-classified; only shareable can be proposed)
     classified: dict = field(default_factory=dict)
+    requirements: dict = field(default_factory=dict)   # {"python": [...], "commands": [...]} it may need (deps.py)
+    destination: str = ""              # where a shareable SOP is proposed: builtin (Rameness) | registry (RamenSOPs)
 
     @classmethod
     def load(cls, path: Path, sop_id: str, scope: str) -> "SOP":
@@ -110,6 +112,9 @@ class SOP:
         desc = f"[SOP {self.id}] {self.description}"
         if self.outputs:
             desc += f" Returns: {json.dumps(self.outputs)[:300]}"
+        if self.requirements:
+            from .deps import describe
+            desc += (" " + describe(self.requirements)).rstrip()
         return {"name": self.tool_name, "description": desc, "input_schema": self.inputs}
 
     def interface(self) -> str:
