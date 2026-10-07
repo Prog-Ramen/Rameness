@@ -1,0 +1,5 @@
+FP32 arithmetic layers: 248
+serving jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52 (/home/runner/.cache/ramensops-kev/hub/models--jaredpalmer--kev-4b/snapshots/6cfce5c2fa4b4bd64026336ab649c5ca78857d52) on cpu via torch (bfloat16) :8008
+INFO:     127.0.0.1:56148 - "GET /v1/models HTTP/1.1" 200 OK
+Kev encoded input: 2460 tokens; 2097 state tokens; seconds: 0.006
+INFO:     127.0.0.1:56160 - "POST /v1/systemone HTTP/1.1" 200 OK
