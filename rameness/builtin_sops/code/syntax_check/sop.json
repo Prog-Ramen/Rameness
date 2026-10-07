@@ -1,0 +1,14 @@
+{
+  "id": "code.syntax_check",
+  "description": "Syntax-check source files with the toolchains already installed (node --check, bash -n, perl -c, cc -fsyntax-only, gofmt -e, ruby -c, php -l, Python's parser, ...). Inline <script> blocks in HTML are checked too. Reports problems only; a missing toolchain is skipped.",
+  "keywords": ["syntax", "check", "parse", "lint", "compile", "diagnostics", "error", "bracket"],
+  "inputs": {"type": "object", "properties": {
+    "paths": {"type": "array", "items": {"type": "string"}, "description": "files to check"},
+    "commands": {"type": "object", "description": "extra or overriding checkers: {\".ext\": \"shell command with {f}\"}; null disables one"}
+  }, "required": ["paths"]},
+  "outputs": {"errors": "array", "report": "string"},
+  "permissions": ["fs:read", "exec"],
+  "tests": [
+    {"input": {"paths": []}, "expect_keys": ["errors", "report"]}
+  ]
+}

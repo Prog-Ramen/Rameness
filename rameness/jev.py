@@ -7,36 +7,49 @@ Every adaptive choice in the harness goes through one of two calls:
 * ``choose``   - multiple choice: a distribution that sums to 1
   ("route this task: direct / answer / agent / clarify").
 
-Backends are swappable so an open-source JEV model can be dropped in:
+Decisions are made by a typed decision model, never by an LLM: a Jev-compatible "System One"
+model returns calibrated probabilities over the options in one forward pass, no generated text.
 
-* ``LexicalJev``  - zero-cost, offline token-overlap scorer (default first pass)
-* ``LLMJev``      - asks a small LLM for calibrated probabilities as JSON
-* ``HttpJev``     - POSTs to a served JEV model (see ``HttpJev`` for the contract)
-* ``CascadeJev``  - lexical first, escalates only options that land in the
-                    uncertain band to the stronger backend
+* ``SystemOneJev`` - **Laya** (open-source, self-hosted, the default) or TypeSafe AI's hosted Jev.
+                     ``choose`` is a Choice question, ``activate`` a batch of Noul questions.
+* ``LexicalJev``   - offline token-overlap scorer. Only a last resort when no decision model can
+                     be reached (and for tests); the harness warns while it is in use.
 
 Every decision is logged to ``decisions.jsonl`` together with its later
-outcome, which is the training data for fine-tuning a JEV.
+outcome, which is the training data for fine-tuning Laya on your own decisions.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import time
+import urllib.error
 import urllib.request
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 
 @dataclass
 class Option:
     id: str
-    text: str
+    text: str                   # keyword cues: what the offline lexical scorer matches against
     prior: float = 1.0          # multiplicative prior, e.g. from SOP success rate
+    desc: str = ""              # one plain sentence saying what choosing this option means: what a
+                                # decision model (Laya / TypeSafe Jev) reads as the option's criterion
+
+    @property
+    def criterion(self) -> str:
+        return (self.desc or self.text)[:500] or self.id
+
+    def criterion_for(self, style: str) -> str:
+        """``keywords`` (the default: measured as accurate or better with Laya and Kev by
+        ``rameness jev bench``) or ``sentences``."""
+        return (self.text[:500] or self.id) if style == "keywords" else self.criterion
 
 
 @dataclass
@@ -139,119 +152,206 @@ class LexicalJev(Backend):
         return out
 
 
-class LLMJev(Backend):
-    """Probabilities from a (small) LLM. ``llm`` must expose ``complete_json(system, prompt)``."""
-
-    name = "llm"
-
-    SYSTEM = ("You are JEV, a decision model inside an agent harness. You output calibrated "
-              "probabilities only, as JSON. Never explain.")
-
-    def __init__(self, llm, timeout: float = 20.0):
-        self.llm = llm
-        self.timeout = timeout           # a decision that takes longer than this falls back to the cheap pass
-
-    def _ask(self, mode, question, query, options, context):
-        opts = "\n".join(f"- {o.id}: {o.text[:300]}" for o in options)
-        rule = ("Each probability is independent (multi-label), 0..1."
-                if mode == "activate" else "Probabilities form a distribution summing to 1.")
-        prompt = (f"Decision: {question}\nTask: {query}\n"
-                  + (f"Context:\n{context[:3000]}\n" if context else "")
-                  + f"Options:\n{opts}\n{rule}\n"
-                  'Reply with JSON only: {"probs": {"<option id>": <probability>, ...}}')
-        data = self.llm.complete_json(self.SYSTEM, prompt, max_tokens=600, timeout=self.timeout)
-        probs = data.get("probs", data) if isinstance(data, dict) else {}
-        return [float(probs.get(o.id, 0.0)) for o in options]
-
-    def activate(self, question, query, options, context=""):
-        return self._ask("activate", question, query, options, context)
-
-    def choose(self, question, query, options, context=""):
-        raw = self._ask("choose", question, query, options, context)
-        s = sum(raw)
-        return [1 / len(raw)] * len(raw) if s <= 0 else [r / s for r in raw]
+# Characters of state a model can read after the question and options take their share
+# (~4 chars per token). Laya: 512-token window on the base checkpoint, 1024 on typed-decisions /
+# multilingual (laya-serve doesn't expose multilingual's 8k mode). Kev and TypeSafe read far more,
+# but a decision should still only see what it needs (see ``fit`` and the call sites).
+STATE_BUDGET = {"laya": 1200, "laya-1024": 3000, "kev": 8000, "typesafe": 8000}
 
 
-class HttpJev(Backend):
-    """Client for a served JEV model.
+def state_budget(preset: str, model: str | None) -> int:
+    if preset == "laya":
+        return STATE_BUDGET["laya-1024"] if model and any(k in model for k in ("typed", "multilingual")) \
+            else STATE_BUDGET["laya"]
+    return STATE_BUDGET.get(preset, 3000)
 
-    Request  (POST ``url``)::
 
-        {"mode": "activate"|"choose", "question": str, "query": str,
-         "context": str, "options": [{"id": str, "text": str}]}
+def fit(text: str, limit: int, head: float = 0.35) -> str:
+    """Trim to ``limit`` characters keeping the start (what the thing is) and the end (where
+    errors, results and conclusions are), with a marker where the middle was cut."""
+    if len(text) <= limit:
+        return text
+    h = int(limit * head)
+    return text[:h] + "\n[...]\n" + text[-(limit - h - 7):]
 
-    Response::
 
-        {"probs": {"<id>": float, ...}}
+class SystemOneJev(Backend):
+    """Client for the Jev "System One" API: typed decisions, never text.
+
+    Two servers speak it:
+
+    * **Laya** (``laya``, the default): Convai Innovations' open-source (Apache-2.0) Jev-compatible
+      decision model, self-hosted: ``pip install "laya[serve]" && laya-serve`` serves it on
+      ``http://127.0.0.1:8000/v1/systemone``. ~35 ms per decision on a T4, no per-call cost.
+    * **TypeSafe AI's Jev** (``typesafe``): the hosted original, ``TYPESAFE_API_KEY``.
+
+    ``choose`` asks one **Choice** question whose criteria are the options and uses the
+    per-option probabilities. ``activate`` asks one **Noul** question per option (does this
+    option apply?), batched into one request, and uses each Noul probability. The task goes in
+    ``state``, with the harness context alongside it.
+
+    When the server can't be reached (not running, no key, 429/529 after retries) the call falls
+    back to ``fallback`` so the harness keeps working; ``failures`` counts those calls.
     """
 
-    name = "http"
+    PRESETS = {
+        "kev": {"url": "http://127.0.0.1:8008/v1/systemone", "model": "kev", "key_env": "KEV_API_KEY"},
+        "laya": {"url": "http://127.0.0.1:8000/v1/systemone", "model": "typed-decisions", "key_env": "LAYA_API_KEY"},
+        "typesafe": {"url": "https://api.typesafe.ai/v1/systemone", "model": "jev-latest", "key_env": "TYPESAFE_API_KEY"},
+    }
+    BATCH = 32                       # Noul questions per request
 
-    def __init__(self, url: str, timeout: float = 10.0):
-        self.url = url
-        self.timeout = timeout
+    def __init__(self, preset: str = "laya", url: str | None = None, model: str | None = None,
+                 api_key: str | None = None, timeout: float = 10.0, retries: int = 2,
+                 fallback: Backend | None = None, option_text: str = "keywords",
+                 max_state_chars: int | None = None):
+        ps = self.PRESETS[preset]
+        self.name = preset
+        self.url, self.model = url or ps["url"], model or ps["model"]
+        self.api_key = api_key or os.environ.get(ps["key_env"])
+        self.timeout, self.retries, self.option_text = timeout, retries, option_text
+        self.max_state_chars = max_state_chars or state_budget(preset, self.model)
+        self.fallback = fallback or LexicalJev()
+        self.failures, self.last_error = 0, ""
+        if preset == "typesafe" and not self.api_key:
+            self.last_error = "TYPESAFE_API_KEY is not set"
 
-    def _post(self, mode, question, query, options, context):
-        body = json.dumps({"mode": mode, "question": question, "query": query, "context": context,
-                           "options": [{"id": o.id, "text": o.text} for o in options]}).encode()
-        req = urllib.request.Request(self.url, data=body, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            probs = json.loads(r.read())["probs"]
-        return [float(probs.get(o.id, 0.0)) for o in options]
+    def _state(self, query: str, context: str) -> str:
+        """The decision's own summary (plus the call's specific context, if it passed one),
+        fitted to the model's window: models truncate silently, so we trim deliberately."""
+        text = f"{query}\n\n{context}" if context else query
+        return fit(text, self.max_state_chars)
+
+    def _ask(self, state, questions: dict) -> dict:
+        if self.name == "typesafe" and not self.api_key:
+            raise RuntimeError(self.last_error)
+        body = json.dumps({**({"model": self.model} if self.model else {}), "state": state,
+                           "questions": questions}).encode()
+        headers = {"Content-Type": "application/json", **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})}
+        req = urllib.request.Request(self.url, data=body, headers=headers)
+        for attempt in range(self.retries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    return json.loads(r.read())["answers"]
+            except urllib.error.HTTPError as e:
+                if e.code not in (429, 529) or attempt == self.retries:
+                    raise
+                time.sleep(0.5 * 2 ** attempt)     # overloaded / rate limited: back off and retry
+        raise RuntimeError("unreachable")
+
+    def _fall(self, e: Exception, mode: str, *args) -> list[float]:
+        self.failures += 1
+        self.last_error = f"{type(e).__name__}: {e}"
+        return getattr(self.fallback, mode)(*args)
+
+    @staticmethod
+    def _choice_probs(ans: dict, options: list[Option]) -> list[float]:
+        """Per-option probabilities, keyed by option id or by option index (servers differ);
+        with only a choice + confidence, the rest of the mass is spread over the other options."""
+        probs = ans.get("probabilities") or {}
+        if probs and all(o.id in probs for o in options):
+            return [float(probs[o.id]) for o in options]
+        if probs and all(str(i) in probs for i in range(len(options))):
+            return [float(probs[str(i)]) for i in range(len(options))]
+        conf = float(ans.get("confidence", 1.0))
+        rest = (1 - conf) / max(1, len(options) - 1)
+        return [conf if o.id == ans.get("choice") else rest for o in options]
 
     def activate(self, question, query, options, context=""):
-        return self._post("activate", question, query, options, context)
+        out: list[float] = []
+        try:
+            for i in range(0, len(options), self.BATCH):
+                chunk = options[i:i + self.BATCH]
+                qs = {f"o{j}": {"type": "noul",
+                                "instructions": f"{question} Does this option apply: {o.id}?",
+                                "criteria": {"true": f"It applies: {o.criterion_for(self.option_text)}",
+                                             "false": "It does not apply."}}
+                      for j, o in enumerate(chunk)}
+                ans = self._ask(self._state(query, context), qs)
+                out += [float(ans[f"o{j}"]["noul"]) for j in range(len(chunk))]
+            return out
+        except Exception as e:
+            return self._fall(e, "activate", question, query, options, context)
 
     def choose(self, question, query, options, context=""):
-        return self._post("choose", question, query, options, context)
-
-
-class CascadeJev(Backend):
-    """Cheap backend first; escalate to the strong one only when unsure."""
-
-    name = "cascade"
-
-    def __init__(self, cheap: Backend, strong: Backend | None, band=(0.3, 0.7)):
-        self.cheap, self.strong, self.band = cheap, strong, band
-        self.escalations = 0
-
-    def _unsure(self, probs):
-        lo, hi = self.band
-        return any(lo <= p <= hi for p in probs)
-
-    def activate(self, question, query, options, context=""):
-        p = self.cheap.activate(question, query, options, context)
-        if self.strong is None or not self._unsure(p):
-            return p
-        idx = [i for i, x in enumerate(p) if self.band[0] <= x <= self.band[1]]
         try:
-            sub = self.strong.activate(question, query, [options[i] for i in idx], context)
-        except Exception:
-            return p
-        self.escalations += 1
-        for i, v in zip(idx, sub):
-            p[i] = v
-        return p
+            ans = self._ask(self._state(query, context), {"decision": {
+                "type": "choice", "instructions": question,
+                "criteria": {o.id: o.criterion_for(self.option_text) for o in options}}})["decision"]
+            raw = self._choice_probs(ans, options)
+            s = sum(raw)
+            return [1 / len(raw)] * len(raw) if s <= 0 else [r / s for r in raw]
+        except Exception as e:
+            return self._fall(e, "choose", question, query, options, context)
 
-    def choose(self, question, query, options, context=""):
-        p = self.cheap.choose(question, query, options, context)
-        if self.strong is None or max(p) >= self.band[1]:
-            return p
-        try:
-            self.escalations += 1
-            return self.strong.choose(question, query, options, context)
-        except Exception:
-            return p
+
+def laya_running(url: str = SystemOneJev.PRESETS["laya"]["url"], timeout: float = 1.0) -> bool:
+    """Is a Jev-compatible server (Laya) answering at ``url``? Asks it one real Noul question:
+    other servers on the same port (vLLM also defaults to :8000) don't speak /v1/systemone."""
+    body = json.dumps({"state": "ping",                   # no model name: servers reject names they don't serve
+                       "questions": {"up": {"type": "noul", "instructions": "Is this a ping?"}}}).encode()
+    try:
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return "noul" in json.loads(r.read())["answers"]["up"]
+    except Exception:
+        return False
+
+
+class LayaLocalJev(SystemOneJev):
+    """Laya loaded in-process with the ``laya`` Python package: no server, and the token budgets
+    are ours to set per call (``agent.predict(..., max_len=, head_max_len=)``).
+
+    ``max_len`` is the whole window (question + options + state); ``head_max_len`` is the part
+    reserved for the question and its options. ``None`` keeps each checkpoint's trained sizes
+    (English 512/192, typed-decisions and multilingual 1024/256), which measured best: widening
+    typed-decisions to 2048/512 dropped the 36-option category decision from 0.71 to 0.43
+    (``rameness jev bench``). The model loads once per process, on the first decision.
+    """
+
+    TRAINED = {"english": (512, 192), "typed-decisions": (1024, 256), "multilingual": (1024, 256)}
+
+    _agents: dict = {}               # (checkpoint, device) -> loaded agent, shared within the process
+
+    def __init__(self, checkpoint: str | None = "typed-decisions", max_len: int | None = None,
+                 head_max_len: int | None = None, device: str | None = None, fallback: Backend | None = None,
+                 option_text: str = "keywords", max_state_chars: int | None = None):
+        ml, hl = self.TRAINED.get(checkpoint or "english", (1024, 256))
+        room = (max_len or ml) - (head_max_len or hl)                 # tokens left for the state
+        super().__init__("laya", url="in-process", model=checkpoint or "english", fallback=fallback,
+                         option_text=option_text, max_state_chars=max_state_chars or room * 4)
+        self.name = "laya-local"
+        self.checkpoint, self.device = checkpoint, device
+        self.max_len, self.head_max_len = max_len, head_max_len
+
+    def _agent(self):
+        key = (self.checkpoint, self.device)
+        if key not in self._agents:
+            import laya                                    # optional dependency: pip install laya
+            sub = None if self.checkpoint in (None, "", "laya", "english") else self.checkpoint
+            self._agents[key] = laya.load("convaiinnovations/laya", subfolder=sub, device=self.device)
+        return self._agents[key]
+
+    def _ask(self, state, questions: dict) -> dict:
+        return self._agent().predict(state, questions, max_len=self.max_len,
+                                     head_max_len=self.head_max_len)["answers"]
+
+
+def laya_importable() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("laya") is not None
 
 
 # --------------------------------------------------------------------------- comfort gate
 
 SIGNIFICANCE = [
     Option("routine", "routine reversible cheap internal assignment scheduling which model environment runtime slot "
-                      "retry wait nudge research draft read only local branch worktree small fix test"),
+                      "retry wait nudge research draft read only local branch worktree small fix test",
+           desc="A routine, reversible, low-cost choice (scheduling, which model or environment, retries, drafts) that is safe to decide automatically."),
     Option("significant", "irreversible destructive delete remove drop overwrite production deploy release merge main "
                           "publish push costly expensive paid money budget credentials secrets security legal privacy "
-                          "customer data external email send abandon cancel scope priority preference"),
+                          "customer data external email send abandon cancel scope priority preference",
+           desc="A significant choice the user should make: irreversible or destructive, costly, external (publishing, sending, merging to main, production), touching secrets or private data, or a matter of preference, priority or scope."),
 ]
 
 
@@ -288,10 +388,10 @@ class Jev:
         if not self._tuning:
             return options
         w, cues = self._tuning.get("weights", {}), self._tuning.get("cues", {})
-        return [Option(o.id, f"{o.text} {cues.get(f'{question}::{o.id}', '')}".strip(),
-                       o.prior * float(w.get(f"{question}::{o.id}", 1.0))) for o in options]
+        return [replace(o, text=f"{o.text} {cues.get(f'{question}::{o.id}', '')}".strip(),
+                        prior=o.prior * float(w.get(f"{question}::{o.id}", 1.0))) for o in options]
 
-    def _record(self, question, query, options, probs, kind) -> Decision:
+    def _record(self, question, query, options, probs, kind, context="") -> Decision:
         self.calls += 1
         d = Decision(uuid.uuid4().hex[:12], question, {o.id: round(p, 4) for o, p in zip(options, probs)},
                      self.backend.name)
@@ -302,27 +402,53 @@ class Jev:
                 f.write(json.dumps({"id": d.id, "t": time.time(), "kind": kind, "question": question,
                                     "query": query[:2000], "options": [o.id for o in options],
                                     "option_texts": {o.id: o.text[:300] for o in options},
+                                    "option_descs": {o.id: o.criterion for o in options},
+                                    "context": context[:2000],
                                     "probs": d.probs, "backend": d.backend}) + "\n")
         return d
+
+    def _telemetry(self, question: str, kind: str, d: Decision, n_opts: int, t0: float, fails0: int, state: str) -> None:
+        from . import telemetry
+        if not telemetry.url():
+            return
+        top = d.top(2)
+        b = self.backend
+        lab = {"backend": b.name, "model": getattr(b, "model", b.name), "kind": kind, "question": question[:80]}
+        telemetry.emit([
+            ("rameness_jev_decision_seconds", round(time.time() - t0, 4), lab),
+            ("rameness_jev_decision_confidence", top[0][1] if top else None, lab),
+            ("rameness_jev_decision_margin", (top[0][1] - top[1][1]) if len(top) > 1 else None, lab),
+            ("rameness_jev_decision_options", n_opts, lab),
+            ("rameness_jev_decision_state_chars", len(state), lab),
+            ("rameness_jev_decision_fallback", int(getattr(b, "failures", 0) > fails0), lab),
+        ])
 
     def activate(self, question: str, query: str, options: list[Option], context: str = "") -> Decision:
         if not options:
             return Decision("-", question, {}, self.backend.name)
+        t0, f0 = time.time(), getattr(self.backend, "failures", 0)
         options = self._tune(question, options)
         raw = self.backend.activate(question, query, options, context)
         probs = [min(0.999, max(0.0, p * o.prior)) for p, o in zip(raw, options)]
-        return self._record(question, query, options, probs, "activate")
+        d = self._record(question, query, options, probs, "activate", context)
+        self._telemetry(question, "activate", d, len(options), t0, f0, query + context)
+        return d
 
     def choose(self, question: str, query: str, options: list[Option], context: str = "") -> Decision:
+        t0, f0 = time.time(), getattr(self.backend, "failures", 0)
         options = self._tune(question, options)
         raw = self.backend.choose(question, query, options, context)
         raw = [p * o.prior for p, o in zip(raw, options)]
         s = sum(raw) or 1.0
-        return self._record(question, query, options, [p / s for p in raw], "choose")
+        d = self._record(question, query, options, [p / s for p in raw], "choose", context)
+        self._telemetry(question, "choose", d, len(options), t0, f0, query + context)
+        return d
 
-    def yes(self, question: str, query: str, yes_cues: str, no_cues: str = "", context: str = "") -> float:
+    def yes(self, question: str, query: str, yes_cues: str, no_cues: str = "", context: str = "",
+            yes_desc: str = "Yes.", no_desc: str = "No.") -> float:
         """Probability of 'yes' for a binary question."""
-        d = self.choose(question, query, [Option("yes", yes_cues), Option("no", no_cues or "none unspecified")], context)
+        d = self.choose(question, query, [Option("yes", yes_cues, desc=yes_desc),
+                                          Option("no", no_cues or "none unspecified", desc=no_desc)], context)
         return d.probs["yes"]
 
     def comfort(self, question: str, query: str, d: Decision, sig_threshold: float = 0.55,
@@ -337,7 +463,7 @@ class Jev:
         margin = conf - (top[1][1] if len(top) > 1 else 0.0)
         opts_text = " ".join(d.probs)
         sd = self.choose("Is this decision significant enough that the user should make it?",
-                         f"{question} {query[:600]} options: {opts_text} leaning: {top[0][0]}", SIGNIFICANCE)
+                         f"{question} {fit(query, 400)} options: {opts_text} leaning: {top[0][0]}", SIGNIFICANCE)
         sig = sd.probs["significant"]
         if sig >= sig_threshold:
             return Comfort(sig, conf, margin, True, "significant")
@@ -353,17 +479,49 @@ class Jev:
                 f.write(json.dumps({"feedback": decision_id, "t": time.time(), **outcome}) + "\n")
 
 
+LOCAL_ORDER = ["kev", "laya", "laya-local"]   # servers first (one shared copy), in-process last
+
+
+def resolve_backend(jc: dict) -> str:
+    """``auto``: the first local decision model whose server answers (``local_order``), else
+    TypeSafe's hosted Jev if ``TYPESAFE_API_KEY`` is set, else the offline lexical scorer
+    (a degraded mode: the harness warns about it)."""
+    kind = jc.get("backend", "auto")
+    if kind != "auto":
+        return kind
+    for local in jc.get("local_order") or LOCAL_ORDER:
+        if local == "laya-local":
+            if laya_importable():
+                return local
+        elif laya_running(jc.get(f"{local}_url") or SystemOneJev.PRESETS[local]["url"]):
+            return local
+    return "typesafe" if os.environ.get("TYPESAFE_API_KEY") else "lexical"
+
+
 def build(cfg: dict, llm=None, log_path: Path | None = None) -> Jev:
+    """``llm`` is accepted for call-site compatibility and ignored: decisions never use an LLM."""
     jc = cfg["jev"]
-    kind = jc["backend"]
-    if kind == "lexical" or (kind in ("llm", "cascade") and llm is None):
-        backend: Backend = LexicalJev()
-    elif kind == "cascade-http":
-        backend = CascadeJev(LexicalJev(), HttpJev(jc["url"]), tuple(jc["uncertain_band"]))
-    elif kind == "llm":
-        backend = LLMJev(llm, jc.get("llm_timeout", 20))
-    elif kind == "http":
-        backend = HttpJev(jc["url"])
+    kind = resolve_backend(jc)
+    style = jc.get("option_text", "keywords")
+    budget = jc.get("max_state_chars")
+    if kind == "laya-local":
+        fallback = SystemOneJev("typesafe", url=jc.get("typesafe_url"), model=jc.get("typesafe_model"),
+                                option_text=style, max_state_chars=budget) \
+            if os.environ.get("TYPESAFE_API_KEY") else LexicalJev()
+        backend: Backend = LayaLocalJev(jc.get("laya_model") or "typed-decisions", jc.get("laya_max_len"),
+                                        jc.get("laya_head_max_len"), jc.get("laya_device"),
+                                        fallback=fallback, option_text=style, max_state_chars=budget)
+    elif kind in ("laya", "kev"):       # a local model; TypeSafe covers an outage when a key is set
+        fallback = SystemOneJev("typesafe", url=jc.get("typesafe_url"), model=jc.get("typesafe_model"),
+                                option_text=style, max_state_chars=budget) \
+            if os.environ.get("TYPESAFE_API_KEY") else LexicalJev()
+        backend = SystemOneJev(kind, url=jc.get(f"{kind}_url"), model=jc.get(f"{kind}_model"),
+                               fallback=fallback, option_text=style, max_state_chars=budget)
+    elif kind == "typesafe":
+        backend = SystemOneJev("typesafe", url=jc.get("typesafe_url"), model=jc.get("typesafe_model"),
+                               option_text=style, max_state_chars=budget)
+    elif kind == "lexical":
+        backend = LexicalJev()
     else:
-        backend = CascadeJev(LexicalJev(), LLMJev(llm, jc.get("llm_timeout", 20)), tuple(jc["uncertain_band"]))
+        raise ValueError(f"unknown jev.backend {kind!r}: use auto, laya-local, laya, kev, typesafe or lexical")
     return Jev(backend, log_path, tuning_path=log_path.parent / "jev_tuning.json" if log_path else None)

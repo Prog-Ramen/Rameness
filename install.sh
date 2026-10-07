@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # rameness installer: one self-contained environment with the harness, the fleet manager,
-# the UI, the JEV tooling and both model SDKs (Anthropic + OpenAI-compatible for
-# llama-server / ollama / vLLM / DeepSeek...).
+# the UI, the JEV tooling, both model SDKs (Anthropic + OpenAI-compatible for
+# llama-server / ollama / vLLM / DeepSeek...) and Laya, the open-source decision model JEV runs on.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Prog-Ramen/Rameness/main/install.sh | bash
 #   ./install.sh                       # from a checkout
@@ -12,6 +12,8 @@
 #   --bin DIR        where the `rameness` launcher goes  (default: ~/.local/bin)
 #   --source SRC     pip source: path, git URL or wheel (default: this checkout, else the GitHub repo)
 #   --with-herdr     also install herdr (agent session runtime) via its official installer
+#   --no-laya        skip Laya (JEV then needs Kev or TYPESAFE_API_KEY, or runs degraded on the lexical scorer)
+#   --with-kev       also install Kev (more accurate decisions; its own Python + PyTorch, ~9 GB weights; GPU advised)
 #   --dev            editable install (for working on rameness itself)
 set -euo pipefail
 
@@ -19,6 +21,8 @@ PREFIX="${RAMENESS_PREFIX:-$HOME/.rameness/env}"
 BIN="$HOME/.local/bin"
 SOURCE=""
 HERDR=0
+LAYA=1
+KEV=0
 DEV=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -26,8 +30,10 @@ while [ $# -gt 0 ]; do
     --bin) BIN="$2"; shift 2;;
     --source) SOURCE="$2"; shift 2;;
     --with-herdr) HERDR=1; shift;;
+    --no-laya) LAYA=0; shift;;
+    --with-kev) KEV=1; shift;;
     --dev) DEV=1; shift;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0;;
     *) echo "unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -68,6 +74,10 @@ else
 fi
 say "installing rameness from $SOURCE"
 if [ "$DEV" = 1 ]; then "${PIP[@]}" -e "$SOURCE"; else "${PIP[@]}" "$SOURCE"; fi
+if [ "$LAYA" = 1 ]; then
+  say "installing Laya (open-source Jev-compatible decision model; pulls PyTorch)"
+  "${PIP[@]}" "laya[serve]"
+fi
 
 # ---- launcher
 mkdir -p "$BIN"
@@ -76,9 +86,16 @@ cat > "$BIN/rameness" <<LAUNCH
 exec "$PREFIX/bin/python" -m rameness "\$@"
 LAUNCH
 chmod +x "$BIN/rameness"
+if [ "$KEV" = 1 ]; then
+  say "installing Kev into ~/.rameness/jev/kev"
+  "$PREFIX/bin/python" -m rameness jev setup kev
+fi
 
 # ---- defaults (never overwrite existing config)
 mkdir -p "$HOME/.rameness"
+if [ "$KEV" = 1 ] && [ ! -f "$HOME/.rameness/config.json" ]; then
+  echo '{"jev": {"serve": "kev"}}' > "$HOME/.rameness/config.json"     # `rameness up` starts Kev
+fi
 [ -f "$HOME/.rameness/fleet.json" ] || cat > "$HOME/.rameness/fleet.json" <<'CFG'
 {
   "backend": "auto",
@@ -106,6 +123,8 @@ case ":$PATH:" in *":$BIN:"*) ;; *) warn "add $BIN to your PATH";; esac
 cat <<'NEXT'
 
 Next:
+  rameness jev up                # start the local decision model (Laya, or Kev with --with-kev)
+  rameness jev status            # which decision model is in use
   rameness init                  # in a project: creates .rameness/ (config, org profile, SOPs)
   rameness fleet slots           # models found: API keys, llama-server / ollama / vLLM ports, CLI agents
   rameness fleet envs            # environments (add ssh / container ones in ~/.rameness/fleet.json)

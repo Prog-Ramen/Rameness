@@ -166,9 +166,11 @@ FIXES_Q = "Which test findings should this cycle fix?"
 ADEQUACY_Q = "Are these the right kinds of tests, and do they cover the edge cases?"
 ADEQUACY = [
     Option("adequate", "covers boundaries invalid input unicode empty timeout failure modes concurrency personas "
-                       "error handling thorough meaningful assertions many tests"),
+                       "error handling thorough meaningful assertions many tests",
+           desc="The tests are thorough: they cover edge cases, invalid input and failure modes with meaningful assertions."),
     Option("gaps", "only happy path few tests missing shallow trivial wrong kind untested skipped superficial "
-                   "single test basic smoke"),
+                   "single test basic smoke",
+           desc="The tests are shallow: mostly the happy path, too few, or missing important cases."),
 ]
 CONVERGE_Q = "Has this work converged, or is another refinement cycle worth it?"
 CATEGORY_TAG_Q = "Which category of work is this task?"
@@ -178,9 +180,11 @@ SEVERITY_IMPACT = {"critical": "high", "high": "high", "medium": "medium", "low"
 
 CONVERGE_OPTIONS = [
     Option("continue", "high impact options remain new issues found significant improvements important gaps "
-                       "critical high failures unfixed untested regressions retest needed"),
+                       "critical high failures unfixed untested regressions retest needed",
+           desc="Important work remains: high-impact improvements, new issues, or unresolved failures justify another cycle."),
     Option("stop", "converged diminishing returns only low impact minor polish nothing new repeated suggestions "
-                   "done all passed no findings stable"),
+                   "done all passed no findings stable",
+           desc="The work has converged: only minor polish or repeated suggestions remain, everything passes."),
 ]
 
 
@@ -195,7 +199,7 @@ def taxonomy_options(ids: list[str] | None = None, recent: list[str] | None = No
         prior = 0.35 if recent[-1:] == [c["id"]] else 0.65 if c["id"] in recent[-3:] else 1.0
         if ids and len(ids) > 1 and c["id"] not in recent:
             prior *= 1.6
-        out.append(Option(c["id"], f"{c['label']} {c['cues']}", prior))
+        out.append(Option(c["id"], f"{c['label']} {c['cues']}", prior, f"{c['label']}: {c['focus']}"))
     return out
 
 
@@ -438,7 +442,8 @@ CREATE TABLE IF NOT EXISTS programs (id TEXT PRIMARY KEY, lead TEXT, goal TEXT, 
             chosen = f.decide_many(p["lead"], FIXES_Q if testing else OPTIONS_Q,
                                    f"{p['goal'][:300]} focus {BY_ID[st['category']]['label']}",
                                    [Option(o["id"], f"{o['title']} {o['why']} impact {o['impact']} effort {o['effort']} "
-                                                    f"risk {o['risk']}", option_prior(o)) for o in opts],
+                                                    f"risk {o['risk']}", option_prior(o),
+                                           f"{o['title']}: {o['why']}") for o in opts],
                                    max_k=f.cfg["cycle_max_options"])
             if chosen is None:
                 return
@@ -550,9 +555,11 @@ CREATE TABLE IF NOT EXISTS programs (id TEXT PRIMARY KEY, lead TEXT, goal TEXT, 
         query = (f"{p['goal'][:300]} cycles done {p['done']} of kinds {kinds}. {self._outlook(p)}. "
                  f"last: {(p['history'][-1].get('summary', '') if p['history'] else '')[:200]}")
         opts = [Option("more", "critical high severity failures found unresolved untested areas "
-                               "regressions flaky new issues important gaps remain retest confirm fixes"),
+                               "regressions flaky new issues important gaps remain retest confirm fixes",
+                       desc="More of this work is needed: serious failures, regressions or untested areas remain."),
                 Option("enough", "all passed no findings only low severity cosmetic coverage adequate "
-                                 "stable converged diminishing returns")]
+                                 "stable converged diminishing returns",
+                       desc="This work is sufficient: tests pass, findings are minor, coverage is adequate.")]
         if p["state"].get("extend_asked"):
             verdict, _ = f.decide(p["lead"], EXTEND_Q, query, opts, "enough", ask_director=True)
         else:

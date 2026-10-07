@@ -1,9 +1,12 @@
 """Public SOP ecosystem: scrub, publish, index, search, install.
 
-Private SOPs never leave the machine on their own. ``publish`` is always an
-explicit, human-confirmed action and refuses anything the scrubber flags:
-secrets, emails, private hosts/IPs, home paths, and the organization's own
-``private_terms``. The JEV's "is this generic?" score is advisory only.
+Private SOPs never leave the machine on their own. Scrubber findings come in two classes:
+
+* hard: secrets (keys, tokens, private keys, JWTs, credentials in URLs, gitleaks/trufflehog hits)
+  and the organization's own ``private_terms``. These always block.
+* soft: pattern hits (emails, private hosts/IPs, home paths) that are often harmless
+  (``user@example.com``, ``192.168.0.1`` in a docstring). JEV decides whether they are
+  private info that could cause issues if published.
 
 A registry is just a directory (or git repo) of packages plus ``index.json``,
 a metadata-only index so remote discovery never downloads code.
@@ -93,6 +96,45 @@ def scrub(sop: SOP, org: Org) -> list[str]:
     return scrub_tree(sop.path, org)
 
 
+def is_hard(finding: str) -> bool:
+    return (any(f": {k}:" in finding for k in SECRET_KINDS) or ": private term:" in finding
+            or "gitleaks" in finding or "trufflehog" in finding)
+
+
+def hard_findings(findings: list[str]) -> list[str]:
+    return [f for f in findings if is_hard(f)]
+
+
+LEAK_CUES = ("real internal hostname company employee customer personal email address production server database "
+             "private network credentials user home directory account tenant proprietary")
+BENIGN_CUES = ("example placeholder localhost test fixture sample documentation dummy default generic "
+               "example.com example.org noreply 127.0.0.1 192.168.0.1 docs tutorial")
+LEAK_Q = "Do these scrubber findings expose private information that could cause issues if published?"
+
+
+def private_info(jev: Jev, sop: SOP, findings: list[str]) -> dict:
+    """JEV's call on soft findings: {'leak': bool, 'p': P(leak), 'findings': [...]}.
+
+    Hard findings are not weighed here - they always block. With no soft findings there is
+    nothing to decide.
+    """
+    soft = [f for f in findings if not is_hard(f)]
+    if not soft:
+        return {"leak": False, "p": 0.0, "findings": []}
+    lines = []                                   # the line each match sits on: "example: user@example.com" vs a real login
+    for f in soft[:20]:
+        path, _, match = f.split(": ", 2)
+        src = sop.path / path
+        text = src.read_text(errors="replace") if src.is_file() else ""
+        lines += [ln.strip()[:200] for ln in text.splitlines() if match[:60] in ln][:2] or [match]
+    d = jev.choose(LEAK_Q, " ; ".join(lines),
+                   [Option("leak", LEAK_CUES, desc="Real private information: a real person's email, an internal "
+                                                  "hostname or IP, a user's home directory, or company-specific data."),
+                    Option("benign", BENIGN_CUES, desc="Harmless: example or placeholder values, documentation, "
+                                                      "test fixtures, localhost or standard default addresses.")])
+    return {"leak": d.probs["leak"] >= d.probs["benign"], "p": d.probs["leak"], "findings": soft}
+
+
 PERSONAL_CUES = ("company internal our team customer account specific hostname credentials proprietary private "
                  "business rule employee tenant workspace personal my database production endpoint")
 GENERAL_CUES = ("generic standard reusable common http json csv yaml file git test parse format convert extract "
@@ -100,32 +142,38 @@ GENERAL_CUES = ("generic standard reusable common http json csv yaml file git te
 
 
 def generality(jev: Jev, sop: SOP) -> float:
-    return jev.yes("Is this procedure generic, useful to anyone, not specific to one organization?", sop.text,
-                   GENERAL_CUES, PERSONAL_CUES)
+    return jev.yes("Is this procedure generic, useful to anyone, not specific to one organization?", sop.digest(),
+                   GENERAL_CUES, PERSONAL_CUES,
+                   yes_desc="Yes: generic and useful to anyone.", no_desc="No: specific to one organization.")
 
 
 def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
     """Personal (stays private) or general (may be proposed for the public registry).
 
-    Deterministic signals first - any scrubber finding or private term makes it personal.
-    Otherwise the JEV decides, and it must be clearly confident to call something general:
-    anything uncertain stays private.
+    Hard scrubber findings (secrets, private terms) make it private. JEV judges the soft
+    findings, and if it sees no leak it decides personal vs general; it must be clearly
+    confident to call something general: anything uncertain stays private.
     """
     findings = scrub(sop, org)
-    body = ""
-    for f in sorted(sop.path.glob("*")):
-        if f.is_file() and f.suffix in (".py", ".sh", ".md"):
-            body += f.read_text(errors="replace")[:1500]
+    hard = hard_findings(findings)
+    leak = private_info(jev, sop, findings) if not hard else {"leak": False, "findings": []}
     d = jev.choose("Is this procedure personal to one user or organization, or general enough to share publicly?",
-                   f"{sop.text} {' '.join(org.private_terms)} {body[:2000]}",
-                   [Option("personal", PERSONAL_CUES), Option("general", GENERAL_CUES)])
-    if findings:
-        vis, reason = "private", f"scrubber: {findings[0]}" + (f" (+{len(findings) - 1} more)" if len(findings) > 1 else "")
+                   sop.digest(),                     # the SOP's own code; private terms are checked by the scrubber
+                   [Option("personal", PERSONAL_CUES, desc="Specific to one user or organization: its own systems, "
+                                                          "data, customers, accounts or business rules."),
+                    Option("general", GENERAL_CUES, desc="A generic, reusable procedure useful to anyone, with nothing "
+                                                        "organization-specific in it.")])
+    if hard:
+        vis, reason = "private", f"scrubber: {hard[0]}" + (f" (+{len(hard) - 1} more)" if len(hard) > 1 else "")
+    elif leak["leak"]:
+        vis, reason = "private", f"JEV: private info in {leak['findings'][0]}"
     elif d.probs["general"] >= 0.65 and d.probs["general"] - d.probs["personal"] >= 0.15:
         vis, reason = "shareable", "JEV: general"
     else:
         vis, reason = "private", "JEV: personal or not clearly general"
     result = {"visibility": vis, "reason": reason, "probs": d.probs, "decision": d.id, "findings": len(findings)}
+    if leak["findings"] and not leak["leak"]:
+        result["reason"] += f" ({len(leak['findings'])} scrubber finding(s) judged benign)"
     if save and sop.scope == "private":
         data = json.loads((sop.path / "sop.json").read_text())
         data["visibility"] = vis
@@ -136,7 +184,7 @@ def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
 
 def publish(sop: SOP, dest_pkg: Path, org: Org, force: bool = False) -> Path:
     findings = scrub(sop, org)
-    secrets = [f for f in findings if any(f": {k}:" in f for k in SECRET_KINDS) or "gitleaks" in f or "trufflehog" in f]
+    secrets = [f for f in findings if is_hard(f) and ": private term:" not in f]
     if secrets:
         raise PermissionError("secrets found (cannot be overridden):\n  " + "\n  ".join(secrets))
     if findings and not force:

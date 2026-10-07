@@ -110,7 +110,7 @@ def mine_repeats(runs: list[dict], min_repeats: int = 2, max_n: int = 4) -> list
     for key, e in seen.items():
         if e["runs"] < min_repeats:
             continue
-        if all(k.startswith(("write_file", "edit_file")) for k in key):
+        if all(k.startswith(("write_file", "edit_file", "edit_lines")) for k in key):
             continue      # raw edits are content, not procedure
         cands.append(Candidate(name=" -> ".join(key), description=f"seen in {e['runs']} tasks: " + " | ".join(e["tasks"][:3]),
                                steps=e["example"], count=e["runs"], exact_repeat=len(e["exacts"]) == 1))
@@ -226,9 +226,35 @@ class Learner:
         if not existing:
             return None
         d = self.jev.activate("Does an existing SOP already perform this procedure?", c.text,
-                              [Option(s.id, s.text) for s in existing])
+                              [Option(s.id, s.text, desc=s.desc) for s in existing])
         sid, p = d.top(1)[0]
         return sid if p >= 0.8 else None
+
+    def _duplicate_generated(self, spec: dict) -> str | None:
+        """Compare the generated behavior too: a trace's name can hide an existing procedure."""
+        existing = [s for s in self.lib.sops.values() if s.status == "validated" and s.kind == "script"]
+        if not existing:
+            return None
+        query = f"{spec.get('id', '')}: {spec.get('description', '')}"
+        d = self.jev.activate("Which existing SOPs might already cover this generated procedure?", query,
+                              [Option(s.id, s.text, desc=s.desc) for s in existing])
+        by_id = {s.id: s for s in existing}
+        for sid, probability in d.top(3):
+            if probability < 0.3:
+                continue
+            sop = by_id[sid]
+            state = (f"Proposed procedure: {query}\nInputs: {json.dumps(spec.get('inputs') or {})}\n"
+                     f"Code:\n{spec.get('script') or spec.get('shell') or ''}\n\n"
+                     f"Existing procedure: {sop.digest()}\nInputs: {json.dumps(sop.inputs)}")
+            p = self.jev.yes("Can the existing SOP perform the proposed procedure using its current parameters, "
+                             "without changing its code?", state,
+                             "same equivalent already covered implements required behavior all outputs parameters",
+                             "different partial missing behavior needs changes incompatible inputs outputs business rules",
+                             yes_desc="Yes: the existing SOP already provides the proposed behavior.",
+                             no_desc="No: it only partly overlaps or needs code changes to provide the behavior.")
+            if p >= 0.8:
+                return sid
+        return None
 
     # ---- generation
 
@@ -256,7 +282,9 @@ class Learner:
                 'Reply {"id": "category.name", "description": str, "keywords": [..], '
                 '"inputs": <JSON schema>, "outputs": {...}, "permissions": subset of '
                 '["fs:read","fs:write","network","exec","side-effect"], "script": <python source>, '
-                '"tests": [{"input": {...}, "expect_keys": [...]}]}. Tests must pass offline in a temp dir.'),
+                '"tests": [{"input": {...}, "expect": {"output_field": expected_value}}]}. '
+                'Tests must assert concrete output values for normal and edge cases, not just output keys. '
+                'Error cases may use "expect_error": true. Tests must pass offline in a temp dir.'),
                 max_tokens=8000)
         except Exception:
             return None
@@ -276,6 +304,10 @@ class Learner:
             spec = self._deterministic_spec(c) or (self._llm_spec(task, c) if self.auto_generate else None)
             if not spec:
                 created.append({"candidate": c.name, "score": round(c.score, 2), "skipped": "no generator available"})
+                continue
+            dup = self._duplicate_generated(spec)
+            if dup:
+                created.append({"candidate": c.name, "skipped": f"generated procedure duplicates {dup}"})
                 continue
             try:
                 sop, failures = register_sop(self.lib, self.ex, spec, {"task": task[:200], "score": c.score},
