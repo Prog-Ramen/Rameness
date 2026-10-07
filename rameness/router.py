@@ -23,18 +23,36 @@ from .sops import SOP, Activation, Library, Requirement, activate, validate_args
 
 ROUTES = [
     Option("direct", "run get fetch download list show find locate summarize status check extract count "
-                     "lookup retrieve single known procedure"),
+                     "lookup retrieve single known procedure",
+           desc="Run one existing, known procedure (SOP) directly; no model reasoning or code changes are needed."),
     Option("answer", "what why how explain define describe difference meaning concept question compare "
-                     "opinion recommend should"),
+                     "opinion recommend should",
+           desc="Answer a question or explain something from knowledge; no files, commands or tools are needed."),
     Option("agent", "implement build create fix debug refactor add change update write code investigate "
-                    "migrate deploy project feature bug error failing modify rename edit generate"),
+                    "migrate deploy project feature bug error failing modify rename edit generate",
+           desc="Needs an agent that works in the project: writing or changing code, running commands, debugging and iterating."),
 ]
 
 EFFORT = [
-    Option("low", "list show get fetch status simple quick rename format lookup count find what"),
-    Option("medium", "add update write change summarize explain small script test"),
+    Option("low", "list show get fetch status simple quick rename format lookup count find what",
+           desc="A simple, quick lookup or mechanical change that needs little thought."),
+    Option("medium", "add update write change summarize explain small script test",
+           desc="A routine piece of work: a small feature, script, test or explanation with a few steps."),
     Option("high", "design architect debug investigate refactor complex migrate optimize why failing race "
-                   "concurrency security performance plan"),
+                   "concurrency security performance plan",
+           desc="Hard work that needs careful reasoning: design, debugging an unclear failure, refactoring, concurrency, security or performance."),
+]
+
+SCOPE_Q = "Does this task have specific requirements to meet, or is it open-ended?"
+SCOPES = [
+    Option("specific", "fix bug failing test add flag rename update change migrate convert answer report extract "
+                       "requirements must should exactly given spec issue ticket error",
+           desc="A specific task: its requirements are stated or clearly implied, and the work is done when they are "
+                "all met, such as a fix, a defined feature, a conversion or a report on given questions."),
+    Option("open_ended", "build make create clone game app website tool prototype design improve explore "
+                         "something like your own idea creative open",
+           desc="An open-ended task: a broad goal such as building an app, a game or a site, where the scope and "
+                "quality of the result are up to the builder and more features keep making it better."),
 ]
 
 
@@ -51,10 +69,13 @@ class Plan:
     questions: list[Requirement] = field(default_factory=list)
     gate: str = "jev"               # jev | director (the user decided) | jev-noted (would have asked, no user present)
     pulls: list[dict] = field(default_factory=list)   # remote-registry pull decisions made for this task
+    scope: str = "specific"         # specific | open_ended (task_scope: build to the requirements, or feature cycles)
+    scope_probs: dict = field(default_factory=dict)
 
     def describe(self) -> str:
         lines = [f"route:  {self.route}  {fmt(self.route_probs)}  [decided by: {self.gate}]",
                  f"effort: {self.effort}  {fmt(self.effort_probs)}",
+                 f"scope:  {self.scope}  {fmt(self.scope_probs)}",
                  f"jev calls for SOP traversal: {self.activation.jev_calls}",
                  "traversal:", self.activation.report() or "  (empty library)"]
         if self.activation.selected:
@@ -198,7 +219,15 @@ class Router:
             if any(x["result"] == "pulled" for x in pulls):
                 act = activate(self.lib, self.jev, task_x, org_ctx, {**self.org.defaults, **resolved},
                                jc["activate_threshold"], jc["explore_threshold"], jc["beam"], jc["max_sops"])
-        plan = Plan(task, decisive(rd, "agent"), decisive(ed, "medium"), act, rd.probs, ed.probs, pulls=pulls)
+        # err towards thinking hard: high effort whenever JEV gives it a real chance, not only when it wins
+        effort = "high" if ed.probs.get("high", 0) > jc.get("high_effort_above", 0.10) else decisive(ed, "medium")
+        plan = Plan(task, decisive(rd, "agent"), effort, act, rd.probs, ed.probs, pulls=pulls)
+        ts = self.cfg.get("task_scope") or {}
+        if ts.get("mode", "jev") == "jev":
+            sd = self.jev.choose(SCOPE_Q, task, SCOPES)
+            plan.scope, plan.scope_probs = decisive(sd, "specific"), sd.probs
+        elif ts.get("mode") in ("specific", "open_ended"):
+            plan.scope = ts["mode"]
         c = self.jev.comfort("How should this task be executed?", task, rd)
         if c.needs_user:
             if self.confirm:

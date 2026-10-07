@@ -35,8 +35,10 @@ SKIP_CUES = "tangential unrelated not needed already covered different purpose s
 
 def pull_options(sop, activation: float) -> list[Option]:
     """The pull option carries the candidate's own description, and its activation score sets the prior."""
-    return [Option("pull", f"{PULL_CUES} {sop.description} {' '.join(sop.keywords)}", 0.5 + activation),
-            Option("skip", SKIP_CUES, max(0.1, 1.5 - activation))]
+    return [Option("pull", f"{PULL_CUES} {sop.description} {' '.join(sop.keywords)}", 0.5 + activation,
+                   f"Pull it: this procedure ({sop.description}) is directly needed for the task and missing locally."),
+            Option("skip", SKIP_CUES, max(0.1, 1.5 - activation),
+                   "Skip it: the procedure is tangential, not needed, or already covered locally.")]
 
 
 class RemoteRegistry:
@@ -105,7 +107,7 @@ class RemoteRegistry:
             if not ents:
                 continue
             d = jev.activate(f"Which capabilities under '{nid or 'root'}' will this task need?", task,
-                             [Option(e["id"], self._text(e)) for e in ents], context)
+                             [Option(e["id"], self._text(e), desc=e.get("description") or e["id"]) for e in ents])
             ranked = sorted(ents, key=lambda e: -d.probs[e["id"]])
             for rank, e in enumerate(ranked):
                 p = d.probs[e["id"]]

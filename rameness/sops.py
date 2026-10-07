@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -84,6 +85,24 @@ class SOP:
         return f"{self.id.replace('.', ' ')} {self.description} {' '.join(self.keywords)}"
 
     @property
+    def desc(self) -> str:
+        """What a decision model reads as this SOP's criterion."""
+        return self.description or self.id
+
+    def digest(self) -> str:
+        """What JEV reads when it evaluates this SOP itself: its description and its code
+        (comments and blank lines dropped), not the rest of the library or the org profile."""
+        if self.kind == "skill":
+            body = self.instructions
+        elif self.kind == "composite":
+            body = json.dumps(self.steps)
+        else:
+            src = self.path / self.entry
+            body = src.read_text(errors="replace") if src.is_file() else ""
+            body = "\n".join(ln for ln in body.splitlines() if ln.strip() and not ln.lstrip().startswith("#"))
+        return f"SOP {self.id}: {self.description}\n{body}"
+
+    @property
     def tool_name(self) -> str:
         return "sop_" + re.sub(r"[^a-zA-Z0-9_]", "_", self.id.replace(".", "__"))[:60]
 
@@ -122,6 +141,13 @@ class Node:
             return self.sop.text
         kids = " ".join(self.children)
         return f"{self.id.split('.')[-1]} {self.description} {' '.join(self.keywords)} {kids}"
+
+    @property
+    def desc(self) -> str:
+        if self.sop:
+            return self.sop.desc
+        kids = ", ".join(self.children)
+        return f"{self.description or self.id.split('.')[-1]}" + (f" (covers: {kids})" if kids else "")
 
     def walk(self):
         yield self
@@ -240,7 +266,7 @@ class Library:
         """Flat search over leaves (used by the model-facing ``sop_search`` tool)."""
         sops = list(self.sops.values())
         d = jev.activate("Which procedures match this request?", query,
-                         [Option(s.id, s.text, self._prior(s)) for s in sops])
+                         [Option(s.id, s.text, self._prior(s), s.desc) for s in sops])
         return [(self.sops[i], p) for i, p in d.top(k) if p > 0.1]
 
     def _prior(self, s: SOP) -> float:
@@ -303,8 +329,9 @@ def activate(lib: Library, jev: Jev, task: str, context: str = "", defaults: dic
         kids = list(node.children.values())
         if not kids:
             continue
+        # JEV sees the task only; the org context resolves `requires` deterministically (unresolved)
         d = jev.activate(f"Which capabilities under '{node.id or 'root'}' will this task need?", task,
-                         [Option(k.id, k.text, lib._prior(k.sop) if k.sop else 1.0) for k in kids], context)
+                         [Option(k.id, k.text, lib._prior(k.sop) if k.sop else 1.0, k.desc) for k in kids])
         ranked = sorted(zip(kids, (d.probs[k.id] for k in kids)), key=lambda x: -x[1])
         for rank, (k, p) in enumerate(ranked):
             if p < explore_th or rank >= beam:
@@ -388,12 +415,13 @@ class Executor:
         extra = [p for p in sop.permissions if p not in self.allow]
         return not extra or self.approve(sop, args)
 
-    def run(self, sop_id: str, args: dict, _depth: int = 0) -> dict:
+    def run(self, sop_id: str, args: dict, _depth: int = 0, preapproved: bool = False) -> dict:
+        """``preapproved``: the user already chose to run this SOP (a configured lifecycle hook)."""
         sop = self.lib.get(sop_id)
         errs = validate_args(sop, args)
         if errs:
             raise SOPError(f"{sop_id}: " + "; ".join(errs))
-        if _depth == 0 and not self.permitted(sop, args):
+        if _depth == 0 and not preapproved and not self.permitted(sop, args):
             raise SOPError(f"{sop_id}: permission denied ({', '.join(sop.permissions)})")
         ok = False
         try:
@@ -416,33 +444,58 @@ class Executor:
             return self._script_remote(sop, args)
         entry = sop.path / sop.entry
         cmd = {".py": [sys.executable, str(entry)], ".sh": ["bash", str(entry)]}.get(entry.suffix, [str(entry)])
-        env = {**os.environ, "RAMENESS_SOP_DIR": str(sop.path)}
+        if sop.scope == "public":
+            # Public code must not inherit provider keys, cloud credentials or Python import overrides.
+            public_env = {"PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TMP", "TEMP", "SYSTEMROOT", "WINDIR"}
+            env = {k: v for k, v in os.environ.items() if k in public_env}
+            if entry.suffix == ".py":
+                cmd = [sys.executable, "-I", "-B", str(entry)]
+        else:
+            env = dict(os.environ)
+        env["RAMENESS_SOP_DIR"] = str(sop.path)
         p = subprocess.run(cmd, input=json.dumps(args), capture_output=True, text=True, cwd=self.cwd,
                            timeout=self.timeout, env=env)
         if p.returncode != 0:
             raise SOPError(f"{sop.id} exited {p.returncode}: {(p.stderr or p.stdout)[-2000:]}")
         out = p.stdout.strip()
         try:
-            return json.loads(out) if out else {}
+            result = json.loads(out) if out else {}
         except json.JSONDecodeError:
             return {"output": out}
+        if not isinstance(result, dict):
+            raise SOPError(f"{sop.id}: script must output a JSON object, got {type(result).__name__}")
+        return result
 
     def _script_remote(self, sop: SOP, args: dict) -> dict:
         """Ship the SOP directory to the environment once, then run it there."""
-        remote = f"/tmp/rameness-sops/{sop.id}-{sop.version}"
+        if not getattr(self, "_remote_root", None):
+            # a private staging dir (mode 700, unique name): a fixed shared path breaks for a second user and
+            # would let another user plant scripts there
+            r = self.env.run("mktemp -d \"${TMPDIR:-/tmp}/rameness-sops.XXXXXXXX\"", str(self.cwd), timeout=30)
+            if r.code != 0 or not r.out.strip():
+                raise SOPError(f"could not create a staging directory on {self.env.id}: {(r.err or r.out)[-500:]}")
+            self._remote_root = r.out.strip().splitlines()[-1]
+        remote = f"{self._remote_root}/{sop.id}-{sop.version}"
         if sop.id not in self._shipped:
             self.env.put_dir(sop.path, remote)
             self._shipped.add(sop.id)
         runner = {".py": "python3", ".sh": "bash"}.get(Path(sop.entry).suffix, "")
-        r = self.env.run(f"RAMENESS_SOP_DIR={remote} {runner} {remote}/{sop.entry}", str(self.cwd),
-                         timeout=self.timeout, input=json.dumps(args))
+        command = f"RAMENESS_SOP_DIR={remote} {runner} {remote}/{sop.entry}"
+        if sop.scope == "public":
+            argv = ([runner] if runner else []) + (["-I", "-B"] if Path(sop.entry).suffix == ".py" else []) + [f"{remote}/{sop.entry}"]
+            command = ('env -i PATH="$PATH" LANG="${LANG:-C.UTF-8}" '
+                       + "RAMENESS_SOP_DIR=" + shlex.quote(remote) + " " + shlex.join(argv))
+        r = self.env.run(command, str(self.cwd), timeout=self.timeout, input=json.dumps(args))
         if r.code != 0:
             raise SOPError(f"{sop.id} exited {r.code} on {self.env.id}: {(r.err or r.out)[-2000:]}")
         out = r.out.strip()
         try:
-            return json.loads(out) if out else {}
+            result = json.loads(out) if out else {}
         except json.JSONDecodeError:
             return {"output": out}
+        if not isinstance(result, dict):
+            raise SOPError(f"{sop.id}: script must output a JSON object, got {type(result).__name__}")
+        return result
 
     def _composite(self, sop: SOP, args: dict, depth: int) -> dict:
         if depth > 8:
