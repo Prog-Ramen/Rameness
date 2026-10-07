@@ -39,7 +39,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .org import Org
-from .publish import classify, hard_findings, private_info, scrub, scrub_tree
+from .deps import describe
+from .publish import classify, destination, hard_findings, private_info, scrub, scrub_tree
 from .sops import SOP, Library
 
 GH_URL = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
@@ -89,12 +90,15 @@ def git(cwd: Path, *args: str, check: bool = True) -> str:
     return p.stdout.strip()
 
 
-def install_hook(repo: Path) -> None:
-    """pre-push: re-scan the whole tree; any hard finding (secret, private term) blocks the push."""
+def install_hook(repo: Path, subdir: str = "") -> None:
+    """pre-push: re-scan the tree (or only ``subdir``, where proposals go: the Rameness repo's own tests
+    carry fake secrets on purpose); any hard finding (secret, private term) blocks the push."""
     hook = repo / ".git" / "hooks" / "pre-push"
     hook.parent.mkdir(parents=True, exist_ok=True)
+    where = "$(git rev-parse --show-toplevel)" + (f"/{subdir}" if subdir else "")
     hook.write_text(f"#!/bin/sh\n# installed by rameness: blocks pushes containing secrets or private data\n"
-                    f"exec \"{sys.executable}\" -m rameness sop scrub-tree \"$(git rev-parse --show-toplevel)\"\n")
+                    # -I: never import rameness from the clone itself (the Rameness repo has a rameness/ folder)
+                    f"exec \"{sys.executable}\" -I -m rameness sop scrub-tree \"{where}\"\n")
     hook.chmod(0o755)
 
 
@@ -103,7 +107,7 @@ def sanitized_copy(sop: SOP, dest: Path) -> None:
         shutil.rmtree(dest)
     shutil.copytree(sop.path, dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env*"))
     d = json.loads((dest / "sop.json").read_text())
-    for k in ("origin", "classified", "visibility", "stats"):
+    for k in ("origin", "classified", "visibility", "stats", "destination"):
         d.pop(k, None)
     d["scope"] = "public"
     (dest / "sop.json").write_text(json.dumps(d, indent=2) + "\n")
@@ -113,6 +117,9 @@ class Registry:
     def __init__(self, cfg: dict, home: Path, org: Org, jev):
         rc = cfg.get("registry") or {}
         self.public = rc.get("public")
+        self.builtin = rc.get("builtin")          # the Rameness repo: built-in SOPs ship with Rameness itself
+        self.builtin_min_share = rc.get("builtin_min_share", 0.5)
+        self.builtin_min_runs = rc.get("builtin_min_runs", 10)
         self.fork = rc.get("fork")
         self.home = home / "registry"
         self.org, self.jev = org, jev
@@ -120,7 +127,34 @@ class Registry:
 
     # ---- helpers
 
-    def _clone(self, url: str, name: str) -> Path:
+    # Where each kind of proposal goes: (repo url, folder the SOPs live in, pre-push scan scope)
+    def _target(self, dest: str) -> tuple[str, str, str]:
+        if dest == "builtin":
+            if not self.builtin:
+                raise RegistryError("no Rameness repo configured for built-in SOPs (registry.builtin)")
+            return self.builtin, "rameness/builtin_sops", "rameness/builtin_sops"
+        if not self.public:
+            raise RegistryError("no registry configured (registry.public)")
+        return self.public, "sops", ""
+
+    def destination(self, sop: SOP) -> dict:
+        """builtin or registry for a shareable SOP, from how many runs used it (publish.destination).
+        An extended copy of an existing SOP goes back to where the original lives, as an update."""
+        overrides = (sop.origin or {}).get("overrides")
+        if overrides in ("builtin", "registry"):
+            return {"destination": overrides, "reason": f"updates the existing {overrides} SOP {sop.id}"}
+        if not self.builtin:
+            return {"destination": "registry", "reason": "no Rameness repo configured for built-in SOPs"}
+        o = sop.origin or {}
+        d = destination(self.jev, sop, int(o.get("runs_seen", 0)), int(o.get("runs_total", 0)),
+                        self.builtin_min_share, self.builtin_min_runs)
+        if sop.scope == "private" and (sop.path / "sop.json").exists():
+            data = json.loads((sop.path / "sop.json").read_text())
+            data["destination"] = d["destination"]
+            (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
+        return d
+
+    def _clone(self, url: str, name: str, scan: str = "") -> Path:
         d = self.home / name
         if not (d / ".git").exists():
             d.parent.mkdir(parents=True, exist_ok=True)
@@ -138,10 +172,10 @@ class Registry:
             self._base = "main"
             git(d, "checkout", "-q", "--orphan", "main", check=False)
         git(d, "clean", "-qfdx")
-        install_hook(d)
+        install_hook(d, scan)
         return d
 
-    def _gh_pr(self, url: str, branch: str, base: str, title: str, body: str) -> str | None:
+    def _gh_pr(self, url: str, branch: str, base: str, title: str, body: str, draft: bool = False) -> str | None:
         m = GH_URL.search(url)
         if not (m and shutil.which("gh")):
             return None
@@ -149,7 +183,8 @@ class Registry:
             body_file = Path(temp) / "body.md"
             body_file.write_text(body)
             p = subprocess.run(["gh", "pr", "create", "--repo", f"{m.group(1)}/{m.group(2)}", "--head", branch,
-                                "--base", base, "--title", title, "--body-file", str(body_file)],
+                                "--base", base, "--title", title, "--body-file", str(body_file)]
+                               + (["--draft"] if draft else []),
                                capture_output=True, text=True, timeout=120)
         if p.returncode:
             # A previous create may have succeeded before the client lost its response.
@@ -227,53 +262,69 @@ class Registry:
             raise RegistryError(f"no push access to {url} and could not fork it: {p.stderr.strip()}")
         return f"https://github.com/{me}/{repo}.git"
 
-    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True) -> dict:
+    def propose(self, sop: SOP, override_personal: bool = False, reclassify: bool = True,
+                to: str | None = None) -> dict:
+        """Open a PR for ``sop``: to the Rameness repo when it is built-in material, else to the registry.
+        ``to`` (builtin | registry) overrides the decision."""
         with proposal_lock(self.home):
-            return self._propose(sop, override_personal, reclassify)
+            return self._propose(sop, override_personal, reclassify, to)
 
-    def _propose(self, sop: SOP, override_personal: bool, reclassify: bool) -> dict:
-        if not self.public:
+    def _propose(self, sop: SOP, override_personal: bool, reclassify: bool, to: str | None = None) -> dict:
+        if not (self.public or self.builtin):
             raise RegistryError("no registry configured (registry.public)")
         cls = self._check(sop, override_personal, reclassify)
-        key = f"{self.public}:{sop.id}:{fingerprint(sop)}"
+        dest = {"destination": to, "reason": "chosen by the user"} if to else self.destination(sop)
+        url, prefix, scan = self._target(dest["destination"])
+        key = f"{url}:{sop.id}:{fingerprint(sop)}"
         previous = next((p for p in self.proposals() if p.get("key") == key), None)
         if previous and previous.get("status") in ("proposed", "pushed_local"):
             return previous
-        if GH_URL.search(self.public) and not shutil.which("gh"):
+        if GH_URL.search(url) and not shutil.which("gh"):
             raise RegistryError("GitHub PR creation requires gh installed and authenticated")
         if previous and previous.get("status") == "pushed":
-            pr = self._gh_pr(self.public, previous["head"], previous["base"], previous["title"], previous["body"])
+            pr = self._gh_pr(url, previous["head"], previous["base"], previous["title"], previous["body"],
+                             draft=previous.get("destination") == "builtin")
             entry = {**previous, "pr": pr, "status": "proposed"}
             self._record(entry)
             return entry
-        repo = self._clone(self.public, "public")
+        repo = self._clone(url, dest["destination"] if dest["destination"] == "builtin" else "public", scan)
         branch = f"sop/{sop.id}-{time.time_ns()}"
         git(repo, "checkout", "-q", "-b", branch)
-        sanitized_copy(sop, repo / "sops" / Path(*sop.id.split(".")))
+        base_dir = repo / prefix
+        sanitized_copy(sop, base_dir / Path(*sop.id.split(".")))
         parts = sop.id.split(".")                # new categories travel with their SOP; the index is rebuilt on merge
         for i in range(1, len(parts)):
-            src, dst = sop.path.parents[len(parts) - 1 - i] / "_node.json", repo / "sops" / Path(*parts[:i]) / "_node.json"
+            src, dst = sop.path.parents[len(parts) - 1 - i] / "_node.json", base_dir / Path(*parts[:i]) / "_node.json"
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
-        leftover = hard_findings(scrub_tree(repo, self.org))
+        leftover = hard_findings(scrub_tree(repo / scan if scan else repo, self.org))
         if leftover:
             raise RegistryError("scan of the registry tree failed:\n  " + "\n  ".join(leftover))
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", f"Propose SOP {sop.id}\n\n{sop.description}")
-        head, pushed = self._push(repo, self.public, branch)
-        body = (f"Proposed SOP `{sop.id}`: {sop.description}\n\nClassification: {cls['visibility']} ({cls['reason']}).\n"
+        head, pushed = self._push(repo, url, branch)
+        builtin = dest["destination"] == "builtin"
+        kind = "built-in SOP (ships with Rameness)" if builtin else "SOP"
+        needs = describe(sop.requirements)
+        body = (f"Proposed {kind} `{sop.id}`: {sop.description}\n\n"
+                f"Classification: {cls['visibility']} ({cls['reason']}).\n"
+                f"Destination: {dest['destination']} ({dest['reason']}).\n"
+                + (f"{needs}\n" if needs else "Needs nothing beyond Python and a POSIX shell.\n") +
                 "Scans: rameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
                 (" + trufflehog" if shutil.which("trufflehog") else "") + ": no secrets or private terms"
-                + (f"; JEV judged {len(cls['benign'])} other finding(s) benign" if cls["benign"] else "") + ".")
-        entry = {"id": sop.id, "key": key, "registry": self.public, "fingerprint": fingerprint(sop),
+                + (f"; JEV judged {len(cls['benign'])} other finding(s) benign" if cls["benign"] else "") + "."
+                + ("\n\n**Needs verification by a Rameness developer before merging.** Built-in SOPs ship to "
+                   "every Rameness user; this was proposed automatically and opened as a draft." if builtin else ""))
+        entry = {"id": sop.id, "key": key, "registry": url, "destination": dest["destination"],
+                 "fingerprint": fingerprint(sop),
                  "branch": branch, "head": head, "base": self._base, "title": f"SOP: {sop.id}", "body": body,
                  "status": "pushed", "t": time.time(), "pushed": pushed, "pr": None,
                  "classification": cls["visibility"],
                  "overridden": cls["visibility"] != "shareable", "benign": cls["benign"]}
         # Persist the pushed branch before calling GitHub, so retries reuse it.
         self._record(entry)
-        pr = self._gh_pr(self.public, head, self._base, entry["title"], body)
-        entry.update(pr=pr or self._compare_url(self.public, head, self._base),
+        pr = self._gh_pr(url, head, self._base, entry["title"], body, draft=builtin)
+        entry.update(pr=pr or self._compare_url(url, head, self._base),
                      status="proposed" if pr else "pushed_local")
         self._record(entry)
         return entry
@@ -285,8 +336,8 @@ class Registry:
             if sop.scope != "private" or sop.status != "validated" or sop.visibility != "shareable":
                 continue
             try:
-                key = f"{self.public}:{sop.id}:{fingerprint(sop)}"
-                if any(p.get("key") == key and p.get("status") in ("proposed", "pushed_local")
+                fp = fingerprint(sop)
+                if any(p.get("key", "").endswith(f":{sop.id}:{fp}") and p.get("status") in ("proposed", "pushed_local")
                        for p in self.proposals()):
                     continue
                 if not sop.tests:

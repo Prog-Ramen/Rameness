@@ -31,7 +31,7 @@ from . import featurebranch
 from .progress import ProgressReview
 from .thinking import Thinking
 from . import hooks as hooks_mod
-from .learning import Learner, RunStore, register_sop
+from .learning import Learner, RunStore
 from .org import Org
 from .router import Plan, Router
 from .sops import SOP, Executor, Library, SOPError
@@ -970,12 +970,13 @@ class Harness:
             if not self.approver("sop_save", f"{args.get('id')}: {args.get('description')}"):
                 return "DENIED", True
             try:
-                sop, failures = register_sop(self.lib, self.executor, args, {"via": "sop_save"},
-                                             jev=self.jev, org=self.org)
+                sop, failures, extended = self.learner.extend_or_register(args, {"via": "sop_save"})
             except Exception as e:
                 return f"ERROR: {e}", True
             active[sop.tool_name] = sop
-            msg = f"saved {sop.id} as {sop.status}; callable as {sop.tool_name}"
+            msg = (f"extended the existing {sop.id} (now version {sop.version}) instead of adding a near-duplicate; "
+                   f"callable as {sop.tool_name}" if extended else
+                   f"saved {sop.id} as {sop.status}; callable as {sop.tool_name}")
             return msg + (f"\ntest failures: {failures}" if failures else ""), bool(failures and failures != ["no tests provided"])
         if name.startswith("sop_"):
             return f"ERROR: {name} is not loaded; use sop_search first", True

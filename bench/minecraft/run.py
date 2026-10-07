@@ -132,15 +132,25 @@ def harness_cmd(h: str, m: dict, proxy: str, run_dir: Path, work: Path, labels: 
     if h == "rameness":
         home = run_dir / "home"
         (home / ".rameness").mkdir(parents=True, exist_ok=True)
+        registry = {"auto_propose": False}               # isolated benchmarks never publish to GitHub
+        pipeline = os.environ.get("BENCH_SOP_PIPELINE") == "1"
+        if pipeline:
+            # The whole SOP pipeline runs (learning, sop_save, extension, proposals), but proposals go to
+            # local stand-in repos in the run folder instead of GitHub; pulls read the real registry index.
+            sinks = run_dir / "sop-sinks"
+            for name in ("RamenSOPs.git", "Rameness.git"):
+                subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(sinks / name)], check=True)
+            registry = {"auto_propose": True, "public": str(sinks / "RamenSOPs.git"),
+                        "builtin": str(sinks / "Rameness.git")}
         (home / ".rameness" / "config.json").write_text(json.dumps(
             # Kev on CPU (bf16, ~8 GB RAM) next to the local llama-server
             {"jev": {"backend": "kev", "kev_url": "http://127.0.0.1:8008/v1/systemone"},
              "max_turns": 1000,                           # the wall-clock limit bounds the run, like the others
-             "registry": {"auto_propose": False},         # isolated benchmarks never publish to GitHub
+             "registry": registry,
              "permissions": {"mode": "auto"}, **json.loads(os.environ.get("BENCH_RAMENESS_CONFIG") or "{}")}))
         env.update(HOME=str(home), RAMENESS_TELEMETRY_URL=vm.VM_URL, RAMENESS_TELEMETRY_LABELS=json.dumps(labels))
         return ["/opt/rameness-bench/bin/rameness", "--base-url", f"{proxy}/v1", "--model", m["id"], "-y",
-                "run", "--no-learn", TASK], env
+                "run", *([] if pipeline else ["--no-learn"]), TASK], env
     if h == "pi":
         agent = run_dir / "pi-agent"
         agent.mkdir(parents=True, exist_ok=True)
@@ -529,6 +539,8 @@ def main():
                     "(default: the model's reasoning_budget in MODELS, else unlimited)")
     ap.add_argument("--rameness-config", default="", help="JSON merged into Rameness's config (flag experiments)")
     ap.add_argument("--serial", action="store_true", help="one run at a time across all servers (saves memory)")
+    ap.add_argument("--sop-pipeline", action="store_true",
+                    help="Rameness: learn and save SOPs and run the proposal pipeline, into local stand-in repos")
     ap.add_argument("--min-free-mb", type=int, default=5000, help="wait for this much free memory before a run")
     ap.add_argument("--smoke", action="store_true", help="a trivial task, to check each harness is wired up")
     a = ap.parse_args()
@@ -573,6 +585,8 @@ def main():
     if a.rameness_config:
         json.loads(a.rameness_config)
         os.environ["BENCH_RAMENESS_CONFIG"] = a.rameness_config
+    if a.sop_pipeline:
+        os.environ["BENCH_SOP_PIPELINE"] = "1"
     if a.serial:
         queues = {"all": [j for jobs in queues.values() for j in jobs]}
     threads = [threading.Thread(target=worker, args=(jobs,)) for jobs in queues.values()]

@@ -119,6 +119,9 @@ DEFAULTS: dict = {
     },
     "registry": {
         "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # `sop propose` opens PRs here
+        "builtin": "https://github.com/Prog-Ramen/Rameness.git",   # ...or here, for SOPs most runs use (built-in)
+        "builtin_min_share": 0.5,         # built-in only if the procedure appeared in at least this share of runs
+        "builtin_min_runs": 10,           # ...measured over at least this many successful runs
         "auto_propose": True,             # after successful tasks, propose validated, shareable private SOPs
         "fork": None,                     # push proposals to this fork; default: origin, else a `gh repo fork`
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/registry/sops/index.json",

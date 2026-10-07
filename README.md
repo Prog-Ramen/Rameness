@@ -437,11 +437,15 @@ gives you a training set for fine-tuning Laya on real harness decisions.
 A directory tree, layered lowest precedence first:
 
 ```
-rameness/builtin_sops/      public starter package (http, data, fs, git, dev, resolve)
-~/.rameness/public/<pkg>/   installed public packages
+rameness/builtin_sops/      built-in: ships with Rameness (code, data, dev, fs, git, http, resolve)
+~/.rameness/public/<pkg>/   registry: public packages pulled from RamenSOPs when a task needs them
 ~/.rameness/sops/           private: yours
 ./.rameness/sops/           private: this project / organization
 ```
+
+Where an SOP lives decides what it is; a later layer's SOP with the same id replaces an earlier
+one, so an organization can override a built-in or registry SOP without forking it. Built-in and
+registry SOPs run with a scrubbed environment (no model keys, cloud credentials or import overrides).
 
 * Category: a directory with `_node.json` (`description`, `keywords`, `requires`).
   `requires` lists the information needed to choose among the children, e.g.
@@ -454,6 +458,13 @@ rameness/builtin_sops/      public starter package (http, data, fs, git, dev, re
 * `inputs` is a JSON schema; `permissions` (`fs:read`, `network`, `exec`, `side-effect`, …)
   are enforced deterministically. Anything outside `permissions.sop_allow` needs approval.
   JEV confidence never grants permission.
+* `requirements` lists the Python packages and programs an SOP may need beyond Python and a POSIX
+  shell (detected from its imports and the commands it runs, by code, not a model). It is shown with
+  the SOP to people and to the agent ("May need programs: jq"); nothing is installed automatically.
+  **Occam's razor:** SOPs are generated with the standard library and the tools every Linux system
+  has. When a new SOP still needs something extra, Rameness asks for a standard-only rewrite and keeps
+  it only if it passes the same tests and needs less (`urllib` instead of `requests`, `json` instead
+  of `jq`); the model can answer that an extra is unavoidable, and then the original stays.
 * `tests` run before an SOP is marked `validated`. Only validated scripts can be run on the
   `direct` route; `candidate` SOPs are offered to the model but never auto-executed.
 
@@ -468,18 +479,36 @@ After each task the trace is stored in `.rameness/runs/`. The learner:
 1. mines step n-grams that recur across different runs (shape-normalised: paths, numbers and strings abstracted),
 2. optionally has the fast model segment the trace into generic sub-procedures,
 3. scores them with the JEV, combined with frequency: `p = 1 - (1 - p_jev)(1 - p_freq)`,
-4. drops duplicates of existing SOPs,
+4. drops duplicates of existing SOPs (an existing SOP already does it, unchanged),
 5. generates the SOP: exact repeated shell sequences become a script with no model call;
    otherwise the fast model writes the script and tests,
-6. registers it privately: `validated` if its tests pass, otherwise `candidate`
+6. **extends a close SOP instead of adding a near-duplicate** when JEV judges a small change would
+   cover it (an extra optional parameter or output). The extension is kept only if every existing
+   test still passes, its new tests pass, no input is dropped and no new input is required; a
+   private SOP is updated in place (minor version bump, `origin.extended` records what was added),
+   and a built-in or registry SOP gets a private override with the same id, which proposing turns
+   into a PR that updates the original. Otherwise it falls through to a new SOP. The agent's own
+   `sop_save` follows the same path,
+7. registers a new one privately: `validated` if its tests pass, otherwise `candidate`
    (`rameness sop promote <id>` after review),
-7. after the task succeeds, the proposal pipeline re-tests validated, shareable SOPs and opens public PRs.
+8. after the task succeeds, the proposal pipeline re-tests validated, shareable SOPs and opens public PRs.
 
 ## Private vs public SOPs
 
 Every learned or agent-saved SOP starts in the **private** project library (`.rameness/sops`).
+JEV files it under a category: it checks the generator's proposed `category.name` against the
+categories that exist and moves it into the best fit, keeping a new category only when none fits.
 With `registry.auto_propose: true` (default), a successful agent or direct task automatically sends
-validated, JEV-classified `shareable` SOPs through the proposal pipeline. It re-runs their tests,
+validated, JEV-classified `shareable` SOPs through the proposal pipeline. Each goes to one of two places:
+
+| Destination | When | PR to | Who merges |
+|---|---|---|---|
+| **Built-in** (`rameness/builtin_sops/`) | the procedure appeared in at least half of the recent successful runs (`builtin_min_share`, over at least `builtin_min_runs` = 10 runs) **and** JEV judges it needed by almost every task | the Rameness repo, opened as a **draft** | a Rameness developer verifies and merges it |
+| **Registry** (RamenSOPs) | every other shareable SOP, and whenever the evidence is thin or JEV is unsure | RamenSOPs | its CI gate, or a maintainer |
+
+Built-in SOPs save a network pull on most runs; registry SOPs are fetched only by the tasks that need
+them. Either kind may list packages it needs. `rameness sop propose <id> --dest builtin|registry`
+overrides the choice. It re-runs their tests,
 classification and privacy scans before pushing a sanitized copy and opening a PR. Personal,
 uncertain, untested or failing SOPs stay private. Automatic proposals also require tests that
 assert concrete output values; checking only output keys is insufficient.
@@ -505,7 +534,8 @@ private library ──automatic proposal──► PR on public RamenSOPs ──C
   and classification stripped) on a `sop/<id>-…` branch: to the public repo if
   you can push there, otherwise to `registry.fork` or a fork made with `gh`, and opens the PR.
   Every clone rameness manages gets a **pre-push hook** that blocks hard findings, so a manual
-  `git push` of a secret is blocked too.
+  `git push` of a secret is blocked too. In a clone of the Rameness repo the hook scans only
+  `rameness/builtin_sops/`, since Rameness's own tests contain fake secrets on purpose.
 * **Retries reuse the branch.** Proposal state is saved under `~/.rameness/registry/proposals.json`.
   Unchanged SOPs already proposed are skipped. If GitHub fails after the push, the next successful
   task retries opening the PR on that same branch. Failures are reported in the task result,
@@ -514,7 +544,8 @@ private library ──automatic proposal──► PR on public RamenSOPs ──C
   reported as a successfully opened GitHub PR.
 * **Controls.** Set `registry.auto_propose: false` to disable automatic publishing. Readonly mode
   also disables it. `--no-learn` skips trace learning but agent-saved SOPs can still be proposed.
-  Benchmark runs disable both trace learning and automatic proposals to keep comparisons isolated.
+  Benchmark runs disable both trace learning and automatic proposals to keep comparisons isolated;
+  `bench.minecraft.run --sop-pipeline` turns them on with proposals sent to local stand-in repos.
 
 * **The registry checks again.** RamenSOPs has its own deployed CI gate: metadata and
   permissions, concrete tests in isolated containers, pinned secret scanning, and a GitHub
@@ -526,7 +557,9 @@ private library ──automatic proposal──► PR on public RamenSOPs ──C
   authoritative, and unavailable quality review blocks automatic merging.
 
 ```json
-"registry": {"public": "https://github.com/Prog-Ramen/RamenSOPs.git", "fork": null, "auto_propose": true}
+"registry": {"public": "https://github.com/Prog-Ramen/RamenSOPs.git",
+             "builtin": "https://github.com/Prog-Ramen/Rameness.git",
+             "builtin_min_share": 0.5, "builtin_min_runs": 10, "fork": null, "auto_propose": true}
 ```
 
 ### Pulling SOPs from the registry: only what a task needs
@@ -537,12 +570,17 @@ When a task comes in:
 
 1. **Local first.** The remote registry is consulted only when no local SOP clearly covers the task
    (best local activation < `activate_threshold` + `registry.coverage_margin`).
-2. **Lazy traversal with the same activation criteria.** JEV scores the root categories in one call.
-   Rejected branches are never downloaded; a branch whose `requires` aren't met is deferred without
-   being opened; only explored categories have their `_index.json` fetched, and so on down the tree.
+2. **Lazy traversal, one tree level at a time** (the fan-out of Google's Dremel serving tree). Every
+   category JEV chose to explore at a level is fetched **in parallel**, and their children are scored
+   in parallel, one JEV decision per category as before. A search costs one round trip per tree
+   level, not one per category: about 0.3 s instead of 0.9 s on a three-level registry at 100 ms per
+   request. Rejected branches are never downloaded, a branch whose `requires` aren't met is deferred
+   without being opened, and a listing that misses the level's deadline uses its cached copy or is
+   left out (a straggler) instead of stalling the search. Listings are cached for 6 hours; after
+   that a conditional request (ETag / Last-Modified) turns an unchanged listing into a 304.
 3. **Pull decision per candidate.** JEV makes the decision, then the comfort gate applies.
    Permissions outside `permissions.sop_allow` need your yes; with no user present the SOP is skipped.
-4. **Verified install.** Only the chosen SOP's files are downloaded, each checked against the SHA-256
+4. **Verified install.** Only the chosen SOP's files are downloaded, in parallel, each checked against the SHA-256
    in its listing, into `~/.rameness/public/<registry>/sops`. Its tests must pass, otherwise it is
    removed again.
 
@@ -594,6 +632,7 @@ rameness/
   router.py         task triage: route, effort, direct SOP execution
   harness.py        agent loop: turns, stop/finish checks, group review/debug, feature cycles, note ledger, images, delegation, learning hook
   featurebranch.py  feature cycles on their own git branch and folder, merged only once verified
+  deps.py           the packages and programs an SOP may need (from its imports and commands)
   thinking.py       per-turn thinking levels (JEV) → reasoning budgets / effort
   hooks.py          lifecycle hooks: JEV-selected SOPs run at on_start / after_output / before_finish / on_end
   progress.py       periodic progress review (JEV)
@@ -607,8 +646,8 @@ rameness/
   llm.py            Anthropic SDK + OpenAI-compatible (llama-server, ollama, vLLM, DeepSeek), text tool protocol, sampling profiles, vision
   tools.py          bash/read/write/edit/edit_lines/grep/glob/web_fetch, line anchors, images, environment-aware
   builtin_sops/     starter SOP package, including code/syntax_check (the after_output hook)
-  publish.py        scrubber, secret scanning, personal-vs-general classification, local publish, index
-  registry.py       propose SOPs as PRs to the public registry (fork fallback), pre-push hooks
+  publish.py        scrubber, secret scanning, personal-vs-general, category and built-in-vs-registry decisions
+  registry.py       propose SOPs as PRs: built-in (Rameness repo, draft) or registry (RamenSOPs); pre-push hooks
   review.py         conservative local registry preflight; execute untrusted tests in a sandbox
   remote.py         lazy, activation-driven pulls of individual SOPs from a sharded registry index
   fleet/

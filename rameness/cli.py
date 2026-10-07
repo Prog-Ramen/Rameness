@@ -173,7 +173,8 @@ def cmd_sop(a):
     elif a.action == "propose":
         from .registry import Registry, RegistryError
         try:
-            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal)
+            r = Registry(h.cfg, h.home, h.org, h.jev).propose(lib.get(a.arg), override_personal=a.override_personal,
+                                                                    to=a.dest)
         except RegistryError as e:
             sys.exit(f"not proposed: {e}")
         print(f"proposed {r['id']} to the public registry (pushed to {r['pushed']})\n  branch {r['branch']}\n  PR: {r['pr']}")
@@ -471,6 +472,9 @@ def main(argv=None):
     p.add_argument("--json", help="review / discover: also write the result as JSON here")
     p.add_argument("--top", type=int, default=12, help="discover: how many candidates to report")
     p.add_argument("--no-jev", action="store_true", help="discover: skip JEV screening (counts only)")
+    p.add_argument("--dest", choices=["builtin", "registry"],
+                   help="propose: open the PR for a built-in SOP (Rameness repo) or the registry (default: "
+                        "decided from how many runs use it)")
     p.add_argument("--override-personal", action="store_true",
                    help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)

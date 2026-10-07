@@ -182,6 +182,80 @@ def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
     return result
 
 
+def categorize(jev: Jev, lib: Library, sop: SOP, min_p: float = 0.5) -> str:
+    """The top-level category an SOP belongs in, chosen by JEV from the library's categories.
+
+    The generator proposes ``category.name``; JEV checks it against the categories that exist (with
+    their descriptions). A proposed category that matches none of them is kept as a new one, unless
+    JEV clearly places the SOP in an existing category. Returns the category id."""
+    proposed = sop.id.split(".")[0] if "." in sop.id else ""
+    cats = {cid: node for cid, node in lib.root.children.items() if node.sop is None and cid != "learned"}
+    if not cats:
+        return proposed or "learned"
+    opts = [Option(cid, node.text, desc=node.desc) for cid, node in cats.items()]
+    if proposed and proposed not in cats and proposed != "learned":
+        opts.append(Option(proposed, f"{proposed} new category {sop.text}",
+                           desc=f"A new category, '{proposed}', for procedures like this one"))
+    d = jev.choose("Which category of standard procedures does this procedure belong in?",
+                   f"{sop.id}: {sop.description}", opts)
+    best = max(d.probs, key=d.probs.get)
+    if d.probs[best] >= min_p or not proposed or proposed == "learned":
+        return best
+    return proposed
+
+
+def recategorize(lib: Library, sop: SOP, category: str) -> SOP:
+    """Move a private SOP to ``<category>.<name>`` (its folder and id), keeping everything else."""
+    name = sop.id.split(".")[-1]
+    new_id = f"{category}.{name}"
+    if new_id == sop.id or sop.scope != "private":
+        return sop
+    root = sop.path
+    for _ in sop.id.split("."):
+        root = root.parent
+    target = root.joinpath(*new_id.split("."))
+    if target.exists():
+        return sop
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(sop.path), str(target))
+    data = json.loads((target / "sop.json").read_text())
+    data["id"] = new_id
+    (target / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
+    lib.reload()
+    return lib.get(new_id)
+
+
+BUILTIN_CUES = ("common everyday basic core almost every task most runs file text json http git test syntax "
+                "search read check format")
+REGISTRY_CUES = ("specialised niche particular domain tool service format occasional some tasks optional")
+
+
+def destination(jev: Jev, sop: SOP, runs_seen: int, runs_total: int, min_share: float = 0.5,
+                min_runs: int = 10) -> dict:
+    """Where a shareable SOP is proposed: ``builtin`` (shipped with Rameness, no network pull) or
+    ``registry`` (RamenSOPs, pulled when a task needs it).
+
+    Built-in is for procedures used in most runs. The evidence is the share of successful runs the
+    procedure appeared in; it must reach ``min_share`` over at least ``min_runs`` runs, and JEV must
+    also judge it broadly needed. Anything else goes to the registry, which costs only a pull."""
+    share = runs_seen / runs_total if runs_total else 0.0
+    d = jev.choose("Should this procedure ship with the agent itself because almost every task uses it, or live "
+                   "in the public registry for the tasks that need it?",
+                   f"{sop.id}: {sop.description}. Used in {runs_seen} of {runs_total} recent successful runs.",
+                   [Option("builtin", BUILTIN_CUES, desc="A basic procedure almost every task uses; worth shipping "
+                                                         "with the agent so it never has to be downloaded."),
+                    Option("registry", REGISTRY_CUES, desc="Useful for some tasks; fetched from the registry when "
+                                                           "a task needs it.")])
+    if runs_total < min_runs:
+        dest, reason = "registry", f"only {runs_total} runs of evidence (built-in needs {min_runs})"
+    elif share < min_share:
+        dest, reason = "registry", f"used in {share:.0%} of runs (built-in needs {min_share:.0%})"
+    elif d.probs["builtin"] >= 0.6 and d.probs["builtin"] - d.probs["registry"] >= 0.15:
+        dest, reason = "builtin", f"used in {share:.0%} of runs; JEV: broadly needed"
+    else:
+        dest, reason = "registry", f"used in {share:.0%} of runs, but JEV not confident it is broadly needed"
+    return {"destination": dest, "reason": reason, "share": round(share, 3), "probs": d.probs}
+
 def publish(sop: SOP, dest_pkg: Path, org: Org, force: bool = False) -> Path:
     findings = scrub(sop, org)
     secrets = [f for f in findings if is_hard(f) and ": private term:" not in f]

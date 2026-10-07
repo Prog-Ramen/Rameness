@@ -8,6 +8,7 @@
   }, "required": ["paths"]},
   "outputs": {"errors": "array", "report": "string"},
   "permissions": ["fs:read", "exec"],
+  "requirements": {"python": ["pyyaml"], "commands": ["node", "zsh", "perl", "cc", "c++", "gofmt", "rustfmt", "ruby", "php", "luac", "swiftc"]},
   "tests": [
     {"input": {"paths": []}, "expect_keys": ["errors", "report"]}
   ]
