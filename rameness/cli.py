@@ -188,7 +188,8 @@ def cmd_sop(a):
         for p in Registry(h.cfg, h.home, h.org, h.jev).proposals():
             print(f"{p['id']:32s} {p.get('status', 'proposed'):12s} {p['branch']:44s} {p['pr'] or ''}")
     elif a.action == "scrub-tree":
-        findings = pub.scrub_tree(Path(a.arg or "."), h.org)
+        root = Path(a.arg or ".")
+        findings = pub.scrub_tree(root, h.org, only=pub.changed_files(root) if a.changed else None)
         hard = pub.hard_findings(findings)
         for f in findings:
             print(f"{'BLOCKED' if f in hard else 'warning'} {f}", file=sys.stderr)
@@ -472,6 +473,8 @@ def main(argv=None):
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--changed", action="store_true",
+                   help="scrub-tree: only the files a push would add or change (the pre-push hook)")
     p.add_argument("--base", default="origin/main", help="review: the branch the PR targets")
     p.add_argument("--static", action="store_true", help="review: skip running SOP tests (never executes PR code)")
     p.add_argument("--json", help="review / discover: also write the result as JSON here")

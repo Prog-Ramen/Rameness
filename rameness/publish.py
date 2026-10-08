@@ -18,6 +18,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -54,11 +55,33 @@ def scrub_text(text: str, terms: list[str], label: str) -> list[str]:
     return out
 
 
-def scrub_tree(root: Path, org: Org | None = None) -> list[str]:
-    """Scan every text file under ``root`` (skipping .git) - used by pre-push hooks and releases."""
+def changed_files(repo: Path) -> list[str]:
+    """Files a push from ``repo`` would add or change: committed since the remote's default branch, plus
+    anything not committed yet. Paths relative to the repo; deleted files left out."""
+    def run(*args):
+        p = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=60)
+        return p.stdout if p.returncode == 0 else None
+    head = (run("symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD") or "").strip()
+    base = None
+    for ref in [head] if head else ["origin/main", "origin/master"]:
+        base = (run("merge-base", "HEAD", ref) or "").strip() or None
+        if base:
+            break
+    names = set((run("diff", "--name-only", base, "HEAD") or "").splitlines()) if base else \
+        set((run("ls-files") or "").splitlines())               # nothing to compare against: all of it
+    for line in (run("status", "--porcelain", "--untracked-files=all") or "").splitlines():
+        names.add(line[3:].split(" -> ")[-1])
+    return sorted(n for n in names if n and (repo / n).is_file())
+
+
+def scrub_tree(root: Path, org: Org | None = None, only: list[str] | None = None) -> list[str]:
+    """Scan every text file under ``root`` (skipping .git), or only the ``only`` paths (relative to root) -
+    used by pre-push hooks and releases. A pre-push hook scans what the push changes, wherever it is, so the
+    target repo's own deliberate test fixtures (fake secrets) do not block it."""
     terms = [t for t in ((org.private_terms + ([org.name] if org.name else [])) if org else []) if t]
     findings = []
-    for f in sorted(root.rglob("*")):
+    files = [root / n for n in only] if only is not None else sorted(root.rglob("*"))
+    for f in files:
         if not f.is_file() or ".git" in f.relative_to(root).parts or f.suffix not in TEXT_SUFFIXES:
             continue
         text = f.read_text(errors="replace")
@@ -70,7 +93,14 @@ def scrub_tree(root: Path, org: Org | None = None) -> list[str]:
             except json.JSONDecodeError:
                 pass
         findings += scrub_text(text, terms, str(f.relative_to(root)))
-    return findings + external_scan(root)
+    if only is None:
+        return findings + external_scan(root)
+    with tempfile.TemporaryDirectory() as tmp:          # the external scanners see the same files
+        for n in only:
+            if (root / n).is_file():
+                (Path(tmp) / n).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(root / n, Path(tmp) / n)
+        return findings + external_scan(Path(tmp))
 
 
 def external_scan(root: Path) -> list[str]:
