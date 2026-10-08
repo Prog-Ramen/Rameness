@@ -125,6 +125,18 @@ class RegistryTest(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("BLOCKED", p.stderr)
 
+    def test_existing_fixture_secrets_in_the_target_repo_do_not_block_a_proposal(self):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        (seed / "tests").mkdir()
+        (seed / "tests" / "test_ci.py").write_text('TOKEN = "ghp_abcdefghijklmnopqrstuvwxyz123456"\n')
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "CI tests with a fake token")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        self.assertIn(self.reg().propose(gen)["status"], ("proposed", "pushed_local"))
+
     def validated(self):
         from rameness.learning import register_sop
         lib = Library([(self.root, "private")])

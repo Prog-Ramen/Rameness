@@ -40,7 +40,7 @@ from pathlib import Path
 
 from .org import Org
 from .deps import describe
-from .publish import classify, destination, hard_findings, private_info, scrub, scrub_tree
+from .publish import changed_files, classify, destination, hard_findings, private_info, scrub, scrub_tree
 from .sops import SOP, Library
 
 GH_URL = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
@@ -91,14 +91,15 @@ def git(cwd: Path, *args: str, check: bool = True) -> str:
 
 
 def install_hook(repo: Path, subdir: str = "") -> None:
-    """pre-push: re-scan the tree (or only ``subdir``, where proposals go: the Rameness repo's own tests
-    carry fake secrets on purpose); any hard finding (secret, private term) blocks the push."""
+    """pre-push: scan every file the push adds or changes, wherever it is (not the repo's existing content:
+    the Rameness and RamenSOPs repos carry fake secrets in their own tests on purpose); any hard finding
+    (secret, private term) blocks the push."""
     hook = repo / ".git" / "hooks" / "pre-push"
     hook.parent.mkdir(parents=True, exist_ok=True)
-    where = "$(git rev-parse --show-toplevel)" + (f"/{subdir}" if subdir else "")
     hook.write_text(f"#!/bin/sh\n# installed by rameness: blocks pushes containing secrets or private data\n"
                     # -I: never import rameness from the clone itself (the Rameness repo has a rameness/ folder)
-                    f"exec \"{sys.executable}\" -I -m rameness sop scrub-tree \"{where}\"\n")
+                    f"exec \"{sys.executable}\" -I -m rameness sop scrub-tree \"$(git rev-parse --show-toplevel)\" "
+                    f"--changed\n")
     hook.chmod(0o755)
 
 
@@ -354,7 +355,7 @@ class Registry:
             src, dst = sop.path.parents[len(parts) - 1 - i] / "_node.json", base_dir / Path(*parts[:i]) / "_node.json"
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
-        leftover = hard_findings(scrub_tree(repo / scan if scan else repo, self.org))
+        leftover = hard_findings(scrub_tree(repo, self.org, only=changed_files(repo)))
         if leftover:
             raise RegistryError("scan of the registry tree failed:\n  " + "\n  ".join(leftover))
         git(repo, "add", "-A")
