@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import schemas
 from .jev import Jev, Option
 from .org import Org
 from .sops import SOP, Activation, Library, Requirement, activate, validate_args
@@ -195,7 +196,7 @@ class Router:
                 "Extract tool arguments from a request. Output JSON only.",
                 f"Request: {task}\nKnown defaults: {defaults}\nTool: {sop.interface()}\n"
                 f"Schema: {sop.inputs}\nReply with the arguments object; use null for anything not stated.",
-                max_tokens=1000)
+                max_tokens=1000, schema=schemas.SOP_ARGS)
         except Exception:
             return None
         args.update({k: v for k, v in got.items() if v is not None and k in sop.inputs.get("properties", {})})

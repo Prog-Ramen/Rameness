@@ -159,8 +159,9 @@ def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
     leak = private_info(jev, sop, findings) if not hard else {"leak": False, "findings": []}
     d = jev.choose("Is this procedure personal to one user or organization, or general enough to share publicly?",
                    sop.digest(),                     # the SOP's own code; private terms are checked by the scrubber
-                   [Option("personal", PERSONAL_CUES, desc="Specific to one user or organization: its own systems, "
-                                                          "data, customers, accounts or business rules."),
+                   [Option("personal", PERSONAL_CUES, desc="Specific to one user, organization or narrow domain: its "
+                                                          "own systems, data, customers, accounts, business rules or "
+                                                          "specialist workflow."),
                     Option("general", GENERAL_CUES, desc="A generic, reusable procedure useful to anyone, with nothing "
                                                         "organization-specific in it.")])
     if hard:
@@ -239,11 +240,12 @@ def destination(jev: Jev, sop: SOP, runs_seen: int, runs_total: int, min_share: 
     procedure appeared in; it must reach ``min_share`` over at least ``min_runs`` runs, and JEV must
     also judge it broadly needed. Anything else goes to the registry, which costs only a pull."""
     share = runs_seen / runs_total if runs_total else 0.0
-    d = jev.choose("Should this procedure ship with the agent itself because almost every task uses it, or live "
-                   "in the public registry for the tasks that need it?",
+    d = jev.choose("Is this procedure so generic that almost every task uses it (ship it with the agent), or a "
+                   "significant procedure that only some tasks need (keep it in the public registry)?",
                    f"{sop.id}: {sop.description}. Used in {runs_seen} of {runs_total} recent successful runs.",
-                   [Option("builtin", BUILTIN_CUES, desc="A basic procedure almost every task uses; worth shipping "
-                                                         "with the agent so it never has to be downloaded."),
+                   [Option("builtin", BUILTIN_CUES, desc="Super generic: a basic procedure almost every task uses; "
+                                                         "worth shipping with the agent so it never has to be "
+                                                         "downloaded."),
                     Option("registry", REGISTRY_CUES, desc="Useful for some tasks; fetched from the registry when "
                                                            "a task needs it.")])
     if runs_total < min_runs:

@@ -113,6 +113,55 @@ def sanitized_copy(sop: SOP, dest: Path) -> None:
     (dest / "sop.json").write_text(json.dumps(d, indent=2) + "\n")
 
 
+def publishable_tests(sop: SOP) -> list[str]:
+    """The tests ship with the SOP (inside sop.json) to wherever it is published, and must pass the checks there:
+    RamenSOPs CI (ci/review.py) for the registry, the Rameness test suite for a built-in. The same rules here, so
+    a proposal does not bounce: 2-40 tests, each asserting concrete values, output keys or an error, at least two
+    with concrete values, distinct cases, declared inputs, and fixtures only at relative paths."""
+    tests, problems = sop.tests or [], []
+    if not tests:
+        return ["no tests provided"]
+    if not 2 <= len(tests) <= 40:
+        problems.append("provide between 2 and 40 tests, including a normal and an edge case")
+    props, required = sop.inputs.get("properties", {}), sop.inputs.get("required", [])
+    for i, t in enumerate(tests):
+        concrete = isinstance(t.get("expect"), dict) and bool(t["expect"])
+        if not (concrete or t.get("expect_keys") or t.get("expect_error") is True) or not isinstance(t.get("input"), dict):
+            problems.append(f"test {i}: assert concrete values, output keys or an error, on an object input")
+            continue
+        if any(k not in t["input"] for k in required) and not t.get("expect_error"):
+            problems.append(f"test {i}: missing a required input")
+        if props and any(k not in props for k in t["input"]):
+            problems.append(f"test {i}: undeclared input")
+        if any(Path(k).is_absolute() or ".." in Path(k).parts for k in (t.get("files") or {})):
+            problems.append(f"test {i}: fixture files must use relative paths")
+    if sum(1 for t in tests if isinstance(t.get("expect"), dict) and t["expect"]) < 2:
+        problems.append("at least two tests must assert expected output values; output keys or error cases "
+                        "alone are insufficient")
+    if len(tests) >= 2 and len({json.dumps([t.get("input"), t.get("files", {}), t.get("setup", "")], sort_keys=True)
+                                for t in tests}) < 2:
+        problems.append("tests must exercise distinct inputs")
+    return problems
+
+
+def savings(sop: SOP, stats: dict | None = None) -> dict:
+    """What one use of ``sop`` saves: measured on its real uses when it has any (``Library.record_savings``),
+    else recorded when it was learned, else estimated from its code (what the model would otherwise write out,
+    at about 4 characters per token and 100 tokens per second)."""
+    st = (stats or {}).get(sop.id) or {}
+    if st.get("measured_uses"):
+        n = st["measured_uses"]
+        return {"tokens": round(st.get("tokens_saved", 0) / n), "seconds": round(st.get("seconds_saved", 0) / n, 1),
+                "measured": True, "uses": n}
+    recorded = (sop.origin or {}).get("saves_per_use")
+    if isinstance(recorded, dict) and "tokens" in recorded:
+        return recorded
+    code = "".join(f.read_text(errors="replace") for f in sop.path.glob("run.*") if f.is_file())
+    use_cost = 150 + len(json.dumps(sop.tool_schema())) // 4     # the call, plus reading its interface
+    tokens = len(code) // 4 - use_cost
+    return {"tokens": tokens, "seconds": round(max(0, tokens) / 100, 1), "measured": False}
+
+
 class Registry:
     def __init__(self, cfg: dict, home: Path, org: Org, jev):
         rc = cfg.get("registry") or {}
@@ -120,6 +169,9 @@ class Registry:
         self.builtin = rc.get("builtin")          # the Rameness repo: built-in SOPs ship with Rameness itself
         self.builtin_min_share = rc.get("builtin_min_share", 0.5)
         self.builtin_min_runs = rc.get("builtin_min_runs", 10)
+        self.min_tokens_saved = rc.get("min_tokens_saved", 1000)   # only significant SOPs are worth sharing
+        self.stats: dict = {}                      # the library's measured uses (set by auto_propose)
+        self.fetch_seconds = rc.get("fetch_seconds", 1.0)          # finding + fetching a registry SOP, roughly
         self.fork = rc.get("fork")
         self.home = home / "registry"
         self.org, self.jev = org, jev
@@ -234,6 +286,11 @@ class Registry:
             raise RegistryError(f"JEV classified {sop.id} as personal ({cls['reason']}); it stays private. "
                                 "If you are sure it is general, pass --override-personal (scans still apply).")
         cls["benign"] = leak["findings"]
+        saves = savings(sop, self.stats)
+        if self.min_tokens_saved > 0 and saves["tokens"] < self.min_tokens_saved and not override_personal:
+            raise RegistryError(f"{sop.id} saves about {saves['tokens']} tokens per use (registry.min_tokens_saved: "
+                                f"{self.min_tokens_saved}); too small to be worth sharing, so it stays private")
+        cls["saves"] = saves
         return cls
 
     def _push(self, repo: Path, url: str, branch: str) -> tuple[str, str]:
@@ -306,9 +363,16 @@ class Registry:
         builtin = dest["destination"] == "builtin"
         kind = "built-in SOP (ships with Rameness)" if builtin else "SOP"
         needs = describe(sop.requirements)
+        sv = cls.get("saves") or savings(sop, self.stats)
+        # Fetching happens once, then the SOP is used again and again: report it as a payback point.
+        payback = "" if builtin or not sv["seconds"] else \
+            f" Fetching it (~{self.fetch_seconds} s, once) pays back after {max(1, -(-self.fetch_seconds // sv['seconds'])):.0f} use(s)."
+        worth = (f"Saves about {sv['tokens']} model tokens"
+                 + (f" and {sv['seconds']} s" if sv["seconds"] else "") + " per use, after reading its interface and "
+                 "calling it" + (" (measured)" if sv.get("measured") else " (estimated)") + "." + payback + "\n")
         body = (f"Proposed {kind} `{sop.id}`: {sop.description}\n\n"
                 f"Classification: {cls['visibility']} ({cls['reason']}).\n"
-                f"Destination: {dest['destination']} ({dest['reason']}).\n"
+                f"Destination: {dest['destination']} ({dest['reason']}).\n" + worth
                 + (f"{needs}\n" if needs else "Needs nothing beyond Python and a POSIX shell.\n") +
                 "Scans: rameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
                 (" + trufflehog" if shutil.which("trufflehog") else "") + ": no secrets or private terms"
@@ -331,6 +395,7 @@ class Registry:
 
     def auto_propose(self, lib: Library, executor) -> list[dict]:
         """Drain eligible private SOPs, including those left by a previous failed attempt."""
+        self.stats = lib.stats
         results = []
         for sop in list(lib.sops.values()):
             if sop.scope != "private" or sop.status != "validated" or sop.visibility != "shareable":
@@ -340,11 +405,9 @@ class Registry:
                 if any(p.get("key", "").endswith(f":{sop.id}:{fp}") and p.get("status") in ("proposed", "pushed_local")
                        for p in self.proposals()):
                     continue
-                if not sop.tests:
-                    raise RegistryError("no tests provided")
-                if not any(isinstance(t.get("expect"), dict) and t["expect"] for t in sop.tests):
-                    raise RegistryError("tests must assert expected output values before automatic publication; "
-                                        "output keys or error cases alone are insufficient")
+                problems = publishable_tests(sop)
+                if problems:
+                    raise RegistryError("; ".join(problems))
                 failures = executor.test(sop.id)
                 if failures:
                     raise RegistryError(f"tests failed: {failures}")

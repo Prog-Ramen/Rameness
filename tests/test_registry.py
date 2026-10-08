@@ -41,7 +41,7 @@ class RegistryTest(unittest.TestCase):
         return Library([(self.root, "private")]).get(sid)
 
     def reg(self, **over):
-        cfg = {"registry": {"public": str(self.public), **over}}
+        cfg = {"registry": {"public": str(self.public), "min_tokens_saved": 0, **over}}   # tiny example SOPs
         return Registry(cfg, self.tmp / "home", self.org, self.jev)
 
     def test_classification(self):
@@ -133,7 +133,8 @@ class RegistryTest(unittest.TestCase):
             "id": "text.upper", "description": "Convert text to upper case: a generic reusable text utility",
             "script": GENERIC, "permissions": ["compute"], "keywords": ["text", "utility", "generic"],
             "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
-            "tests": [{"input": {"text": "ab"}, "expect": {"upper": "AB"}}]},
+            "tests": [{"input": {"text": "ab"}, "expect": {"upper": "AB"}},
+                      {"input": {"text": ""}, "expect": {"upper": ""}}]},
             root=self.root, jev=self.jev, org=self.org)
         self.assertEqual(failures, [])
         self.assertEqual(sop.visibility, "shareable")
@@ -192,6 +193,18 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(rows[0]["status"], "failed")
         self.assertIn("private terms", rows[0]["error"])
         push.assert_not_called()
+
+    def test_every_kind_of_test_ships_with_the_proposal_and_meets_ramensops_rules(self):
+        from rameness.registry import publishable_tests
+        lib, executor, sop = self.validated()
+        sop.tests += [{"input": {"text": "x"}, "expect_keys": ["upper"]},
+                      {"input": {"text": "y"}, "files": {"in.txt": "y"}, "expect": {"upper": "Y"}}]
+        self.assertEqual(publishable_tests(sop), [])
+        sop.tests = [sop.tests[0], dict(sop.tests[0])]                # the same case twice
+        self.assertIn("tests must exercise distinct inputs", publishable_tests(sop))
+        sop.tests = [{"input": {"text": "a"}, "expect": {"upper": "A"}},
+                     {"input": {"text": "b"}, "files": {"../x": ""}, "expect": {"upper": "B"}}]
+        self.assertIn("test 1: fixture files must use relative paths", publishable_tests(sop))
 
     def test_missing_tests_cannot_auto_publish(self):
         lib, executor, sop = self.validated()
