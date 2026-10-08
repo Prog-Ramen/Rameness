@@ -1,0 +1,76 @@
+{
+  "auth": {
+    "py_files": 5,
+    "lines": 78,
+    "todos": [
+      "mod0.py:14: check permissions",
+      "mod0.py:19: validate the range",
+      "mod0.py:9: check permissions",
+      "mod1.py:5: support unicode",
+      "mod3.py:14: validate the range",
+      "mod3.py:5: support unicode"
+    ],
+    "tests_pass": true
+  },
+  "billing": {
+    "py_files": 3,
+    "lines": 45,
+    "todos": [
+      "mod0.py:13: add a timeout",
+      "mod1.py:10: add retries",
+      "mod1.py:5: validate the range"
+    ],
+    "tests_pass": false
+  },
+  "cache": {
+    "py_files": 5,
+    "lines": 100,
+    "todos": [
+      "mod0.py:5: check permissions",
+      "mod1.py:5: handle empty input",
+      "mod2.py:14: remove the hard-coded limit",
+      "mod2.py:5: check permissions",
+      "mod3.py:14: add retries",
+      "mod3.py:23: add retries",
+      "mod3.py:9: add a timeout",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "parser": {
+    "py_files": 5,
+    "lines": 81,
+    "todos": [
+      "mod1.py:14: cache this lookup",
+      "mod1.py:19: handle empty input",
+      "mod1.py:24: check permissions",
+      "mod1.py:5: validate the range",
+      "mod2.py:9: remove the hard-coded limit"
+    ],
+    "tests_pass": true
+  },
+  "search": {
+    "py_files": 3,
+    "lines": 63,
+    "todos": [
+      "mod0.py:13: check permissions",
+      "mod0.py:18: validate the range",
+      "mod0.py:23: cache this lookup",
+      "mod1.py:10: support unicode",
+      "mod1.py:5: close the file"
+    ],
+    "tests_pass": true
+  },
+  "weather": {
+    "py_files": 5,
+    "lines": 81,
+    "todos": [
+      "mod0.py:17: validate the range",
+      "mod1.py:5: validate the range",
+      "mod3.py:14: add a timeout",
+      "mod3.py:9: add a timeout",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  }
+}

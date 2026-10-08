@@ -441,7 +441,13 @@ rameness/builtin_sops/      built-in: ships with Rameness (code, data, dev, fs, 
 ~/.rameness/public/<pkg>/   registry: public packages pulled from RamenSOPs when a task needs them
 ~/.rameness/sops/           private: yours
 ./.rameness/sops/           private: this project / organization
+<your folders>              private: any you choose, e.g. one per use case or session
 ```
+
+Private folders beyond those two come from `sops.private` in the config, `RAMENESS_SOPS`
+(`os.pathsep`-separated) or `--sops DIR` (repeatable) for one session; new private SOPs go to `sops.save_to`,
+else the last folder given. A session sees only the folders it was given. Private SOPs never reach GitHub:
+a private folder inside a git work tree gets a `.gitignore` that ignores its contents, code and tests alike.
 
 Where an SOP lives decides what it is; a later layer's SOP with the same id replaces an earlier
 one, so an organization can override a built-in or registry SOP without forking it. Built-in and
@@ -482,16 +488,25 @@ After each task the trace is stored in `.rameness/runs/`. The learner:
 4. drops duplicates of existing SOPs (an existing SOP already does it, unchanged),
 5. generates the SOP: exact repeated shell sequences become a script with no model call;
    otherwise the fast model writes the script and tests,
-6. **extends a close SOP instead of adding a near-duplicate** when JEV judges a small change would
+6. **makes an SOP only when it is worth it.** Using an SOP costs the model too: reading its interface and
+   writing the call. Saving per use = the tokens the model spent producing those steps (measured from the
+   turns that produced them, or estimated from their size) minus that cost. A candidate must save at least
+   `learning.min_tokens_saved_per_use` (500) per use, and over the uses we expect more than generating and
+   testing it costs (`learning.sop_creation_tokens`, 4,000); a short procedure the model writes in seconds is
+   left alone. **Mid-run**, every `learning.midrun_every` turns, a multi-step procedure this run has already
+   repeated `midrun_min_count` times (with consistent parameters, not exploration such as a different search each
+   time) becomes an SOP and is offered to the model for the remaining repetitions,
+7. **extends a close SOP instead of adding a near-duplicate** when JEV judges a small change would
    cover it (an extra optional parameter or output). The extension is kept only if every existing
    test still passes, its new tests pass, no input is dropped and no new input is required; a
    private SOP is updated in place (minor version bump, `origin.extended` records what was added),
    and a built-in or registry SOP gets a private override with the same id, which proposing turns
    into a PR that updates the original. Otherwise it falls through to a new SOP. The agent's own
    `sop_save` follows the same path,
-7. registers a new one privately: `validated` if its tests pass, otherwise `candidate`
-   (`rameness sop promote <id>` after review),
-8. after the task succeeds, the proposal pipeline re-tests validated, shareable SOPs and opens public PRs.
+8. registers a new one privately: `validated` if its tests pass, otherwise `candidate`
+   (`rameness sop promote <id>` after review). Run history is per user (`~/.rameness/runs`), so repeats across
+   projects count; an SOP learned from two or more projects is saved to `~/.rameness/sops` for every project,
+9. after the task succeeds, the proposal pipeline re-tests validated, shareable SOPs and opens public PRs.
 
 ## Private vs public SOPs
 
@@ -500,6 +515,11 @@ JEV files it under a category: it checks the generator's proposed `category.name
 categories that exist and moves it into the best fit, keeping a new category only when none fits.
 With `registry.auto_propose: true` (default), a successful agent or direct task automatically sends
 validated, JEV-classified `shareable` SOPs through the proposal pipeline. Each goes to one of two places:
+
+Three tiers: domain- or organization-specific SOPs stay **private**; significant, generalizable ones go to
+**RamenSOPs**; super-generic ones used in most runs ship **built in**. Only SOPs that save at least
+`registry.min_tokens_saved` (1,000) tokens per use are proposed at all, and each PR states the saving per use
+and, for a registry SOP, after how many uses its one-time fetch pays back.
 
 | Destination | When | PR to | Who merges |
 |---|---|---|---|
@@ -510,8 +530,14 @@ Built-in SOPs save a network pull on most runs; registry SOPs are fetched only b
 them. Either kind may list packages it needs. `rameness sop propose <id> --dest builtin|registry`
 overrides the choice. It re-runs their tests,
 classification and privacy scans before pushing a sanitized copy and opening a PR. Personal,
-uncertain, untested or failing SOPs stay private. Automatic proposals also require tests that
-assert concrete output values; checking only output keys is insufficient.
+uncertain, untested or failing SOPs stay private.
+
+An SOP's tests live in its `sop.json` and travel with it: a built-in's tests land in the Rameness repo,
+where its own test suite runs them; a registry SOP's tests land in RamenSOPs, where its CI runs every one
+in an isolated container, fixtures (`files`, `setup`) and error cases included; a private SOP's tests stay
+with it. Before proposing, Rameness applies the same rules RamenSOPs CI does, so a proposal does not
+bounce: 2–40 tests, each asserting concrete values, output keys or an error, at least two with concrete
+values, distinct cases, declared inputs, and fixtures only at relative paths.
 `rameness sop propose <id>` also remains available.
 
 ```

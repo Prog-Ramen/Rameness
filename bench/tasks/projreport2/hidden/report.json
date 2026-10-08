@@ -1,0 +1,66 @@
+{
+  "cache": {
+    "py_files": 3,
+    "lines": 40,
+    "todos": [
+      "mod1.py:10: handle empty input",
+      "mod1.py:5: validate the range"
+    ],
+    "tests_pass": false
+  },
+  "chat": {
+    "py_files": 3,
+    "lines": 48,
+    "todos": [
+      "mod0.py:5: remove the hard-coded limit",
+      "mod1.py:17: check permissions"
+    ],
+    "tests_pass": true
+  },
+  "media": {
+    "py_files": 5,
+    "lines": 86,
+    "todos": [
+      "mod0.py:9: remove the hard-coded limit",
+      "mod1.py:18: check permissions",
+      "mod1.py:23: close the file",
+      "mod1.py:5: add a timeout",
+      "mod2.py:13: remove the hard-coded limit",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "reports": {
+    "py_files": 4,
+    "lines": 61,
+    "todos": [
+      "mod2.py:9: check permissions",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "scheduler": {
+    "py_files": 5,
+    "lines": 91,
+    "todos": [
+      "mod0.py:22: remove the hard-coded limit",
+      "mod0.py:9: validate the range",
+      "mod1.py:5: support unicode",
+      "mod2.py:10: handle empty input",
+      "mod2.py:15: close the file",
+      "mod2.py:24: log the failure",
+      "mod2.py:5: remove the hard-coded limit"
+    ],
+    "tests_pass": true
+  },
+  "sessions": {
+    "py_files": 4,
+    "lines": 70,
+    "todos": [
+      "mod1.py:9: handle empty input",
+      "mod2.py:10: close the file",
+      "mod2.py:5: support unicode"
+    ],
+    "tests_pass": true
+  }
+}

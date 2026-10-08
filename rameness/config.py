@@ -116,12 +116,24 @@ DEFAULTS: dict = {
         "min_repeats": 2,
         "sop_threshold": 0.6,
         "auto_generate": True,
+        "review_runs": 5,                 # at the end of a run the model reviews this many recent runs for
+                                          # repeated multi-step tasks; Kev and the tests decide what becomes an SOP
+        "min_tokens_saved_per_use": 500,  # an SOP must save at least this much model output per use...
+        "sop_creation_tokens": 4000,      # ...and over its expected uses more than it costs to generate and test
+    },
+    "sops": {
+        "private": [],                    # more private SOP folders (~ or relative to the project), e.g. one per
+                                          # use case; searched after ~/.rameness/sops and ./.rameness/sops, so they
+                                          # win on the same id. Also RAMENESS_SOPS (os.pathsep-separated) or --sops.
+        "save_to": None,                  # where new private SOPs go; default: the last of `private`, else
+                                          # ./.rameness/sops. Private folders are kept out of git (a .gitignore).
     },
     "registry": {
         "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # `sop propose` opens PRs here
         "builtin": "https://github.com/Prog-Ramen/Rameness.git",   # ...or here, for SOPs most runs use (built-in)
         "builtin_min_share": 0.5,         # built-in only if the procedure appeared in at least this share of runs
         "builtin_min_runs": 10,           # ...measured over at least this many successful runs
+        "min_tokens_saved": 1000,         # only SOPs saving this much per use (after reading and calling them) are shared; 0 = off
         "auto_propose": True,             # after successful tasks, propose validated, shareable private SOPs
         "fork": None,                     # push proposals to this fork; default: origin, else a `gh repo fork`
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/registry/sops/index.json",

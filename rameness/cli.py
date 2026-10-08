@@ -30,6 +30,9 @@ def _harness(a, need_llm=True) -> Harness:
         cfg["jev"]["backend"] = a.jev
     if getattr(a, "no_learn", False):
         cfg["learning"]["enabled"] = False
+    if getattr(a, "sops", None):
+        cfg["sops"]["private"] = list(cfg["sops"].get("private") or []) + a.sops
+        cfg["sops"]["save_to"] = a.sops[-1]
     llm = None
     if not need_llm:
         from .llm import FakeProvider
@@ -413,6 +416,8 @@ def main(argv=None):
     ap.add_argument("--jev", help="auto | laya-local | laya | kev | typesafe | lexical")
     ap.add_argument("-y", "--yes", action="store_true", help="auto-approve tool actions")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--sops", action="append", metavar="DIR",
+                    help="a private SOP folder for this session (repeatable); new private SOPs go to the last one")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("run", help="run one task")

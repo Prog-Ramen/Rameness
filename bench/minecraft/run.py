@@ -127,11 +127,40 @@ def _sync_rameness() -> None:
                         "--force-reinstall", str(src.parent)], check=True)
 
 
+def sop_metrics(events: Path) -> dict:
+    """What the SOP pipeline did in a run: SOPs learned (mid-run / at the end), saved by the agent, and called."""
+    out = {"sop_calls": 0, "sops_learned_midrun": 0, "sops_learned_end": 0, "sop_saves": 0,
+           "sop_tokens_saved": 0, "sop_seconds_saved": 0.0}
+    try:
+        lines = events.read_text(errors="replace").splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        try:
+            e = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        if e.get("kind") == "tool" and str(e.get("tool", "")).startswith("sop_"):
+            if e["tool"] == "sop_save":
+                out["sop_saves"] += 1
+            elif e["tool"] != "sop_search":
+                out["sop_calls"] += 1
+        elif e.get("kind") == "sop_use":
+            out["sop_tokens_saved"] += int(e.get("tokens_saved") or 0)
+            out["sop_seconds_saved"] = round(out["sop_seconds_saved"] + float(e.get("seconds_saved") or 0), 2)
+        elif e.get("kind") == "sop_learned" and e.get("sop"):
+            out["sops_learned_midrun" if e.get("stage") == "midrun" else "sops_learned_end"] += 1
+    return out
+
+
 def harness_cmd(h: str, m: dict, proxy: str, run_dir: Path, work: Path, labels: dict) -> tuple[list[str], dict]:
     env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8", "TERM": "dumb"}
     if h == "rameness":
-        home = run_dir / "home"
+        shared = os.environ.get("BENCH_SHARED_HOME")      # a series of runs sharing learned SOPs and run history
+        home = Path(shared) if shared else run_dir / "home"
         (home / ".rameness").mkdir(parents=True, exist_ok=True)
+        if shared:
+            subprocess.run(["chown", "-R", "bench:bench", str(home)], check=True)
         registry = {"auto_propose": False}               # isolated benchmarks never publish to GitHub
         pipeline = os.environ.get("BENCH_SOP_PIPELINE") == "1"
         if pipeline:
@@ -474,6 +503,7 @@ def run_one(h: str, mkey: str, batch: str, out: Path, timeout: int, reasoning_bu
         if local:
             reap(run_dir)
         totals = px.recorder.totals()
+        totals.update(sop_metrics(run_dir / "events.jsonl"))
     vm.push([("bench_run_active", 0, labels)])
     cost = None
     try:
@@ -539,6 +569,8 @@ def main():
                     "(default: the model's reasoning_budget in MODELS, else unlimited)")
     ap.add_argument("--rameness-config", default="", help="JSON merged into Rameness's config (flag experiments)")
     ap.add_argument("--serial", action="store_true", help="one run at a time across all servers (saves memory)")
+    ap.add_argument("--shared-home", help="Rameness: use this HOME for every run (learned SOPs and run history "
+                                           "carry over from run to run)")
     ap.add_argument("--sop-pipeline", action="store_true",
                     help="Rameness: learn and save SOPs and run the proposal pipeline, into local stand-in repos")
     ap.add_argument("--min-free-mb", type=int, default=5000, help="wait for this much free memory before a run")
@@ -587,6 +619,8 @@ def main():
         os.environ["BENCH_RAMENESS_CONFIG"] = a.rameness_config
     if a.sop_pipeline:
         os.environ["BENCH_SOP_PIPELINE"] = "1"
+    if a.shared_home:
+        os.environ["BENCH_SHARED_HOME"] = str(Path(a.shared_home).resolve())
     if a.serial:
         queues = {"all": [j for jobs in queues.values() for j in jobs]}
     threads = [threading.Thread(target=worker, args=(jobs,)) for jobs in queues.values()]

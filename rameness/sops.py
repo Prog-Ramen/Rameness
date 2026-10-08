@@ -29,6 +29,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,8 +109,11 @@ class SOP:
     def tool_name(self) -> str:
         return "sop_" + re.sub(r"[^a-zA-Z0-9_]", "_", self.id.replace(".", "__"))[:60]
 
-    def tool_schema(self) -> dict:
+    def tool_schema(self, uses: int = 0) -> dict:
         desc = f"[SOP {self.id}] {self.description}"
+        if self.status == "validated" and self.tests:
+            desc += (f" Tested: its {len(self.tests)} tests pass" + (f", used successfully {uses} times" if uses else "")
+                     + "; its output is verified, no need to recompute it.")
         if self.outputs:
             desc += f" Returns: {json.dumps(self.outputs)[:300]}"
         if self.requirements:
@@ -160,6 +164,17 @@ class Node:
             yield from c.walk()
 
 
+def keep_out_of_git(root: Path) -> None:
+    """Private SOPs (code and tests) never reach GitHub: a private folder inside a git work tree gets a
+    .gitignore that ignores everything in it, unless it already has one."""
+    root = Path(root)
+    if (root / ".gitignore").exists():
+        return
+    if any((p / ".git").exists() for p in [root, *root.parents]):
+        root.mkdir(parents=True, exist_ok=True)
+        (root / ".gitignore").write_text("# private SOPs and their tests stay on this machine (rameness)\n*\n")
+
+
 # --------------------------------------------------------------------------- library
 
 class Library:
@@ -170,14 +185,22 @@ class Library:
         self.reload()
 
     @classmethod
-    def default(cls, cwd: Path, home: Path) -> "Library":
+    def default(cls, cwd: Path, home: Path, private: list | None = None, save_to=None) -> "Library":
+        """Built-in, then registry packages, then private folders: the user's, the project's, then any the user
+        chose (``sops.private``, RAMENESS_SOPS, --sops), e.g. one per use case or session. Later ones win."""
         roots: list[tuple[Path, str]] = [(BUILTIN_ROOT, "public")]
         pub = home / "public"
         if pub.exists():
             # registry repos (e.g. RamenSOPs) keep their SOPs under sops/
             roots += [((p / "sops") if (p / "sops").is_dir() else p, "public") for p in sorted(pub.iterdir()) if p.is_dir()]
         roots += [(home / "sops", "private"), (cwd / ".rameness" / "sops", "private")]
-        return cls(roots, cwd / ".rameness" / "sop_stats.json")
+        here = lambda d: (cwd / Path(str(d)).expanduser()).resolve()    # absolute paths stay as they are
+        for d in private or []:
+            if all(here(d) != r for r, _ in roots):
+                roots.append((here(d), "private"))
+        lib = cls(roots, cwd / ".rameness" / "sop_stats.json")
+        lib.save_to = here(save_to) if save_to else None
+        return lib
 
     def add_root(self, path: Path, scope: str = "public") -> None:
         """Add a package root below the private roots (so private SOPs still override it)."""
@@ -189,7 +212,8 @@ class Library:
 
     @property
     def private_root(self) -> Path:
-        return self.roots[-1][0]
+        """Where new private SOPs are written."""
+        return getattr(self, "save_to", None) or self.roots[-1][0]
 
     def reload(self) -> None:
         self.root = Node("", "all capabilities")
@@ -241,9 +265,22 @@ class Library:
 
     # ---- stats (kept out of package dirs so public packages stay pristine)
 
+    def ok_uses(self, sop_id: str) -> int:
+        return int(self.stats.get(sop_id, {}).get("ok", 0))
+
     def success_rate(self, sop_id: str) -> float:
         s = self.stats.get(sop_id, {})
         return (s.get("ok", 0) + 1) / (s.get("uses", 0) + 2)
+
+    def record_savings(self, sop_id: str, tokens: float, seconds: float) -> None:
+        """Add one measured use's savings to the SOP's running totals (the evidence for sharing it)."""
+        s = self.stats.setdefault(sop_id, {"uses": 0, "ok": 0})
+        s["measured_uses"] = s.get("measured_uses", 0) + 1
+        s["tokens_saved"] = round(s.get("tokens_saved", 0) + tokens)
+        s["seconds_saved"] = round(s.get("seconds_saved", 0.0) + seconds, 2)
+        if self.stats_path:
+            self.stats_path.parent.mkdir(parents=True, exist_ok=True)
+            self.stats_path.write_text(json.dumps(self.stats, indent=1))
 
     def record_use(self, sop_id: str, ok: bool) -> None:
         s = self.stats.setdefault(sop_id, {"uses": 0, "ok": 0})
@@ -269,7 +306,9 @@ class Library:
 
     def search(self, jev: Jev, query: str, k: int = 8) -> list[tuple[SOP, float]]:
         """Flat search over leaves (used by the model-facing ``sop_search`` tool)."""
-        sops = list(self.sops.values())
+        sops = [s for s in self.sops.values() if s.status == "validated"]   # candidates stay hidden
+        if not sops:
+            return []
         d = jev.activate("Which procedures match this request?", query,
                          [Option(s.id, s.text, self._prior(s), s.desc) for s in sops])
         return [(self.sops[i], p) for i, p in d.top(k) if p > 0.1]
@@ -331,8 +370,8 @@ def activate(lib: Library, jev: Jev, task: str, context: str = "", defaults: dic
     while frontier:
         frontier.sort(key=lambda x: -x[1])
         node, _ = frontier.pop(0)
-        kids = list(node.children.values())
-        if not kids:
+        kids = [k for k in node.children.values() if not (k.sop and k.sop.status != "validated")]
+        if not kids:                               # untested candidates are never offered to the agent
             continue
         # JEV sees the task only; the org context resolves `requires` deterministically (unresolved)
         d = jev.activate(f"Which capabilities under '{node.id or 'root'}' will this task need?", task,
@@ -515,17 +554,56 @@ class Executor:
         ret = sop.outputs.get("return")
         return _render(ret, scope) if ret else scope["steps"][-1] if scope["steps"] else {}
 
+    def _run_test(self, sop_id: str, t: dict) -> dict:
+        """One test, always in a fresh folder: never the project's own directory, whose files a test that writes
+        (a report, an output path) would overwrite. Fixtures (``files``: relative path -> text; ``setup``: Python
+        that builds anything else, e.g. binary files) are created there, and inputs refer to them by relative path."""
+        if self.env is not None:
+            if t.get("files") or t.get("setup"):
+                raise SOPError("test fixtures need a local environment")
+            r = self.env.run("mktemp -d \"${TMPDIR:-/tmp}/rameness-sop-test.XXXXXXXX\"", str(self.cwd), timeout=30)
+            if r.code != 0 or not r.out.strip():
+                raise SOPError(f"could not create a test directory on {self.env.id}: {(r.err or r.out)[-500:]}")
+            prev, self.cwd = self.cwd, Path(r.out.strip().splitlines()[-1])
+            try:
+                return self.run(sop_id, t.get("input", {}), _depth=1)
+            finally:
+                self.cwd = prev
+                self.env.run(f"rm -rf {shlex.quote(r.out.strip().splitlines()[-1])}", str(prev), timeout=30)
+        prev = self.cwd
+        with tempfile.TemporaryDirectory(prefix="rameness-sop-test-") as tmp:
+            root = Path(tmp)
+            for rel, text in (t.get("files") or {}).items():
+                target = (root / rel).resolve()
+                if not target.is_relative_to(root.resolve()):
+                    raise SOPError(f"fixture path {rel!r} leaves the test folder")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(text))
+            if t.get("setup"):
+                r = subprocess.run([sys.executable, "-c", str(t["setup"])], cwd=root, capture_output=True, text=True,
+                                   timeout=60)
+                if r.returncode:
+                    raise SOPError(f"test setup failed: {(r.stderr or r.stdout).strip()[-400:]}")
+            self.cwd = root
+            try:
+                return self.run(sop_id, t.get("input", {}), _depth=1)
+            finally:
+                self.cwd = prev
+
     def test(self, sop_id: str) -> list[str]:
         """Run the SOP's embedded tests. Returns failure messages (empty = pass)."""
         sop = self.lib.get(sop_id)
         failures = []
+        self.last_outputs: list = []               # what each test actually returned (for repairing the SOP)
         for i, t in enumerate(sop.tests):
             try:
-                res = self.run(sop_id, t.get("input", {}), _depth=1)   # tests bypass approval prompts
+                res = self._run_test(sop_id, t)
             except Exception as e:
+                self.last_outputs.append({"error": str(e)[:600]})
                 if not t.get("expect_error"):
                     failures.append(f"test {i}: raised {e}")
                 continue
+            self.last_outputs.append(res)
             if t.get("expect_error"):
                 failures.append(f"test {i}: expected an error")
             for k, v in t.get("expect", {}).items():

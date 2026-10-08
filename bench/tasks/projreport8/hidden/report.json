@@ -1,0 +1,69 @@
+{
+  "inventory": {
+    "py_files": 3,
+    "lines": 49,
+    "todos": [
+      "mod1.py:14: add retries",
+      "mod1.py:5: check permissions",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": false
+  },
+  "ledger": {
+    "py_files": 4,
+    "lines": 60,
+    "todos": [
+      "mod2.py:5: handle empty input"
+    ],
+    "tests_pass": true
+  },
+  "metrics": {
+    "py_files": 5,
+    "lines": 96,
+    "todos": [
+      "mod0.py:10: validate the range",
+      "mod0.py:5: cache this lookup",
+      "mod1.py:13: add a timeout",
+      "mod2.py:10: support unicode",
+      "mod2.py:15: support unicode",
+      "mod2.py:24: handle empty input",
+      "mod2.py:5: remove the hard-coded limit",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "notify": {
+    "py_files": 4,
+    "lines": 73,
+    "todos": [
+      "mod0.py:9: cache this lookup",
+      "mod2.py:9: validate the range"
+    ],
+    "tests_pass": false
+  },
+  "routing": {
+    "py_files": 4,
+    "lines": 65,
+    "todos": [
+      "mod0.py:13: add retries",
+      "mod1.py:10: add retries",
+      "mod1.py:15: close the file",
+      "mod1.py:5: cache this lookup",
+      "mod2.py:10: cache this lookup",
+      "mod2.py:5: validate the range"
+    ],
+    "tests_pass": true
+  },
+  "sessions": {
+    "py_files": 5,
+    "lines": 85,
+    "todos": [
+      "mod0.py:13: cache this lookup",
+      "mod2.py:14: add retries",
+      "mod2.py:5: log the failure",
+      "mod3.py:10: validate the range",
+      "mod3.py:5: add retries"
+    ],
+    "tests_pass": false
+  }
+}

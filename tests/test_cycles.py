@@ -678,6 +678,56 @@ class TestClaudeCodeParity(unittest.TestCase):
                 self.assertNotIn(other, extra, card)
             self.assertEqual(p.context_window(), window, card)
 
+    def test_json_replies_are_enforced_by_schema_where_the_server_supports_it(self):
+        from types import SimpleNamespace as NS
+        from openai import BadRequestError
+        from rameness.llm import OpenAICompatProvider
+        schema = {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}
+        for owner, sent_format in (("vllm", True), ("openai", False)):
+            p = OpenAICompatProvider("m", base_url="http://127.0.0.1:9/v1")
+            p._props, p._model_card = {}, {"id": "m", "owned_by": owner}
+            sent = []
+            msg = NS(content='{"ok": true}', tool_calls=None, reasoning_content=None, model_extra={})
+            p.client = NS(chat=NS(completions=NS(create=lambda **kw: sent.append(kw) or NS(
+                choices=[NS(message=msg, finish_reason="stop")], usage=NS(prompt_tokens=1, completion_tokens=1)))))
+            self.assertEqual(p.complete_json("sys", "go", schema=schema), {"ok": True})
+            self.assertEqual("response_format" in sent[-1], sent_format, owner)
+            if sent_format:
+                self.assertEqual(sent[-1]["response_format"]["json_schema"]["schema"], schema)
+        # a server that refuses the schema: dropped once, the request retried without it
+        p = OpenAICompatProvider("m", base_url="http://127.0.0.1:9/v1")
+        p._props, p._model_card = {}, {"id": "m", "owned_by": "vllm"}
+        calls = []
+
+        def create(**kw):
+            calls.append(kw)
+            if "response_format" in kw:
+                err = BadRequestError.__new__(BadRequestError)      # what the server's 400 becomes
+                Exception.__init__(err, "response_format is not supported")
+                raise err
+            return NS(choices=[NS(message=msg, finish_reason="stop")], usage=NS(prompt_tokens=1, completion_tokens=1))
+
+        p.client = NS(chat=NS(completions=NS(create=create)))
+        self.assertEqual(p.complete_json("sys", "go", schema=schema), {"ok": True})
+        self.assertEqual(["response_format" in c for c in calls], [True, False])
+        self.assertTrue(p._format_rejected)
+
+    def test_json_whose_strings_hold_code_fences_parses_whole(self):
+        from rameness.llm import parse_json
+        spec = {"id": "x.y", "script": "def f():\n    \"\"\"Example:\n```json\n{\"a\": 1}\n```\"\"\"\n"}
+        self.assertEqual(parse_json(json.dumps(spec)), spec)
+        self.assertEqual(parse_json('Here it is:\n```json\n{"a": 1}\n```'), {"a": 1})   # prose replies still work
+
+    def test_the_run_review_asks_for_its_schema(self):
+        from rameness import schemas
+        from rameness.learning import Learner, RunStore
+        from rameness.sops import Executor, Library
+        lib = Library([])
+        llm = FakeProvider(json_script=[{"procedures": []}])
+        Learner(lib, Executor(lib, []), Jev(LexicalJev()), RunStore(self.tmp / "runs"), llm).review_runs(
+            [{"task": "t", "steps": [{"tool": "bash", "input": {"command": "ls"}}]}])
+        self.assertEqual(llm.schemas, [schemas.REVIEW])
+
     def test_line_anchors_edit_by_handle_and_refuse_stale_ones(self):
         from rameness.tools import Approver, Toolbox, anchor
         (self.tmp / "a.py").write_text("x = 1\ny = 2\nz = 3\n")
