@@ -2,37 +2,64 @@
 <div align="center"><img src="rameness_txt1.png" alt="Rameness Text" width="75%"></div>
 
 
-**An agent harness where a decision model, not an LLM, makes the calls, and that gets better with use.**
+**Rameness runs coding and research tasks with AI models from your terminal, works well with local
+models on your own GPU, and gets faster at work it has done before.**
+
+## What you use it for
+
+**Fix a bug or add a feature in a repository.** Describe the task; one agent reads the code, edits the
+files, runs the tests, and stops when the work is checked. It asks before every command unless you pass `-y`.
+
+```bash
+cd my-repo
+rameness run "test_login fails since the last commit, find out why and fix it"
+```
+
+**Run it on your own hardware.** Point it at llama.cpp, vLLM, ollama or any OpenAI-compatible server, or
+use Claude, OpenAI or DeepSeek. With local models it sets the thinking budget, context limit and sampling
+for the server it finds. On a 150-minute build test, Qwen3.8-27B on one GPU scored, in its best run,
+the same as Claude Code with Claude Opus ([Benchmarks](docs/benchmarks.md)).
+
+```bash
+rameness --base-url http://localhost:8080/v1 run "add CSV export to the reports page"
+```
+
+**Hand a bigger job to a team.** A manager splits the work across agents, each on its own git branch,
+model and machine (for example a local model for routine parts, Claude for hard ones, a GPU box over
+ssh). It runs rounds of improvement and testing, and brings you only the decisions that matter, in a web UI.
+
+```bash
+rameness up                                                   # manager + UI on http://127.0.0.1:7788
+rameness fleet ask "build a habit tracker web app" --cycles 4  # a first build, then 4 rounds of improvement
+```
+
+**Stop paying for the same work twice.** After each run, Rameness looks at what it did over its last few
+runs. A multi-step procedure it keeps repeating, such as "start a local server and check the page in a
+browser" or "run the package's tests plus a check per reported issue", becomes a tested script (an SOP)
+that later runs call in one step. On a series of eight similar tasks, that cut task time by a third and
+tokens by half. Useful SOPs can be shared publicly in [RamenSOPs](https://github.com/Prog-Ramen/RamenSOPs);
+anything specific to you stays on your machine.
+
+## What makes it different
 
 Other harnesses (Claude Code, Codex, pi) hard-code their choices: whether a task needs reasoning, which
 procedure applies, which model and machine should do the work, what to do when something fails.
-Rameness hands those choices to a small typed decision model (JEV: Kev or Laya running locally, or
-TypeSafe AI's hosted Jev) that returns calibrated probabilities in one pass. Before a decision takes
-effect, JEV asks itself whether it is routine enough to make alone or significant enough for you, and
-you can watch every decision live.
-
-It improves without retraining the model that does the work:
-
-* **It learns procedures.** Tasks it repeats become tested SOPs that later runs call as code instead of
-  re-deriving them, and the useful ones are shared.
-* **Its decisions get better.** Every decision is logged with its outcome, to calibrate JEV and to
-  fine-tune it.
-* **It refines its own work.** Refine and test cycles let JEV pick the next improvement and decide when
-  the work is done.
+Rameness hands each of those choices to a small decision model (JEV: Kev or Laya running locally, or
+TypeSafe AI's hosted Jev) that scores the options in about a second or less. Routine choices it makes
+alone; significant or uncertain ones come to you. You can watch every decision live, and your
+corrections make the next ones better.
 
 ## Quick start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Prog-Ramen/Rameness/main/install.sh | bash
-rameness jev up                          # start the decision model
+rameness jev up                          # start the decision model (Laya, installed by default)
 cd your-project && rameness init
 rameness run "fix the failing test"      # one agent
-rameness up                              # or a whole team: manager + UI on http://127.0.0.1:7788
 ```
 
-Any model works: Anthropic, OpenAI, DeepSeek, ollama, or any OpenAI-compatible server
-(`rameness --base-url http://localhost:8080/v1 run "..."`). [Getting started](docs/getting-started.md)
-covers choosing a decision model and every command.
+[Getting started](docs/getting-started.md) covers choosing a decision model, connecting your models, and
+every command.
 
 > **Safety:** tools act on your machine as you, and ask before each action by default. Use `-y` (approve
 > everything) only somewhere disposable. The UI has no authentication and binds to 127.0.0.1.
