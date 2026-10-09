@@ -218,9 +218,16 @@ class Library:
     def reload(self) -> None:
         self.root = Node("", "all capabilities")
         self.sops: dict[str, SOP] = {}
+        self.aliases: dict[str, str] = {}         # old id -> new id, for SOPs moved when a category split
         for base, scope in self.roots:
             if base.exists():
                 self._scan(base, base, scope)
+                f = base / "_aliases.json"
+                if f.exists():
+                    try:
+                        self.aliases.update(json.loads(f.read_text()))
+                    except json.JSONDecodeError:
+                        pass
 
     def _node(self, node_id: str) -> Node:
         n = self.root
@@ -255,7 +262,16 @@ class Library:
             if c.is_dir() and not c.name.startswith((".", "_")):
                 self._scan(base, c, scope)
 
+    def resolve(self, sop_id: str) -> str:
+        """The SOP's current id: an id from before a category split still works."""
+        seen = set()
+        while sop_id not in self.sops and sop_id in getattr(self, "aliases", {}) and sop_id not in seen:
+            seen.add(sop_id)
+            sop_id = self.aliases[sop_id]
+        return sop_id
+
     def get(self, sop_id: str) -> SOP:
+        sop_id = self.resolve(sop_id)
         if sop_id not in self.sops:
             raise KeyError(f"unknown SOP {sop_id!r}")
         return self.sops[sop_id]

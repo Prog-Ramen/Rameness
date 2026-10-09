@@ -236,7 +236,8 @@ def categorize(jev: Jev, lib: Library, sop: SOP, min_p: float = 0.5) -> str:
 
 
 def recategorize(lib: Library, sop: SOP, category: str) -> SOP:
-    """Move a private SOP to ``<category>.<name>`` (its folder and id), keeping everything else."""
+    """Move a private SOP to ``<category>.<name>`` (its folder and id), keeping everything else. ``category``
+    may be several levels deep (tree.place walks the tree); the SOP's own name is kept."""
     name = sop.id.split(".")[-1]
     new_id = f"{category}.{name}"
     if new_id == sop.id or sop.scope != "private":
@@ -320,12 +321,21 @@ def build_index(pkg_root: Path) -> Path:
 
     def entry(n) -> dict:
         if n.sop:
+            # columnar, like Dremel reading only the columns a query needs: a listing carries only what JEV
+            # chooses by; the rest (inputs, permissions, file hashes) is in the SOP's own _meta.json, fetched
+            # only for the SOPs JEV picks. The listing pins that file by its hash.
             s = n.sop
             files = [{"path": str(f.relative_to(pkg_root)), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
-                     for f in sorted(s.path.rglob("*")) if f.is_file() and "__pycache__" not in f.parts]
-            return {"type": "sop", "id": s.id, "description": s.description, "keywords": s.keywords, "kind": s.kind,
-                    "permissions": s.permissions, "version": s.version, "inputs": s.inputs, "status": s.status,
-                    "path": str(s.path.relative_to(pkg_root)), "files": files}
+                     for f in sorted(s.path.rglob("*")) if f.is_file() and "__pycache__" not in f.parts
+                     and f.name != "_meta.json"]
+            meta = {"kind": s.kind, "permissions": s.permissions, "version": s.version, "inputs": s.inputs,
+                    "status": s.status, "files": files}
+            data = json.dumps(meta, indent=1, sort_keys=True).encode()
+            (s.path / "_meta.json").write_bytes(data)
+            return {"type": "sop", "id": s.id, "description": s.description, "keywords": s.keywords,
+                    "path": str(s.path.relative_to(pkg_root)),
+                    "meta": {"path": str((s.path / "_meta.json").relative_to(pkg_root)),
+                             "sha256": hashlib.sha256(data).hexdigest()}}
         return {"type": "node", "id": n.id, "description": n.description, "keywords": n.keywords,
                 "requires": [{"name": r.name, "hints": r.hints, "question": r.question} for r in n.requires],
                 "children": sorted(n.children)}
@@ -334,9 +344,11 @@ def build_index(pkg_root: Path) -> Path:
         if n.id and not n.sop:
             d = pkg_root.joinpath(*n.id.split("."))
             (d / "_index.json").write_text(json.dumps(
-                {"format": 3, "id": n.id, "entries": [entry(c) for _, c in sorted(n.children.items())]}, indent=1))
+                {"format": 4, "id": n.id, "entries": [entry(c) for _, c in sorted(n.children.items())]}, indent=1))
     p = pkg_root / "index.json"
-    p.write_text(json.dumps({"format": 3, "id": "", "entries": [entry(c) for _, c in sorted(lib.root.children.items())]},
+    aliases = pkg_root / "_aliases.json"                 # SOPs moved by a split still answer to their old ids
+    p.write_text(json.dumps({"format": 4, "id": "", "entries": [entry(c) for _, c in sorted(lib.root.children.items())],
+                             **({"aliases": json.loads(aliases.read_text())} if aliases.exists() else {})},
                             indent=1))
     return p
 

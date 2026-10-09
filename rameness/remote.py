@@ -62,6 +62,7 @@ class RemoteRegistry:
         self.fanout = fanout                        # parallel requests per tree level
         self.levels = 0                             # tree levels expanded (round trips) in the last search
         self._mem: dict[str, list] = {}
+        self.aliases: dict[str, str] = {}           # old id -> new id (SOPs moved when a category split)
         self._lock = threading.Lock()
 
     # ---- lazy listings
@@ -90,6 +91,8 @@ class RemoteRegistry:
                     data = json.loads(r.read())
                     etag, modified = r.headers.get("ETag"), r.headers.get("Last-Modified")
                 ents = data.get("entries", [])
+                if not node_id and isinstance(data.get("aliases"), dict):
+                    ents = ents + [{"type": "alias", "id": k, "to": v} for k, v in data["aliases"].items()]
                 self._store(cache, ents, etag, modified)
                 self.fetched.append(node_id or "<root>")
             except urllib.error.HTTPError as e:
@@ -105,9 +108,28 @@ class RemoteRegistry:
                 ents = cached["entries"] if cached else []     # offline / not published: use what we have
         with self._lock:
             for e in ents:
+                if e.get("type") == "alias":
+                    self.aliases[e["id"]] = e["to"]
+                    continue
                 (self.entries if e.get("type") == "sop" else self.nodes)[e["id"]] = e
+            ents = [e for e in ents if e.get("type") != "alias"]
             self._mem[node_id] = ents
         return ents
+
+    def full(self, e: dict) -> dict:
+        """A listing entry with its SOP's metadata (inputs, permissions, file hashes). Columnar listings keep that
+        in the SOP's _meta.json, fetched only for the SOPs JEV picks and checked against the hash in the listing;
+        an older listing carries it inline."""
+        if "files" in e or "meta" not in e:
+            return e
+        with urllib.request.urlopen(f"{self.base}/{e['meta']['path']}", timeout=20) as r:
+            data = r.read()
+        if hashlib.sha256(data).hexdigest() != e["meta"]["sha256"]:
+            raise ValueError(f"hash mismatch for {e['meta']['path']}: refusing {e['id']}")
+        full = {**e, **json.loads(data)}
+        with self._lock:
+            self.entries[e["id"]] = full
+        return full
 
     def _store(self, cache: Path, ents: list, etag: str | None, modified: str | None) -> None:
         cache.parent.mkdir(parents=True, exist_ok=True)
@@ -207,14 +229,29 @@ class RemoteRegistry:
                     if not unresolved(node, full, defaults):
                         nxt.append((e["id"], p))
             level = [nid for nid, _ in sorted(nxt, key=lambda x: -x[1])]
-        return sorted(selected, key=lambda x: -x[1])[:max_sops]
+        top = sorted(selected, key=lambda x: -x[1])[:max_sops]
+        if not top:
+            return []
+        # only now the chosen few's metadata (permissions for the pull decision), all at once
+        with ThreadPoolExecutor(max_workers=max(1, min(self.fanout, len(top)))) as pool:
+            fulls = list(pool.map(lambda sp: self._safe_full(self.entries[sp[0].id]), top))
+        return [(self._stub(f), p) for f, (_, p) in zip(fulls, top) if f is not None]
+
+    def _safe_full(self, e: dict) -> dict | None:
+        try:
+            return self.full(e)
+        except Exception:
+            return None                              # unreachable or tampered metadata: not a candidate
 
     def candidates(self, jev: Jev, task: str, context: str, defaults: dict, installed: set[str],
                    activate_th: float, explore_th: float, beam: int) -> list[tuple[SOP, float]]:
         return self.traverse(jev, task, context, defaults, installed, activate_th, explore_th, beam)
 
     def entry(self, sop_id: str) -> dict | None:
-        """Locate one SOP by walking only its ancestors' listings."""
+        """Locate one SOP by walking only its ancestors' listings (following an alias if it moved)."""
+        if sop_id not in self.entries and not self.aliases:
+            self.listing("")
+        sop_id = self.aliases.get(sop_id, sop_id)
         if sop_id not in self.entries:
             parts = sop_id.split(".")
             self.listings([".".join(parts[:i]) for i in range(len(parts))])   # all ancestors at once
@@ -227,6 +264,7 @@ class RemoteRegistry:
         e = self.entry(sop_id)
         if not e:
             raise KeyError(f"{sop_id} is not in the remote registry")
+        e = self.full(e)
         dest = self.install_root.joinpath(*e["path"].split("/"))
         tmp = dest.with_name(dest.name + ".partial")
         if tmp.exists():

@@ -57,8 +57,21 @@ class RemotePullTest(unittest.TestCase):
         self.assertEqual({e["type"] for e in root["entries"]}, {"node"})          # categories only, no SOPs
         self.assertTrue((self.reg / "text" / "_index.json").exists())
         sub = json.loads((self.reg / "text" / "_index.json").read_text())
-        self.assertEqual(sub["entries"][0]["id"], "text.slugify")
-        self.assertTrue(sub["entries"][0]["files"][0]["sha256"])
+        e = sub["entries"][0]
+        self.assertEqual(e["id"], "text.slugify")
+        # columnar: the listing holds only what JEV chooses by; the rest is in _meta.json, pinned by its hash
+        self.assertEqual(sorted(e), ["description", "id", "keywords", "meta", "path", "type"])
+        meta = (self.reg / e["meta"]["path"]).read_bytes()
+        import hashlib
+        self.assertEqual(hashlib.sha256(meta).hexdigest(), e["meta"]["sha256"])
+        self.assertTrue(json.loads(meta)["files"][0]["sha256"])
+
+    def test_tampered_metadata_is_refused(self):
+        e = json.loads((self.reg / "text" / "_index.json").read_text())["entries"][0]
+        (self.reg / e["meta"]["path"]).write_text('{"files": [], "permissions": []}')
+        h = self.harness()
+        plan = h.plan("slugify this blog post title into a url slug")
+        self.assertNotIn("text.slugify", [x["id"] for x in plan.pulls if x["result"] == "pulled"])
 
     def test_pulls_only_the_needed_sop_and_only_explored_branches(self):
         h = self.harness()
