@@ -200,7 +200,7 @@ def _split(lib: Library, ex, node: Node, leaves: list[SOP], llm, jev: Jev, min_s
             root = _root_of(lib, sop)
             if not (root.joinpath(*sub_id.split(".")) / "_node.json").exists() and name not in subs:
                 _node_meta(root.joinpath(*sub_id.split(".")), desc, keywords)
-            was_ok = sop.status == "validated" and not ex.test(sop.id)
+            was_ok = ex is not None and sop.status == "validated" and not ex.test(sop.id)
             new = move(lib, root, sop, f"{sub_id}.{sop.id.split('.')[-1]}")
             if new is None:
                 continue
@@ -209,6 +209,19 @@ def _split(lib: Library, ex, node: Node, leaves: list[SOP], llm, jev: Jev, min_s
                 continue
             moved.append(f"{sop.id} -> {new.id}")
     return moved
+
+
+def crowded(root: Path, limit: int = LIMIT) -> dict[str, int]:
+    """Categories under ``root`` with more than ``limit`` SOPs directly in them, read from the folders alone (no
+    model, no code run): the cheap check a CI job makes before it rebalances anything."""
+    out = {}
+    for d in [root, *sorted(p for p in root.rglob("*") if p.is_dir())]:
+        if (d / "sop.json").exists() or any(part.startswith((".", "_")) for part in d.relative_to(root).parts):
+            continue
+        n = sum(1 for c in d.iterdir() if c.is_dir() and (c / "sop.json").exists())
+        if n > limit and d != root:
+            out[".".join(d.relative_to(root).parts)] = n
+    return out
 
 
 def rebalance_all(lib: Library, ex, llm, jev: Jev, limit: int = LIMIT, min_size: int = MIN_SIZE) -> list[dict]:

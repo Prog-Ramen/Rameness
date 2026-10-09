@@ -100,11 +100,22 @@ by level; at each level JEV scores only that category's children. So every categ
 * **Splitting.** When more than 8 SOPs sit directly in a category, it splits inside itself: the model proposes
   groups of related SOPs (each with a name and a one-line description), JEV confirms each member, and each
   group of at least 3 becomes a subcategory. A subcategory that grows past 8 splits the same way, so the tree
-  deepens only where SOPs pile up. A split runs right after an SOP is added; `rameness sop rebalance` runs it
-  over a whole library (for example a RamenSOPs checkout, passed with `--sops`).
+  deepens only where SOPs pile up.
 * **Folding.** A subcategory left with fewer than 3 SOPs folds back into its parent.
 * **Nothing breaks.** A moved SOP keeps its old id as an alias (`_aliases.json`), keeps its usage stats, and
   must still pass its tests in its new place, or it is moved back.
+
+Every tree gets the same rules; who runs them differs:
+
+| Tree | Rebalanced by | Moves land as |
+|---|---|---|
+| Your private folders | Rameness, right after it adds an SOP | direct changes (they are yours) |
+| RamenSOPs | its post-merge job (`rameness sop rebalance --root sops`) | a "reorganize" PR for a maintainer |
+| Built-ins | a developer; CI fails while a built-in category is crowded | a reviewed PR |
+
+`rameness sop rebalance --root DIR --check` reports crowded categories from the folders alone (no model, no
+code run). A proposal is placed in the **target's** tree, not yours: JEV walks the registry's (or the
+built-ins') own categories to find where it belongs.
 
 With at most about 8 choices per level, 5,000 SOPs are 4-5 levels: a handful of small listings and a few dozen
 JEV questions to find any one of them.
