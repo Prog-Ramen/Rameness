@@ -454,7 +454,7 @@ def main(argv=None):
     ap.add_argument("--provider", help="anthropic | openai | deepseek | ollama | llama-server")
     ap.add_argument("--model")
     ap.add_argument("--base-url", help="OpenAI-compatible endpoint, e.g. http://localhost:8080/v1 (llama-server)")
-    ap.add_argument("--jev", help="auto | laya-local | laya | kev | typesafe | lexical")
+    ap.add_argument("--jev", help="auto | laya-local | laya | kev | clef | typesafe | lexical")
     ap.add_argument("-y", "--yes", action="store_true", help="auto-approve tool actions")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--sops", action="append", metavar="DIR",
@@ -475,7 +475,7 @@ def main(argv=None):
     sub.add_parser("learn", help="show recurring step patterns across runs").set_defaults(fn=cmd_learn)
     p = sub.add_parser("jev", help="the decision model: setup / up / down / status of local servers, bench")
     p.add_argument("action", choices=["setup", "up", "down", "status", "bench"])
-    p.add_argument("name", nargs="?", choices=["laya", "kev"], help="setup/up/down: which local model (default: jev.serve)")
+    p.add_argument("name", nargs="?", choices=["laya", "kev", "clef"], help="setup/up/down: which local model (default: jev.serve)")
     p.add_argument("--keywords", action="store_true", help="force the options' keyword cues (default: jev.option_text)")
     p.add_argument("--json", help="also write the full results here")
     p.set_defaults(fn=cmd_jev)

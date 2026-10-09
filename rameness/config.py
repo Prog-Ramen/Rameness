@@ -72,11 +72,11 @@ DEFAULTS: dict = {
         "min_confidence": 0.5,        # intervene (drifting / stalled / finish) only on a verdict this probable
     },
     "jev": {
-        "backend": "auto",            # auto | laya-local | laya | kev | typesafe | lexical. auto: the first local model
+        "backend": "auto",            # auto | laya-local | laya | kev | clef | typesafe | lexical. auto: the first local model
                                       # in local_order whose server answers, else typesafe if
                                       # TYPESAFE_API_KEY is set, else lexical (offline, degraded)
-        "local_order": ["kev", "laya", "laya-local"],   # servers first (one shared copy), then in-process
-        "serve": "laya",              # the local decision server `rameness up` starts: laya | kev | None
+        "local_order": ["clef", "kev", "laya", "laya-local"],   # servers first (one shared copy), then in-process
+        "serve": "laya",              # the local decision server `rameness up` starts: laya | kev | clef | None
         "serve_device": None,         # cuda | cpu | None (GPU if visible). cpu if the GPU is busy with a big model
         "kev_checkpoint": "jaredpalmer/kev-4b",
         "option_text": "keywords",    # what the model reads per option: keywords | sentences (Option.desc)
@@ -90,6 +90,11 @@ DEFAULTS: dict = {
         "laya_device": None,          # laya-local only: cuda | cpu | None (auto)
         "kev_url": None,              # default http://127.0.0.1:8008/v1/systemone (`python -m kev.serve`)
         "kev_model": None,
+        "clef_url": None,             # default http://127.0.0.1:8010/v1/systemone (`rameness jev up clef`)
+        "clef_model": None,           # default clef-flash
+        "clef_checkpoint": "Cloudflare/clef-flash",   # Hugging Face repo id or a local folder
+        "clef_bits": 8,               # 8 fits a 16 GB GPU (bitsandbytes); 16 needs ~20 GB
+        "clef_python": None,          # an existing Python with Clef's packages; default ~/.rameness/jev/clef/venv
         "typesafe_url": None,         # TypeSafe's hosted Jev (subscription): https://api.typesafe.ai/v1/systemone
         "typesafe_model": None,       # default "jev-latest"
         "high_effort_above": 0.10,    # use high reasoning effort when JEV gives "high" more than this probability

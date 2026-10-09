@@ -18,15 +18,16 @@ launcher goes in `~/.local/bin`.
 
 ## Pick a decision model
 
-Rameness's choices come from a typed decision model, not an LLM. Kev is the better one if you have the memory.
+Rameness's choices come from a typed decision model, not an LLM. Clef if you have a spare GPU, else Kev if you
+have the memory, else Laya. They are interchangeable: one setting (`jev.backend`) or `--jev`.
 
-| | Laya (installed by default) | Kev (`--with-kev`) | TypeSafe Jev (subscription) |
-|---|---|---|---|
-| What | open-source, 421M params | open-source, Qwen3.5-4B based | hosted by TypeSafe AI |
-| Accuracy (`rameness jev bench`) | 0.73 | 0.93 | not measured here |
-| Speed | ~0.13 s CPU | ~0.9 s CPU (bf16), ~20 ms GPU | network round trip |
-| Memory | ~1.7 GB | ~9 GB GPU, ~8-12 GB CPU | none locally |
-| Cost | free | free | per call |
+| | Laya (installed by default) | Kev | Clef-Flash | TypeSafe Jev (subscription) |
+|---|---|---|---|---|
+| What | open-source, 421M params | open-source, Qwen3.5-4B based | open-source (Cloudflare), Qwen3.5-9B based | hosted by TypeSafe AI |
+| Accuracy (`rameness jev bench`) | 0.73 | 0.92-0.93 | **0.96** | not measured here |
+| Speed per decision | ~0.13 s CPU | ~1-1.5 s CPU (bf16), ~20 ms GPU | ~0.18 s GPU | network round trip |
+| Memory | ~1.7 GB | ~9 GB GPU, ~8-12 GB CPU | ~10 GB GPU (8-bit) | none locally |
+| Cost | free | free | free | per call |
 
 A run makes one or two decisions per turn, so Kev on CPU adds roughly a second to each turn.
 
@@ -47,6 +48,18 @@ rameness jev setup kev             # or install.sh --with-kev; weights (~9 GB) d
 rameness jev up kev                # 127.0.0.1:8008; uses the GPU if it has ~10 GB free
 ```
 
+**Clef-Flash** gets its own environment too (PyTorch, transformers, bitsandbytes) under `~/.rameness/jev/clef`,
+and needs a GPU with ~10 GB free (8-bit):
+
+```bash
+rameness jev setup clef            # weights (~18 GB) download on first start
+rameness jev up clef               # 127.0.0.1:8010
+```
+
+Swap it in for Kev with `{"jev": {"backend": "clef", "serve": "clef"}}`, or `rameness --jev clef run "..."` for one
+run. With `"backend": "auto"`, a running Clef is preferred, then Kev, then Laya. [Kev vs Clef](decisions.md#kev-vs-clef)
+has the measurements.
+
 To make `rameness up` start Kev, and run it on CPU when the GPU is busy, set in `~/.rameness/config.json`:
 
 ```json
@@ -62,7 +75,7 @@ export TYPESAFE_API_KEY=ts_...
 With a key set, TypeSafe is used when no local model runs, and covers a local server outage. To use it
 for every decision, set `{"jev": {"backend": "typesafe"}}`.
 
-`auto` (the default) picks a running Kev server, then a running Laya server, then Laya in-process,
+`auto` (the default) picks a running Clef server, then Kev, then a running Laya server, then Laya in-process,
 then TypeSafe if a key is set. With none, Rameness warns and falls back to an offline keyword scorer.
 More in [Decisions](decisions.md).
 
