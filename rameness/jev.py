@@ -115,6 +115,16 @@ class Backend(ABC):
         return [1 / len(raw)] * len(raw) if s <= 0 else [r / s for r in raw]
 
 
+def _activate_many_default(self, groups, query, context=""):
+    """Several activate questions about the same task: one request per group. Merging them into one request
+    was measured against Kev (2026-10-09): its answers changed with what else was in the request (by up to
+    0.71) and it was slower (365 s against 202 s on CPU), so every group keeps its own request."""
+    return [self.activate(q, query, opts, context) for q, opts in groups]
+
+
+Backend.activate_many = _activate_many_default
+
+
 class LexicalJev(Backend):
     """IDF-weighted token overlap mapped to a probability.
 
@@ -433,6 +443,24 @@ class Jev:
         d = self._record(question, query, options, probs, "activate", context)
         self._telemetry(question, "activate", d, len(options), t0, f0, query + context)
         return d
+
+    def activate_many(self, groups: list[tuple[str, list[Option]]], query: str, context: str = "") -> list[Decision]:
+        """Several activate decisions about the same task (one tree level), each in its own request, tuned,
+        logged and returned as its own decision: the same answers as asking them one by one."""
+        t0, f0 = time.time(), getattr(self.backend, "failures", 0)
+        tuned = [(q, self._tune(q, opts)) for q, opts in groups]
+        live = [(q, opts) for q, opts in tuned if opts]
+        raws = iter(self.backend.activate_many(live, query, context) if live else [])
+        out = []
+        for q, opts in tuned:
+            if not opts:
+                out.append(Decision("-", q, {}, self.backend.name))
+                continue
+            probs = [min(0.999, max(0.0, p * o.prior)) for p, o in zip(next(raws), opts)]
+            d = self._record(q, query, opts, probs, "activate", context)
+            self._telemetry(q, "activate", d, len(opts), t0, f0, query + context)
+            out.append(d)
+        return out
 
     def choose(self, question: str, query: str, options: list[Option], context: str = "") -> Decision:
         t0, f0 = time.time(), getattr(self.backend, "failures", 0)
