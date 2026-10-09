@@ -117,31 +117,29 @@ def sanitized_copy(sop: SOP, dest: Path) -> None:
 def publishable_tests(sop: SOP) -> list[str]:
     """The tests ship with the SOP (inside sop.json) to wherever it is published, and must pass the checks there:
     RamenSOPs CI (ci/review.py) for the registry, the Rameness test suite for a built-in. The same rules here, so
-    a proposal does not bounce: 2-40 tests, each asserting concrete values, output keys or an error, at least two
-    with concrete values, distinct cases, declared inputs, and fixtures only at relative paths."""
-    tests, problems = sop.tests or [], []
+    a proposal does not bounce: learning.test_quality (every test asserts something, two check concrete values,
+    required inputs given with their declared types), 2-40 tests, distinct cases, fixtures only at relative paths,
+    and every permission the code uses declared."""
+    from .learning import test_quality
+    from .review import used_permissions
+    tests = sop.tests or []
     if not tests:
         return ["no tests provided"]
+    problems = []
     if not 2 <= len(tests) <= 40:
         problems.append("provide between 2 and 40 tests, including a normal and an edge case")
-    props, required = sop.inputs.get("properties", {}), sop.inputs.get("required", [])
+    problems += [p.replace("fewer than two tests check concrete expected values",
+                           "at least two tests must assert expected output values; output keys or error cases "
+                           "alone are insufficient") for p in test_quality(sop)]
     for i, t in enumerate(tests):
-        concrete = isinstance(t.get("expect"), dict) and bool(t["expect"])
-        if not (concrete or t.get("expect_keys") or t.get("expect_error") is True) or not isinstance(t.get("input"), dict):
-            problems.append(f"test {i}: assert concrete values, output keys or an error, on an object input")
-            continue
-        if any(k not in t["input"] for k in required) and not t.get("expect_error"):
-            problems.append(f"test {i}: missing a required input")
-        if props and any(k not in props for k in t["input"]):
-            problems.append(f"test {i}: undeclared input")
         if any(Path(k).is_absolute() or ".." in Path(k).parts for k in (t.get("files") or {})):
             problems.append(f"test {i}: fixture files must use relative paths")
-    if sum(1 for t in tests if isinstance(t.get("expect"), dict) and t["expect"]) < 2:
-        problems.append("at least two tests must assert expected output values; output keys or error cases "
-                        "alone are insufficient")
     if len(tests) >= 2 and len({json.dumps([t.get("input"), t.get("files", {}), t.get("setup", "")], sort_keys=True)
                                 for t in tests}) < 2:
         problems.append("tests must exercise distinct inputs")
+    undeclared = sorted(used_permissions(sop.path) - set(sop.permissions)) if sop.path.exists() else []
+    if undeclared:
+        problems.append(f"the code uses {undeclared} but does not declare it")
     return problems
 
 
@@ -164,7 +162,7 @@ def savings(sop: SOP, stats: dict | None = None) -> dict:
 
 
 class Registry:
-    def __init__(self, cfg: dict, home: Path, org: Org, jev):
+    def __init__(self, cfg: dict, home: Path, org: Org, jev, llm=None):
         rc = cfg.get("registry") or {}
         self.public = rc.get("public")
         self.builtin = rc.get("builtin")          # the Rameness repo: built-in SOPs ship with Rameness itself
@@ -176,6 +174,7 @@ class Registry:
         self.fork = rc.get("fork")
         self.home = home / "registry"
         self.org, self.jev = org, jev
+        self.llm = llm                             # reads the whole script in the security review (code alone without)
         self.ledger = self.home / "proposals.json"
 
     # ---- helpers
@@ -253,6 +252,14 @@ class Registry:
             raise RegistryError("PR creation returned no URL")
         return p.stdout.strip()
 
+    def _pr_open(self, pr: str) -> bool:
+        """Is this PR still open (so a newer version of its SOP belongs on its branch)?"""
+        if not GH_URL.search(pr or "") or not shutil.which("gh"):
+            return False
+        p = subprocess.run(["gh", "pr", "view", pr, "--json", "state", "-q", ".state"],
+                           capture_output=True, text=True, timeout=60)
+        return p.returncode == 0 and p.stdout.strip() == "OPEN"
+
     def _compare_url(self, url: str, branch: str, base: str) -> str | None:
         m = GH_URL.search(url)
         return f"https://github.com/{m.group(1)}/{m.group(2)}/compare/{base}...{branch}?expand=1" if m else None
@@ -274,6 +281,16 @@ class Registry:
             raise RegistryError(f"{sop.id} is already public")
         if sop.status != "validated":
             raise RegistryError(f"{sop.id} is {sop.status}: only SOPs whose tests pass can be proposed")
+        from . import sopsafety
+        sec = sopsafety.current(sop)              # reviewed for the code as it is now?
+        if sec is None:
+            sec = sopsafety.review(sop, self.llm, self.jev)
+            sopsafety.record(sop, sec)
+        if sec["verdict"] != "safe":
+            top = sec["risks"][0] if sec["risks"] else {}
+            raise RegistryError(f"security review: {sec['verdict']}" + (
+                f" (line {top.get('line')}: {top.get('kind')}: {top.get('detail')})" if top else "")
+                + "; `rameness sop finish <id>` fixes what can be fixed")
         findings = scrub(sop, self.org)
         hard = hard_findings(findings)
         if hard:
@@ -346,8 +363,17 @@ class Registry:
             self._record(entry)
             return entry
         repo = self._clone(url, dest["destination"] if dest["destination"] == "builtin" else "public", scan)
-        branch = f"sop/{sop.id}-{time.time_ns()}"
-        git(repo, "checkout", "-q", "-b", branch)
+        # a newer version of an SOP whose PR is still open updates that PR instead of opening another
+        update = next((p for p in reversed(self.proposals()) if p.get("id") == sop.id and p.get("registry") == url
+                       and p.get("status") == "proposed" and p.get("pushed") == url and p.get("pr")
+                       and self._pr_open(p["pr"])), None)
+        if update:
+            branch = update["branch"]
+            git(repo, "fetch", "-q", "origin", f"{branch}:{branch}")
+            git(repo, "checkout", "-q", branch)
+        else:
+            branch = f"sop/{sop.id}-{time.time_ns()}"
+            git(repo, "checkout", "-q", "-b", branch)
         base_dir = repo / prefix
         sanitized_copy(sop, base_dir / Path(*sop.id.split(".")))
         parts = sop.id.split(".")                # new categories travel with their SOP; the index is rebuilt on merge
@@ -359,8 +385,14 @@ class Registry:
         if leftover:
             raise RegistryError("scan of the registry tree failed:\n  " + "\n  ".join(leftover))
         git(repo, "add", "-A")
-        git(repo, "commit", "-q", "-m", f"Propose SOP {sop.id}\n\n{sop.description}")
+        git(repo, "commit", "-q", "-m", (f"Update SOP {sop.id}" if update else f"Propose SOP {sop.id}")
+            + f"\n\n{sop.description}")
         head, pushed = self._push(repo, url, branch)
+        if update:
+            entry = {**update, "key": key, "fingerprint": fingerprint(sop), "head": head, "t": time.time(),
+                     "classification": cls["visibility"], "benign": cls["benign"], "updated": True}
+            self._record(entry)
+            return entry
         builtin = dest["destination"] == "builtin"
         kind = "built-in SOP (ships with Rameness)" if builtin else "SOP"
         needs = describe(sop.requirements)

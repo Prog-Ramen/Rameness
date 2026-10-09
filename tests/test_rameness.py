@@ -222,7 +222,7 @@ class TestLearning(Env):
             Response("Done and verified.", [], "end_turn")], json_script=[
                 {"procedures": [{"name": "word_count", "description": "count words", "params": ["text"],
                                  "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R1", "steps": [2, 3]}]}]},
-                spec])
+                spec] + [lambda prompt: {"risks": []}] * 3)    # the security review finds nothing
         h = Harness(cfg, llm=llm)
         with patch("rameness.registry.Registry._gh_pr", return_value="https://github.com/example/sops/pull/2") as pr:
             result = h.run("implement a reusable word counting utility", allow_direct=False)
@@ -245,7 +245,8 @@ class TestLearning(Env):
                 "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
                                                       {"input": {"s": ""}, "expect": {"s": ""}}]}
         llm = FakeProvider([Response("", [ToolCall("1", "sop_save", spec)], "tool_use"),
-                            Response("done", [], "end_turn")])
+                            Response("done", [], "end_turn")],
+                           json_script=[lambda prompt: {"risks": []}] * 3)   # nothing to extend; no security risks
         h = Harness(cfg, llm=llm)
         with patch("rameness.registry.Registry._gh_pr", return_value="https://github.com/example/sops/pull/2"):
             result = h.run("implement a text conversion utility", allow_direct=False)
@@ -259,7 +260,8 @@ class TestLearning(Env):
         good = "import json,sys; a=json.load(sys.stdin); print(json.dumps({'s': a['s'].upper()}))"
         spec = {"id": "text.upper", "description": "Upper-case text",
                 "inputs": {"type": "object", "properties": {"s": {"type": "string"}}, "required": ["s"]},
-                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}}]}
+                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
+                                                      {"input": {"s": "bc"}, "expect": {"s": "BC"}}]}
         bad = dict(spec, script=good.replace(".upper()", ""))
         llm = FakeProvider([Response("", [ToolCall("1", "sop_save", bad)], "tool_use"),
                             Response("", [ToolCall("2", "sop_save", bad)], "tool_use"),
@@ -323,7 +325,8 @@ class TestLearning(Env):
         spec = {"id": "text.word_count", "description": "count words in text", "permissions": ["compute"],
                 "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'words': len(a['text'].split())}))",
-                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}}]}
+                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}},
+                          {"input": {"text": ""}, "expect": {"words": 0}}]}
         llm = FakeProvider(json_script=[
             {"procedures": [{"name": "word_count", "description": "count words", "params": ["text"],
                              "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R1", "steps": [2, 3]}]}]},
@@ -433,7 +436,8 @@ class TestHarness(Env):
                 "id": "text.upper", "description": "uppercase text",
                 "inputs": {"type": "object", "properties": {"s": {"type": "string"}}, "required": ["s"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'s': a['s'].upper()}))",
-                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}}]})], "tool_use"),
+                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
+                                                      {"input": {"s": ""}, "expect": {"s": ""}}]})], "tool_use"),
             Response("", [ToolCall("3", "sop_text__upper", {"s": "hey"})], "tool_use"),
             Response("done", [], "end_turn"),
         ]

@@ -139,7 +139,8 @@ class Simplify(unittest.TestCase):
         self.ex = Executor(self.lib, [], cwd=self.tmp)
         self.spec = {"id": "data.count_keys", "description": "Count the keys of a JSON object", "script": JQ_SCRIPT,
                      "inputs": {"type": "object", "properties": {"obj": {"type": "object"}}},
-                     "tests": [{"input": {"obj": {"a": 1, "b": 2}}, "expect": {"count": 2}}]}
+                     "tests": [{"input": {"obj": {"a": 1, "b": 2}}, "expect": {"count": 2}},
+                               {"input": {"obj": {}}, "expect": {"count": 0}}]}
 
     def test_a_standard_rewrite_that_passes_replaces_the_extra_program(self):
         sop, failures = register_sop(self.lib, self.ex, self.spec, llm=FakeProvider(json_script=[{"script": STD_SCRIPT}]))
@@ -325,6 +326,10 @@ MAKE_PNG = ("import struct, zlib\n"
             " + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))\n")
 
 
+MAKE_PNG_5x1 = MAKE_PNG.replace("3, 2, 8", "5, 1, 8")
+SECOND_PNG = {"input": {"path": "img.png"}, "setup": MAKE_PNG_5x1, "expect": {"width": 5, "height": 1}}
+
+
 class FinishingSops(unittest.TestCase):
     """The model finishes an SOP with tests that run: fixtures for files, setup code for binary data, and repair
     rounds that see what the tests actually returned."""
@@ -340,18 +345,20 @@ class FinishingSops(unittest.TestCase):
         sop, failures = register_sop(self.lib, self.ex, {
             "id": "web.read_page", "description": "Read an HTML page", "script": READ_PAGE,
             "tests": [{"input": {"path": "page.html"}, "files": {"page.html": "<html><script>x</script></html>"},
-                       "expect": {"chars": 31, "has_script": True}}]})
+                       "expect": {"chars": 31, "has_script": True}},
+                      {"input": {"path": "plain.html"}, "files": {"plain.html": "<p>hi</p>"},
+                       "expect": {"chars": 9, "has_script": False}}]})
         self.assertEqual((failures, sop.status), ([], "validated"))
         sop, failures = register_sop(self.lib, self.ex, {
             "id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
-            "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}]})
+            "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}, SECOND_PNG]})
         self.assertEqual((failures, sop.status), ([], "validated"))     # a real PNG, built by code, not by hand
 
     def test_a_wrong_expectation_is_repaired_after_seeing_the_real_output(self):
         spec = {"id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
-                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}]}
+                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}, SECOND_PNG]}
         fixed = {"script": PNG_SIZE, "explanation": "the image built by setup is 3x2",
-                 "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}]}
+                 "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}, SECOND_PNG]}
         llm = FakeProvider([], json_script=[fixed])
         sop, failures = register_sop(self.lib, self.ex, spec, llm=llm)
         self.assertEqual((failures, sop.status), ([], "validated"))
@@ -369,13 +376,14 @@ class FinishingSops(unittest.TestCase):
         broken = "import json, sys\nprint(json.dumps({'ok': 'yes\n'}))\n"     # a newline inside the literal
         fixed = {"script": "import json, sys\nprint(json.dumps({'ok': 'yes'}))\n"}
         sop, failures = register_sop(self.lib, self.ex, {"id": "x.ok", "description": "ok", "script": broken,
-                                                         "tests": [{"input": {}, "expect": {"ok": "yes"}}]},
+                                                         "tests": [{"input": {}, "expect": {"ok": "yes"}},
+                                                                   {"input": {"x": 1}, "expect": {"ok": "yes"}}]},
                                      llm=FakeProvider([], json_script=[fixed]))
         self.assertEqual((failures, sop.status), ([], "validated"))
 
     def test_a_repair_that_guts_the_tests_is_refused(self):
         spec = {"id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
-                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}]}
+                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}, SECOND_PNG]}
         gutted = {"script": PNG_SIZE, "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG}]}
         sop, failures = register_sop(self.lib, self.ex, spec, llm=FakeProvider([], json_script=[gutted, gutted]))
         self.assertTrue(failures)
