@@ -44,8 +44,8 @@ anything specific to you stays on your machine.
 
 Other harnesses (Claude Code, Codex, pi) hard-code their choices: whether a task needs reasoning, which
 procedure applies, which model and machine should do the work, what to do when something fails.
-Rameness hands each of those choices to a small decision model (JEV: Kev or Laya running locally, or
-TypeSafe AI's hosted Jev) that scores the options in about a second or less. Routine choices it makes
+Rameness hands each of those choices to a small decision model (JEV: Clef-Flash, Kev or Laya running
+locally, swappable with one setting, or TypeSafe AI's hosted Jev) that scores the options in about a second or less. Routine choices it makes
 alone; significant or uncertain ones come to you. You can watch every decision live, and your
 corrections make the next ones better.
 
@@ -87,7 +87,8 @@ grade), Rameness's best runs with local models match Claude Code with Claude Opu
 |---|---|---|
 | Claude Code + Claude Opus 5.5 (reference) | 100% | 7.25 |
 | Rameness + Qwen3.8-27B UD-Q4_K_M (llama.cpp) | 100% | 7.25 |
-| Rameness + Qwen3.8-Flash-Next AutoRound 3bpw (vLLM) | 92.9% | 7.5 |
+| Rameness + Qwen3.8-Flash-Next AutoRound 3bpw (vLLM), Kev | 100% | 7.5 |
+| Rameness + Qwen3.8-Flash-Next AutoRound 3bpw (vLLM), Clef-Flash | 100% | 8.0 ([human review](docs/benchmarks.md#human-review-of-the-clef-build); judge 6.5) |
 
 On a series that repeats one procedure, learned SOPs cut task time by a third and tokens by half.
 [Benchmarks](docs/benchmarks.md) has every run, the charts, and the caveats (variance is large).
@@ -105,7 +106,7 @@ On a series that repeats one procedure, learned SOPs cut task time by a third an
 | [Sharing SOPs](docs/sharing.md) | The three tiers, where tests go, safety checks, pulling from the registry. |
 | [Experiments](docs/experiments.md) | Features behind flags, and the A/B evidence for each. |
 | [Benchmarks](docs/benchmarks.md) | The tasks Rameness is measured on, and the results. |
-| [Architecture](docs/architecture.md) | Where everything lives in the code. |
+| [Architecture](docs/architecture.md) | Diagrams of how it all works, and where everything lives in the code. |
 | [Iterations](docs/iterations.md) | What changed between versions, and whether each change reached its runs. |
 
 ## Acknowledgements
