@@ -157,5 +157,21 @@ class Placement(Base):
         self.assertEqual(sorted(lib.root.children["http"].children), ["browser", "server"])
 
 
+
+class BuiltinTree(unittest.TestCase):
+    def test_no_builtin_category_is_crowded(self):
+        """CI guard: the built-ins change only through reviewed PRs, so a crowded category fails here with the fix:
+        `rameness sop rebalance --root rameness/builtin_sops`."""
+        from rameness.sops import BUILTIN_ROOT
+        self.assertEqual(tree.crowded(BUILTIN_ROOT), {})
+
+    def test_crowded_reads_only_the_folders(self):
+        root = Path(tempfile.mkdtemp())
+        for i in range(9):
+            write_sop(root, f"dev.s{i}", "x")
+        write_sop(root, "dev.sub.t0", "y")
+        self.assertEqual(tree.crowded(root), {"dev": 9})
+
+
 if __name__ == "__main__":
     unittest.main()

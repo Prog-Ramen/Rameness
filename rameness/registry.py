@@ -252,6 +252,19 @@ class Registry:
             raise RegistryError("PR creation returned no URL")
         return p.stdout.strip()
 
+    def _place_in(self, base_dir: Path, sop: SOP) -> str:
+        """The SOP's id in the target tree: kept if that SOP already lives there (an update), else the category
+        JEV finds by walking the target's own categories, plus the SOP's name."""
+        if (base_dir.joinpath(*sop.id.split(".")) / "sop.json").exists() or not base_dir.exists():
+            return sop.id
+        from .tree import place
+        target = Library([(base_dir, "public")])
+        if not target.root.children:
+            return sop.id
+        name = sop.id.split(".")[-1]
+        new_id = f"{place(self.jev, target, sop)}.{name}"
+        return sop.id if (base_dir.joinpath(*new_id.split(".")) / "sop.json").exists() else new_id
+
     def _pr_open(self, pr: str) -> bool:
         """Is this PR still open (so a newer version of its SOP belongs on its branch)?"""
         if not GH_URL.search(pr or "") or not shutil.which("gh"):
@@ -375,10 +388,18 @@ class Registry:
             branch = f"sop/{sop.id}-{time.time_ns()}"
             git(repo, "checkout", "-q", "-b", branch)
         base_dir = repo / prefix
-        sanitized_copy(sop, base_dir / Path(*sop.id.split(".")))
-        parts = sop.id.split(".")                # new categories travel with their SOP; the index is rebuilt on merge
+        # where it goes is decided by the TARGET's tree, not your private one: JEV walks the registry's (or the
+        # built-ins') categories level by level; an update to an SOP already there stays where it is
+        target_id = update.get("registry_id", sop.id) if update else self._place_in(base_dir, sop)
+        sanitized_copy(sop, base_dir / Path(*target_id.split(".")))
+        if target_id != sop.id:
+            meta = base_dir / Path(*target_id.split(".")) / "sop.json"
+            meta.write_text(json.dumps({**json.loads(meta.read_text()), "id": target_id}, indent=2) + "\n")
+        local_root = sop.path.parents[len(sop.id.split(".")) - 1]
+        parts = target_id.split(".")             # new categories travel with their SOP; the index is rebuilt on merge
         for i in range(1, len(parts)):
-            src, dst = sop.path.parents[len(parts) - 1 - i] / "_node.json", base_dir / Path(*parts[:i]) / "_node.json"
+            dst = base_dir / Path(*parts[:i]) / "_node.json"
+            src = local_root / Path(*parts[:i]) / "_node.json"
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
         leftover = hard_findings(scrub_tree(repo, self.org, only=changed_files(repo)))
@@ -403,7 +424,7 @@ class Registry:
         worth = (f"Saves about {sv['tokens']} model tokens"
                  + (f" and {sv['seconds']} s" if sv["seconds"] else "") + " per use, after reading its interface and "
                  "calling it" + (" (measured)" if sv.get("measured") else " (estimated)") + "." + payback + "\n")
-        body = (f"Proposed {kind} `{sop.id}`: {sop.description}\n\n"
+        body = (f"Proposed {kind} `{target_id}`: {sop.description}\n\n"
                 f"Classification: {cls['visibility']} ({cls['reason']}).\n"
                 f"Destination: {dest['destination']} ({dest['reason']}).\n" + worth
                 + (f"{needs}\n" if needs else "Needs nothing beyond Python and a POSIX shell.\n") +
@@ -412,9 +433,9 @@ class Registry:
                 + (f"; JEV judged {len(cls['benign'])} other finding(s) benign" if cls["benign"] else "") + "."
                 + ("\n\n**Needs verification by a Rameness developer before merging.** Built-in SOPs ship to "
                    "every Rameness user; this was proposed automatically and opened as a draft." if builtin else ""))
-        entry = {"id": sop.id, "key": key, "registry": url, "destination": dest["destination"],
+        entry = {"id": sop.id, "registry_id": target_id, "key": key, "registry": url, "destination": dest["destination"],
                  "fingerprint": fingerprint(sop),
-                 "branch": branch, "head": head, "base": self._base, "title": f"SOP: {sop.id}", "body": body,
+                 "branch": branch, "head": head, "base": self._base, "title": f"SOP: {target_id}", "body": body,
                  "status": "pushed", "t": time.time(), "pushed": pushed, "pr": None,
                  "classification": cls["visibility"],
                  "overridden": cls["visibility"] != "shareable", "benign": cls["benign"]}

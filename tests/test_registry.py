@@ -137,6 +137,28 @@ class RegistryTest(unittest.TestCase):
                        GENERIC, ["text", "convert", "format", "utility", "generic"])
         self.assertIn(self.reg().propose(gen)["status"], ("proposed", "pushed_local"))
 
+    def test_a_proposal_is_placed_in_the_registry_tree_not_the_private_one(self):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        for cid, desc in (("text", "Text transformations"), ("text.case", "upper lower title case conversion of text")):
+            d = seed / "sops" / Path(*cid.split("."))
+            d.mkdir(parents=True)
+            (d / "_node.json").write_text(json.dumps({"description": desc}))
+        lower = seed / "sops" / "text" / "case" / "lower"
+        lower.mkdir()
+        (lower / "sop.json").write_text(json.dumps({"id": "text.case.lower", "description": "lower case text"}))
+        (lower / "run.py").write_text("print('{}')\n")
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "a registry with a case subcategory")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        with patch("rameness.tree.place", return_value="text.case"):      # JEV's walk (tested in test_tree)
+            entry = self.reg().propose(gen)
+        self.assertEqual(entry["registry_id"], "text.case.upper")
+        pushed = sh(self.public, "show", f"{entry['head']}:sops/text/case/upper/sop.json")
+        self.assertEqual(json.loads(pushed.stdout)["id"], "text.case.upper")
+
     def validated(self):
         from rameness.learning import register_sop
         lib = Library([(self.root, "private")])

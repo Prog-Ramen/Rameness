@@ -118,6 +118,14 @@ def cmd_sop(a):
     if a.action == "index":
         print(f"wrote {pub.build_index(Path(a.arg))}")
         return
+    if a.action == "rebalance" and a.check:      # count only: no harness, no model, no code run (CI pre-check)
+        from .tree import LIMIT, crowded
+        over = crowded(Path(a.root or ".").resolve())
+        for cid, n in over.items():
+            print(f"crowded {cid}: {n} SOPs directly in it (limit {LIMIT}); run `rameness sop rebalance --root ...`")
+        if a.json:
+            Path(a.json).write_text(json.dumps(over, indent=1))
+        sys.exit(1 if over else 0)
     h = _harness(a, need_llm=a.action in ("finish", "propose", "rebalance"))   # finishing and the security review use the model
     if a.action == "discover":                  # candidate SOPs from event logs; reports only, generates nothing
         from . import discover as dsc
@@ -203,9 +211,16 @@ def cmd_sop(a):
             sec = (sop.origin or {}).get("security") or {}
             print(f"{sid:56s} {sop.status:10s} {sop.visibility:9s} security: {sec.get('verdict', '-'):10s}"
                   + (f" {left[0][:90]}" if left else ""), flush=True)
-    elif a.action == "rebalance":                # split crowded categories, fold tiny ones (private folders)
+    elif a.action == "rebalance":                # split crowded categories, fold tiny ones
+        from .review import PERMISSIONS
+        from .sops import Executor, Library
         from .tree import rebalance, rebalance_all
-        rows = [rebalance(lib, h.executor, a.arg, h.llm, h.jev)] if a.arg else rebalance_all(lib, h.executor, h.llm, h.jev)
+        if a.root:                               # any tree: a RamenSOPs checkout, rameness/builtin_sops
+            lib = Library([(Path(a.root).resolve(), "private")])
+        ex = None if a.no_tests else (Executor(lib, list(PERMISSIONS), cwd=Path.cwd()) if a.root else h.executor)
+        rows = [rebalance(lib, ex, a.arg, h.llm, h.jev)] if a.arg else rebalance_all(lib, ex, h.llm, h.jev)
+        if a.json:
+            Path(a.json).write_text(json.dumps(rows, indent=1))
         for r in rows:
             for m in r["split"]:
                 print(f"split  {m}")
@@ -498,6 +513,10 @@ def main(argv=None):
     p.add_argument("--name", help="package name for 'install'")
     p.add_argument("--index", help="registry index.json url/path for 'remote'")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--root", help="rebalance: the SOP tree to work on (default: your private folders)")
+    p.add_argument("--check", action="store_true", help="rebalance: only report crowded categories (no model)")
+    p.add_argument("--no-tests", action="store_true",
+                   help="rebalance: don't run moved SOPs' tests here (the registry's CI runs them in containers)")
     p.add_argument("--changed", action="store_true",
                    help="scrub-tree: only the files a push would add or change (the pre-push hook)")
     p.add_argument("--base", default="origin/main", help="review: the branch the PR targets")
