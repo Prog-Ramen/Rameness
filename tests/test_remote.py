@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rameness import config
 from rameness.harness import Harness
-from rameness.llm import FakeProvider
+from rameness.llm import FakeProvider, Response, ToolCall
 from rameness.publish import build_index
 from rameness.sops import BUILTIN_ROOT
 
@@ -112,6 +112,29 @@ class RemotePullTest(unittest.TestCase):
         h = self.harness(remote_index=(self.tmp / "nowhere" / "index.json").as_uri())
         plan = h.plan("slugify this blog post title into a url slug")
         self.assertEqual(plan.pulls, [])
+
+    def run_with_search(self, query, task="write a short blog post about our ramen shop", **reg):
+        """A task that planning gives no registry SOP; mid-run the agent searches, then calls what it found."""
+        h = self.harness(**reg)
+        h.llm = FakeProvider([Response("", [ToolCall("1", "sop_search", {"query": query})], "tool_use"),
+                              Response("", [ToolCall("2", "sop_text__slugify", {"text": "Ramen Is Good"})], "tool_use"),
+                              Response("done", [], "end_turn")])
+        h.router.llm = h.llm
+        h.run(task, allow_direct=False)
+        results = [m for m in h.messages if m.get("role") in ("tool", "user")]
+        return h, json.dumps(results, default=str)
+
+    def test_a_weak_local_search_pulls_from_the_registry_mid_run(self):
+        h, seen = self.run_with_search("convert a title into a url slug")
+        self.assertIn("pulled from the registry just now", seen)
+        self.assertIn("ramen-is-good", seen)                      # the pulled SOP was callable at once
+        self.assertIn("text.slugify", h.lib.sops)
+        self.assertNotIn("media", h.router.remote.fetched)        # still only the branches JEV opened
+
+    def test_mid_run_pulls_respect_the_off_switch(self):
+        h, seen = self.run_with_search("convert a title into a url slug", auto_pull="off")
+        self.assertNotIn("text.slugify", h.lib.sops)
+        self.assertNotIn("pulled from the registry", seen)
 
     def test_off_switch(self):
         h = self.harness(auto_pull="off")

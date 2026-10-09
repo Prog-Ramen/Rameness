@@ -44,7 +44,8 @@ project, so a test that writes a file cannot overwrite your work. Sharing requir
 Only tested SOPs are offered, and each says so, so the agent can rely on the interface alone.
 
 * JEV traverses the SOP tree per task and exposes the selected SOPs as normal tools (`sop_http__get`, …);
-  the model can pull in more with `sop_search`.
+  the model can pull in more with `sop_search`, which also looks in the registry when nothing local matches
+  well ([Pulling](sharing.md#pulling-sops-from-the-registry)).
 * Only `validated` SOPs are offered. Candidates (tests failing or missing) are never shown to the agent
   or run on the `direct` route; `rameness sop promote <id>` after review.
 * Each SOP's description carries a trust line, e.g. *"Tested: its 4 tests pass, used successfully 3
