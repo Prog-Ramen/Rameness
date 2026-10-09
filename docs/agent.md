@@ -16,6 +16,9 @@ task ─► Router (JEV) ──┬─ clarify  → ask only for information that
       ─► end of run: review recent runs → new SOPs → tests + privacy checks → PR (see Learning, Sharing)
 ```
 
+A plain question (JEV routes it as "answer" with confidence) skips the SOP-tree search altogether, since it
+uses no tools; if it turns out to need them, the search runs then.
+
 ## One agent turn
 
 Each turn: choose a thinking budget, call the model, run tools and hooks, check for trouble, manage context.

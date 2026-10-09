@@ -361,6 +361,10 @@ class Harness:
                 self.messages = self.messages[:-2]
                 self.event("route_escalated", frm="answer", to="agent")
                 plan.route = "agent"
+                if plan.activation_skipped:          # a plain question after all needs tools: search the SOPs now
+                    plan.activation = self.router.activation_for(task, resolved)
+                    plan.activation_skipped = False
+                self.hooks.select(self.jev, task)    # the agent loop's lifecycle hooks, as for any agent run
                 res = self._agent(task, plan)
         else:
             res = self._agent(task, plan)

@@ -386,6 +386,32 @@ class TestLearning(Env):
 
 
 class TestHarness(Env):
+    def answer_route(self, h):
+        """Make JEV route the task as a plain question, with confidence."""
+        real = h.jev.choose
+        def choose(q, query, opts, context=""):
+            if q == "How should this task be executed?":
+                from rameness.jev import Decision
+                return Decision("r", q, {o.id: (0.9 if o.id == "answer" else 0.1 / (len(opts) - 1)) for o in opts}, "test")
+            return real(q, query, opts, context)
+        h.jev.choose = choose
+
+    def test_a_plain_question_skips_the_sop_search(self):
+        h = Harness(self.cfg(), llm=FakeProvider([Response("A list is mutable; a tuple is not.", [], "end_turn")]))
+        self.answer_route(h)
+        with patch("rameness.router.activate", side_effect=AssertionError("searched the SOP tree")):
+            r = h.run("what is the difference between a list and a tuple in python?")
+        self.assertEqual(r.route, "answer")
+        self.assertTrue(r.plan.activation_skipped)
+
+    def test_a_question_that_needs_tools_searches_then(self):
+        h = Harness(self.cfg(), llm=FakeProvider([Response("<tool_call><function=bash>", [], "end_turn"),
+                                                  Response("done", [], "end_turn")]))
+        self.answer_route(h)
+        r = h.run("what is in the git status of this project?")
+        self.assertEqual(r.route, "agent")                       # escalated: the model reached for a tool
+        self.assertFalse(r.plan.activation_skipped)              # and the SOP search ran at that point
+
     def test_direct_route_uses_no_model(self):
         (self.cwd / "sales.csv").write_text("region,amount\neu,10\nus,30\n")
         llm = FakeProvider()

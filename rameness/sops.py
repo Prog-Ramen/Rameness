@@ -380,37 +380,43 @@ def activate(lib: Library, jev: Jev, task: str, context: str = "", defaults: dic
     """
     defaults = defaults or {}
     act = Activation()
-    frontier: list[tuple[Node, float]] = [(lib.root, 1.0)]
+    level: list[tuple[Node, float]] = [(lib.root, 1.0)]
     full = f"{task}\n{context}"
     before = jev.calls
-    while frontier:
-        frontier.sort(key=lambda x: -x[1])
-        node, _ = frontier.pop(0)
-        kids = [k for k in node.children.values() if not (k.sop and k.sop.status != "validated")]
-        if not kids:                               # untested candidates are never offered to the agent
-            continue
+    while level:
+        # one tree level at a time; each category opened at this level gets its own JEV request, with exactly the
+        # question and options a one-by-one walk would ask (merging them into one request changed Kev's answers)
+        groups = []
+        for node, _ in sorted(level, key=lambda x: -x[1]):
+            kids = [k for k in node.children.values() if not (k.sop and k.sop.status != "validated")]
+            if kids:                               # untested candidates are never offered to the agent
+                groups.append((node, kids))
         # JEV sees the task only; the org context resolves `requires` deterministically (unresolved)
-        d = jev.activate(f"Which capabilities under '{node.id or 'root'}' will this task need?", task,
-                         [Option(k.id, k.text, lib._prior(k.sop) if k.sop else 1.0, k.desc) for k in kids])
-        ranked = sorted(zip(kids, (d.probs[k.id] for k in kids)), key=lambda x: -x[1])
-        for rank, (k, p) in enumerate(ranked):
-            if p < explore_th or rank >= beam:
-                act.explored.append((k.id, p, "reject"))
-                continue
-            if k.sop:
-                if p >= activate_th:
-                    act.selected.append((k.sop, p))
-                    act.explored.append((k.id, p, "select"))
+        decisions = jev.activate_many(
+            [(f"Which capabilities under '{node.id or 'root'}' will this task need?",
+              [Option(k.id, k.text, lib._prior(k.sop) if k.sop else 1.0, k.desc) for k in kids])
+             for node, kids in groups], task) if groups else []
+        level = []
+        for (node, kids), d in zip(groups, decisions):
+            ranked = sorted(zip(kids, (d.probs[k.id] for k in kids)), key=lambda x: -x[1])
+            for rank, (k, p) in enumerate(ranked):
+                if p < explore_th or rank >= beam:
+                    act.explored.append((k.id, p, "reject"))
+                    continue
+                if k.sop:
+                    if p >= activate_th:
+                        act.selected.append((k.sop, p))
+                        act.explored.append((k.id, p, "select"))
+                    else:
+                        act.explored.append((k.id, p, "weak"))
+                    continue
+                missing = unresolved(k, full, defaults)
+                if missing:
+                    act.deferred.append((k, p, missing))
+                    act.explored.append((k.id, p, "defer"))
                 else:
-                    act.explored.append((k.id, p, "weak"))
-                continue
-            missing = unresolved(k, full, defaults)
-            if missing:
-                act.deferred.append((k, p, missing))
-                act.explored.append((k.id, p, "defer"))
-            else:
-                frontier.append((k, p))
-                act.explored.append((k.id, p, "explore"))
+                    level.append((k, p))
+                    act.explored.append((k.id, p, "explore"))
     act.selected.sort(key=lambda x: -x[1])
     act.selected = act.selected[:max_sops]
     act.jev_calls = jev.calls - before
