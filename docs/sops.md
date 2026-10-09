@@ -110,8 +110,8 @@ Every tree gets the same rules; who runs them differs:
 | Tree | Rebalanced by | Moves land as |
 |---|---|---|
 | Your private folders | Rameness, right after it adds an SOP | direct changes (they are yours) |
-| RamenSOPs | its post-merge job (`rameness sop rebalance --root sops`) | a "reorganize" PR for a maintainer |
-| Built-ins | a developer; CI fails while a built-in category is crowded | a reviewed PR |
+| RamenSOPs | Rameness, while proposing an SOP that would crowd a category | the same PR as the SOP; RamenSOPs CI fails a PR that leaves a category crowded |
+| Built-ins | Rameness, while proposing a built-in that would crowd a category | the same draft PR; Rameness CI fails while a built-in category is crowded |
 
 `rameness sop rebalance --root DIR --check` reports crowded categories from the folders alone (no model, no
 code run). A proposal is placed in the **target's** tree, not yours: JEV walks the registry's (or the
