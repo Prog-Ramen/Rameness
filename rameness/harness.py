@@ -978,14 +978,18 @@ class Harness:
                 return f"ERROR: {e}", True
         if name == "sop_search":
             hits = self.lib.search(self.jev, args["query"])
+            pulled = self._search_registry(args["query"], hits)
+            if pulled:
+                hits = self.lib.search(self.jev, args["query"])       # the pulled SOPs are local now
             for s, _ in hits:
                 if s.kind == "skill":
                     continue
                 active[s.tool_name] = s
             if not hits:
                 return "no matching SOPs", False
-            return "\n".join(f"{s.tool_name}: {s.interface()}" + (f"\n{s.instructions}" if s.kind == "skill" else "")
-                             for s, _ in hits), False
+            return "\n".join(f"{s.tool_name}: {s.interface()}" + (" [pulled from the registry just now]"
+                                                                  if s.id in pulled else "")
+                             + (f"\n{s.instructions}" if s.kind == "skill" else "") for s, _ in hits), False
         if name == "sop_save":
             if not self.approver("sop_save", f"{args.get('id')}: {args.get('description')}"):
                 return "DENIED", True
@@ -1008,6 +1012,24 @@ class Harness:
         if name.startswith("sop_"):
             return f"ERROR: {name} is not loaded; use sop_search first", True
         return self._with_hooks(name, args)
+
+    def _search_registry(self, query: str, hits: list) -> set[str]:
+        """sop_search mid-run: when no local SOP clearly matches, look in the registry the same way planning does
+        (JEV walks it level by level, decides each pull, the comfort gate asks when needed, the install is
+        hash-checked and its tests must pass). Returns the ids pulled."""
+        router, rc, jc = self.router, self.cfg.get("registry") or {}, self.cfg["jev"]
+        best = max((p for _, p in hits), default=0.0)
+        if router.remote is None or rc.get("auto_pull", "gated") == "off" or \
+                best >= jc["activate_threshold"] + rc.get("coverage_margin", 0.15):
+            return set()
+        try:
+            pulls = router._pull_remote(self.org.expand(query), self.org.render(), dict(self.org.defaults))
+        except Exception as e:                    # registry unreachable: local results only, never a failed search
+            self.event("sop_pull_error", query=query[:200], error=f"{type(e).__name__}: {e}"[:300])
+            return set()
+        for p in pulls:
+            self.event("sop_pull", query=query[:200], during="sop_search", **p)
+        return {p["id"] for p in pulls if p.get("result") == "pulled"}
 
     def _drop_drafts(self, drafts: list[SOP]) -> None:
         """Remove failed sop_save attempts of this run; never a validated SOP or one saved by another run."""

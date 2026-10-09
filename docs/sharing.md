@@ -106,13 +106,20 @@ turns them on with proposals sent to local stand-in repos.
 
 ## Pulling SOPs from the registry
 
-Nothing is mirrored: a task fetches only the SOPs it needs, one tree level at a time.
+Nothing is mirrored: a task fetches only the SOPs it needs, one tree level at a time, at two moments:
+
+* **When the task is planned,** before the first turn, if no local SOP clearly covers the task.
+* **During the task,** when the agent's `sop_search` finds no strong local match. Needs that only appear once
+  the work starts (the task said "fix the blank page"; the agent finds it needs a headless browser) are looked
+  up then. The pulled SOP is listed in the search result, marked as just pulled, and is callable at once.
+
+Both use the same steps below; a registry that is unreachable leaves the search with its local results.
 
 The registry index is **sharded per category**: `sops/index.json` lists only the top-level categories,
 and every category has its own `_index.json` listing only its children.
 
-1. **Local first.** The registry is consulted only when no local SOP clearly covers the task (best local
-   activation < `activate_threshold` + `registry.coverage_margin`).
+1. **Local first.** The registry is consulted only when no local SOP clearly covers the task or the search
+   (best local match < `activate_threshold` + `registry.coverage_margin`).
 2. **Lazy traversal, one level at a time** (the fan-out of Google's Dremel serving tree). Every category
    JEV chose to explore at a level is fetched **in parallel**, and their children are scored in parallel,
    one JEV decision per category. A search costs one round trip per tree level: about 0.3 s instead of
