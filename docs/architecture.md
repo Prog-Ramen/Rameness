@@ -20,6 +20,8 @@ rameness/
   schemas.py        JSON schemas for every model call whose reply must be JSON
   tools.py          bash/read/write/edit/edit_lines/grep/glob/web_fetch, line anchors, images, environment-aware
   sops.py           hierarchical SOP library and private folders, traversal with defer, executor (local or remote env), isolated tests
+  tree.py           keeps the SOP tree small per level: placement by walking it, split on overflow, fold, aliases
+  sopsafety.py      security review: code finds where an input could run, the model judges, JEV decides
   builtin_sops/     starter SOP package, including code/syntax_check (the after_output hook)
   deps.py           the packages and programs an SOP may need (from its imports and commands)
   learning.py       end-of-run review → value check → SOP generation, extension, repair → validation

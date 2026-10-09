@@ -681,9 +681,10 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
         shutil.rmtree(tmp, ignore_errors=True)
     lib.reload()
     if jev is not None:
-        # JEV files it under the category it belongs in (the generator only proposes one)
-        from .publish import categorize, recategorize
-        sop_id = recategorize(lib, lib.get(sop_id), categorize(jev, lib, lib.get(sop_id))).id
+        # JEV files it where it belongs, walking the tree level by level (the generator only proposes a path)
+        from .publish import recategorize
+        from .tree import place
+        sop_id = recategorize(lib, lib.get(sop_id), place(jev, lib, lib.get(sop_id))).id
     if llm is not None and sop.tests:
         simplify_sop(lib, ex, sop_id, llm)       # Occam's razor: nothing extra if the standard tools can do it
     failures = finish_sop(lib, ex, sop_id, llm, jev)   # the model finishes the SOP and its tests
@@ -693,6 +694,10 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
         from .publish import classify
         classify(jev, lib.get(sop_id), org or Org())
         lib.reload()
+        # the category it joined may now be too large: split it (and keep the tree shallow and small per level)
+        from .tree import rebalance
+        rebalance(lib, ex, lib.get(sop_id).id.rsplit(".", 1)[0], llm, jev)
+        sop_id = lib.resolve(sop_id)
     return lib.get(sop_id), failures
 
 

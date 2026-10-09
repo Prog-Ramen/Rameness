@@ -118,7 +118,7 @@ def cmd_sop(a):
     if a.action == "index":
         print(f"wrote {pub.build_index(Path(a.arg))}")
         return
-    h = _harness(a, need_llm=a.action in ("finish", "propose"))   # finishing and the security review use the model
+    h = _harness(a, need_llm=a.action in ("finish", "propose", "rebalance"))   # finishing and the security review use the model
     if a.action == "discover":                  # candidate SOPs from event logs; reports only, generates nothing
         from . import discover as dsc
         runs = dsc.load_paths([x for x in (a.arg or str(h.state)).split(",") if x])
@@ -203,6 +203,15 @@ def cmd_sop(a):
             sec = (sop.origin or {}).get("security") or {}
             print(f"{sid:56s} {sop.status:10s} {sop.visibility:9s} security: {sec.get('verdict', '-'):10s}"
                   + (f" {left[0][:90]}" if left else ""), flush=True)
+    elif a.action == "rebalance":                # split crowded categories, fold tiny ones (private folders)
+        from .tree import rebalance, rebalance_all
+        rows = [rebalance(lib, h.executor, a.arg, h.llm, h.jev)] if a.arg else rebalance_all(lib, h.executor, h.llm, h.jev)
+        for r in rows:
+            for m in r["split"]:
+                print(f"split  {m}")
+            for m in r["folded"]:
+                print(f"folded {m}")
+        print(lib.tree())
     elif a.action == "scrub-tree":
         root = Path(a.arg or ".")
         findings = pub.scrub_tree(root, h.org, only=pub.changed_files(root) if a.changed else None)
@@ -482,7 +491,7 @@ def main(argv=None):
     p = sub.add_parser("sop", help="manage the SOP library")
     p.add_argument("action", choices=["tree", "list", "show", "search", "run", "test", "promote", "remove",
                                       "publish", "install", "index", "remote", "classify", "propose", "proposals",
-                                      "scrub-tree", "pull", "review", "discover", "finish"])
+                                      "scrub-tree", "pull", "review", "discover", "finish", "rebalance"])
     p.add_argument("arg", nargs="?")
     p.add_argument("--args", help="JSON arguments for 'run'")
     p.add_argument("--to", help="package directory for 'publish'")

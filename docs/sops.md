@@ -87,6 +87,28 @@ or more projects goes to `~/.rameness/sops` so every project can use it.
 gets a `.gitignore` that ignores its contents, so the SOPs and their tests can't be committed and pushed
 by accident.
 
+## The tree stays small at every level
+
+Like Google's Dremel serving tree: categories stay small, so finding an SOP means a few small steps, never a scan.
+
+The folders are the tree: a category is a folder with a `_node.json`, an SOP is a folder with a `sop.json`, and
+an SOP's id is its path (`code.lint.eslint_check` is `code/lint/eslint_check/`). Finding an SOP walks it level
+by level; at each level JEV scores only that category's children. So every category is kept small:
+
+* **Filing.** A new SOP is placed by walking down the tree: at each level JEV picks the subcategory it belongs
+  in, or keeps it at that level. A deeper path the model proposes is kept, never flattened.
+* **Splitting.** When more than 8 SOPs sit directly in a category, it splits inside itself: the model proposes
+  groups of related SOPs (each with a name and a one-line description), JEV confirms each member, and each
+  group of at least 3 becomes a subcategory. A subcategory that grows past 8 splits the same way, so the tree
+  deepens only where SOPs pile up. A split runs right after an SOP is added; `rameness sop rebalance` runs it
+  over a whole library (for example a RamenSOPs checkout, passed with `--sops`).
+* **Folding.** A subcategory left with fewer than 3 SOPs folds back into its parent.
+* **Nothing breaks.** A moved SOP keeps its old id as an alias (`_aliases.json`), keeps its usage stats, and
+  must still pass its tests in its new place, or it is moved back.
+
+With at most about 8 choices per level, 5,000 SOPs are 4-5 levels: a handful of small listings and a few dozen
+JEV questions to find any one of them.
+
 ## Keep SOPs simple
 
 Occam's razor: the standard library and the tools every Linux system has.

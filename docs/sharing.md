@@ -116,7 +116,11 @@ Nothing is mirrored: a task fetches only the SOPs it needs, one tree level at a 
 Both use the same steps below; a registry that is unreachable leaves the search with its local results.
 
 The registry index is **sharded per category**: `sops/index.json` lists only the top-level categories,
-and every category has its own `_index.json` listing only its children.
+and every category has its own `_index.json` listing only its children. Listings are **columnar**, like
+Dremel reading only the columns a query needs: an SOP's entry holds only what JEV chooses by (id,
+description, keywords). Its inputs, permissions and file hashes are in its own `_meta.json`, fetched only for
+the SOPs JEV picks and checked against the hash the listing gives for it. Categories stay small
+([The tree](sops.md#the-tree-stays-small-at-every-level)), so every listing stays small too.
 
 1. **Local first.** The registry is consulted only when no local SOP clearly covers the task or the search
    (best local match < `activate_threshold` + `registry.coverage_margin`).

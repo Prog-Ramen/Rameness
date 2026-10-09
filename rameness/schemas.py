@@ -65,3 +65,8 @@ SOP_SECURITY = {"type": "object", "required": ["risks"], "properties": {"risks":
     "type": "object", "required": ["line", "kind", "detail", "severity"], "properties": {
         "line": {"type": "integer"}, "kind": STR, "detail": STR,
         "severity": {"type": "string", "enum": ["high", "medium", "low"]}}}}}}
+
+# tree.rebalance: a crowded category's procedures grouped into subcategories
+SOP_GROUPS = {"type": "object", "required": ["groups"], "properties": {"groups": {"type": "array", "items": {
+    "type": "object", "required": ["name", "description", "members"], "properties": {
+        "name": STR, "description": STR, "keywords": STRS, "members": STRS}}}}}
