@@ -406,8 +406,22 @@ REPAIR_SYSTEM = """You finish an SOP whose tests fail. You see its script, its t
 returned. Decide for each failure whether the script or the test is wrong, and fix it: a script bug gets fixed in the
 script; a wrong expectation, a missing fixture or an input the script can't read gets fixed in the test. Keep the tests
 checking real behaviour with concrete expected values (never delete them or empty their expectations to make them
-pass). The script must read a JSON object of arguments from stdin and print one JSON object to stdout. Reply with
-"script" (the complete Python source), "tests" (the full list) and "explanation" (one line). Output JSON only."""
+pass). A failure that starts with "security:" is a risk found in the script (the line is given): fix it in the
+script (e.g. pass arguments as a list instead of building a shell string, keep paths inside the working folder)
+without changing what the script does for valid input. The script must read a JSON object of arguments from stdin
+and print one JSON object to stdout. Reply with "script" (the complete Python source), "tests" (the full list) and
+"explanation" (one line). Output JSON only."""
+
+
+ASSERT_SYSTEM = """You finish the tests of an SOP. Each test below was run; you see its input, its fixtures and what
+the script actually returned (or the error). For each test, judge whether that result is correct for that input,
+from the SOP's description and what the input and fixtures contain (work it out yourself; do not trust the script).
+Then say what the test must assert: "expect" with the output fields that matter and their correct values (for a
+correct result, the values it returned; for a wrong one, the values it should have returned), or "expect_error":
+true if this input should make the SOP fail. Leave out fields that change from run to run (times, temporary paths,
+ports, process ids). At least two tests must check concrete values for different inputs (a normal case and an edge
+case): if there are fewer, add cases under "add" (input and fixtures only; they will be run and shown to you).
+Reply {"tests": [{"index": n, "correct": true, "expect": {...}, "why": "..."}], "add": [...]}. Output JSON only."""
 
 
 def repair_sop(lib: Library, ex: Executor, sop_id: str, failures: list[str], llm, rounds: int = 3) -> list[str]:
@@ -479,6 +493,148 @@ def repair_sop(lib: Library, ex: Executor, sop_id: str, failures: list[str], llm
     return failures
 
 
+def asserts(t: dict) -> bool:
+    """A test that checks something: concrete values, output keys, or an expected error."""
+    return bool(t.get("expect") or t.get("expect_keys") or t.get("expect_error"))
+
+
+JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict,
+              "null": type(None)}
+
+
+def test_quality(sop: SOP) -> list[str]:
+    """What a validated SOP's tests must do (the same rules RamenSOPs CI applies): every test asserts something, at
+    least two check concrete values, and every test gives each required input, with the declared types."""
+    problems = [f"test {i}: asserts nothing (no expect, expect_keys or expect_error)"
+                for i, t in enumerate(sop.tests) if not asserts(t)]
+    if sum(1 for t in sop.tests if t.get("expect")) < 2:
+        problems.append("fewer than two tests check concrete expected values")
+    props, required = sop.inputs.get("properties", {}), sop.inputs.get("required", [])
+    for i, t in enumerate(sop.tests):
+        args = t.get("input") if isinstance(t.get("input"), dict) else {}
+        problems += [f"test {i}: missing required input {k}" for k in required if k not in args]
+        for k, v in args.items():
+            declared = props.get(k, {}).get("type") if isinstance(props.get(k), dict) else None
+            want = JSON_TYPES.get(declared) if isinstance(declared, str) else None
+            if k not in props and props:
+                problems.append(f"test {i}: input {k} is not declared in the SOP's inputs")
+            elif want and (not isinstance(v, want) or (declared in ("integer", "number") and isinstance(v, bool))):
+                problems.append(f"test {i}: input {k} should be {declared}")
+    return problems
+
+
+def complete_tests(lib: Library, ex: Executor, sop_id: str, llm, rounds: int = 2) -> dict:
+    """Run the tests, show the model what each actually returned, and have it write what each must assert
+    (judging whether the result is right; a wrong one becomes a failing test for repair_sop), adding cases until
+    at least two check concrete values. The model never removes a test."""
+    done = {"asserted": 0, "wrong": 0, "added": 0}
+    for _ in range(rounds):
+        sop = lib.get(sop_id)
+        if not sop.tests or not test_quality(sop):
+            break
+        shown = []
+        for i, t in enumerate(sop.tests):
+            try:
+                got = ex._run_test(sop_id, t)
+            except Exception as e:
+                got = {"error": str(e)[-600:]}
+            shown.append({"index": i, "input": t.get("input"), "files": {k: str(v)[:400] for k, v in
+                                                                         (t.get("files") or {}).items()},
+                          "setup": str(t.get("setup", ""))[:400],
+                          "asserts": {k: t[k] for k in ("expect", "expect_keys", "expect_error") if t.get(k)},
+                          "returned": json.loads(json.dumps(got, default=str)[:1500]) if len(json.dumps(got, default=str)) <= 1500
+                          else json.dumps(got, default=str)[:1500]})
+        try:
+            r = llm.complete_json(ASSERT_SYSTEM, (
+                f"SOP {sop.id}: {sop.description}\nInputs: {json.dumps(sop.inputs)[:1500]}\n"
+                f"Outputs: {json.dumps(sop.outputs)[:800]}\n\nTests as run:\n{json.dumps(shown, indent=1)[:24000]}"
+                f"\n\n{TEST_RULES}"), max_tokens=8000, schema=schemas.SOP_ASSERTIONS, thinking=2048)
+        except Exception as e:
+            done["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+            break
+        tests = [dict(t) for t in sop.tests]
+        for a in (r or {}).get("tests") or []:
+            i = a.get("index") if isinstance(a, dict) else None
+            if not isinstance(i, int) or not 0 <= i < len(tests):
+                continue
+            t = {k: v for k, v in tests[i].items() if k not in ("expect", "expect_keys", "expect_error")}
+            if a.get("expect_error"):
+                t["expect_error"] = True
+            elif isinstance(a.get("expect"), dict) and a["expect"]:
+                t["expect"] = a["expect"]
+            elif a.get("expect_keys"):
+                t["expect_keys"] = [str(k) for k in a["expect_keys"]]
+            else:
+                continue                                  # nothing usable: keep the test as it was
+            tests[i] = t
+            done["asserted"] += 1
+            done["wrong"] += not a.get("correct", True)
+        added = [t for t in (r or {}).get("add") or [] if isinstance(t, dict) and isinstance(t.get("input"), dict)]
+        tests += [{k: v for k, v in t.items() if k in ("input", "files", "setup")} for t in added[:6]]
+        done["added"] += len(added[:6])
+        data = json.loads((sop.path / "sop.json").read_text())
+        data["tests"] = tests
+        data.setdefault("origin", {})["test_completion"] = dict(done)
+        (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
+        lib.reload()
+    return done
+
+
+def finish_sop(lib: Library, ex: Executor, sop_id: str, llm=None, jev: Jev | None = None) -> list[str]:
+    """Take an SOP from written to validated without help: complete its tests from what the script really returns,
+    repair the script or the tests until they pass, require tests that check real values, then a security review
+    (code + model find the risks, JEV decides; a fix goes back through repair). Sets the status; returns what is
+    still wrong (empty: validated)."""
+    from .deps import requirements
+    failures: list[str] = []
+    for _ in range(2):
+        sop = lib.get(sop_id)
+        if not sop.tests:
+            failures = ["no tests provided"]
+            break
+        if llm is not None:
+            complete_tests(lib, ex, sop_id, llm)
+        failures = ex.test(sop_id)
+        failures += [p for p in test_quality(lib.get(sop_id)) if p not in failures]
+        if failures and llm is not None:
+            repair_sop(lib, ex, sop_id, failures, llm)            # test failures and rule breaks alike
+            failures = ex.test(sop_id)
+            failures += [p for p in test_quality(lib.get(sop_id)) if p not in failures]
+        if not failures or llm is None:
+            break
+    from . import sopsafety
+    from .review import used_permissions
+    sop = lib.get(sop_id)
+    src = "".join(f.read_text(errors="replace") for f in sorted(sop.path.glob("run.*")))
+    # declare what the code does (read by code, as RamenSOPs CI does): running programs needs exec, which asks for
+    # approval exactly as the agent's own bash does; writing files needs fs:write; and so on
+    used = used_permissions(sop.path) | ({"exec"} if sopsafety.runs_processes(src) else set())
+    missing = sorted(used - set(sop.permissions))
+    if missing:
+        sop.permissions = list(sop.permissions) + missing
+        sop.save()
+        lib.reload()
+    if not failures and llm is not None and jev is not None:
+        for attempt in range(3):
+            result = sopsafety.review(lib.get(sop_id), llm, jev)
+            sopsafety.record(lib.get(sop_id), result)
+            lib.reload()
+            if result["verdict"] != "fix" or attempt == 2:
+                break
+            ex.test(sop_id)                                  # what the tests return now, for the repair prompt
+            left = repair_sop(lib, ex, sop_id, [f"security: line {x['line']} {x['kind']}: {x['detail']}"
+                                                for x in result["risks"]], llm, rounds=1)
+            if ex.test(sop_id):                              # a security fix must not break the tests
+                failures = left or ["tests fail after the security fix"]
+                break
+    fresh = lib.get(sop_id)
+    fresh.requirements = {k: v for k, v in requirements(fresh.path).items() if v}
+    fresh.status = "validated" if not failures else "candidate"
+    fresh.save()
+    lib.reload()
+    return failures
+
+
 def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = None,
                  root: Path | None = None, jev: Jev | None = None, org=None, llm=None) -> tuple[SOP, list[str]]:
     """Write an SOP to the private library, compile + test it, set its status."""
@@ -530,17 +686,7 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
         sop_id = recategorize(lib, lib.get(sop_id), categorize(jev, lib, lib.get(sop_id))).id
     if llm is not None and sop.tests:
         simplify_sop(lib, ex, sop_id, llm)       # Occam's razor: nothing extra if the standard tools can do it
-    failures = ex.test(sop_id) if sop.tests else ["no tests provided"]
-    if failures and sop.tests and llm is not None:
-        from .deps import requirements
-        failures = repair_sop(lib, ex, sop_id, failures, llm)    # the model finishes the SOP and its tests
-        fresh = lib.get(sop_id)
-        fresh.requirements = {k: v for k, v in requirements(fresh.path).items() if v}
-        fresh.save()
-    sop = lib.get(sop_id)
-    sop.status = "validated" if not failures else "candidate"
-    sop.save()
-    lib.reload()
+    failures = finish_sop(lib, ex, sop_id, llm, jev)   # the model finishes the SOP and its tests
     if jev is not None:
         # JEV decides personal vs general right away; anything uncertain stays private
         from .org import Org

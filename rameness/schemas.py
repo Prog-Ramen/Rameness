@@ -52,3 +52,16 @@ SUBTASKS = {"type": "object", "required": ["subtasks"], "properties": {"subtasks
 # learning.repair_sop: the SOP's script and tests after seeing what its tests actually returned
 SOP_REPAIR = {"type": "object", "required": ["script", "tests"], "properties": {"script": STR, "tests": TESTS,
                                                                             "explanation": STR}}
+
+# learning.complete_tests: after the tests ran, the model writes what each should assert (and adds cases if needed)
+SOP_ASSERTIONS = {"type": "object", "required": ["tests"], "properties": {
+    "tests": {"type": "array", "items": {"type": "object", "required": ["index", "correct"], "properties": {
+        "index": {"type": "integer"}, "correct": {"type": "boolean"}, "expect": OBJ, "expect_keys": STRS,
+        "expect_error": {"type": "boolean"}, "why": STR}}},
+    "add": TESTS}}
+
+# sopsafety.review: security risks the model finds in an SOP's script
+SOP_SECURITY = {"type": "object", "required": ["risks"], "properties": {"risks": {"type": "array", "items": {
+    "type": "object", "required": ["line", "kind", "detail", "severity"], "properties": {
+        "line": {"type": "integer"}, "kind": STR, "detail": STR,
+        "severity": {"type": "string", "enum": ["high", "medium", "low"]}}}}}}

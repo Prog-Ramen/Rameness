@@ -379,7 +379,7 @@ class Harness:
         if (rc.get("auto_propose", True) and rc.get("public") and res.metrics.get("success")
                 and res.route in ("agent", "direct") and self.cfg["permissions"]["mode"] != "readonly"):
             from .registry import Registry
-            registry = Registry(self.cfg, self.home, self.org, self.jev)
+            registry = Registry(self.cfg, self.home, self.org, self.jev, self.llm)
             try:
                 res.proposals = registry.auto_propose(self.lib, self.executor)
             except Exception as e:

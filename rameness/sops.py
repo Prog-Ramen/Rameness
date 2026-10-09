@@ -617,4 +617,6 @@ class Executor:
             for k in t.get("expect_keys", []):
                 if k not in res:
                     failures.append(f"test {i}: missing key {k}")
+            if not (t.get("expect") or t.get("expect_keys") or t.get("expect_error")):
+                failures.append(f"test {i}: asserts nothing (no expect, expect_keys or expect_error)")
         return failures
