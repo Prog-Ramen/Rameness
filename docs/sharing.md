@@ -39,7 +39,11 @@ private library ──automatic proposal──► PR on RamenSOPs or Rameness �
 4. **Classify.** JEV must be clearly confident (≥ 0.65, margin ≥ 0.15) that the SOP is general to mark it
    `shareable`; anything uncertain stays private unless you pass `--override-personal` (scans still
    apply). `rameness sop classify` shows or redoes this.
-5. **Push and open the PR.** A sanitized copy (origin, stats and classification stripped) goes on a
+5. **Place it in the target's tree.** JEV walks the registry's (or the built-ins') own categories to find
+   where it belongs, not your private layout. If that category would then hold more than 8 SOPs directly, the
+   same PR splits it into subcategories ([The tree](sops.md#the-tree-stays-small-at-every-level)); if no
+   grouping is found, the SOP is not proposed.
+6. **Push and open the PR.** A sanitized copy (origin, stats and classification stripped) goes on a
    `sop/<id>-…` branch: to the target repo if you can push there, otherwise to `registry.fork` or a fork
    made with `gh`. The PR is public as soon as it is pushed.
 

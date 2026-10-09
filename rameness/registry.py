@@ -42,6 +42,7 @@ from .org import Org
 from .deps import describe
 from .publish import changed_files, classify, destination, hard_findings, private_info, scrub, scrub_tree
 from .sops import SOP, Library
+from .tree import LIMIT
 
 GH_URL = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
 
@@ -252,6 +253,23 @@ class Registry:
             raise RegistryError("PR creation returned no URL")
         return p.stdout.strip()
 
+    def _reorganize(self, base_dir: Path, target_id: str) -> tuple[str, list[str]]:
+        """If the category the SOP joins now holds more than LIMIT SOPs directly, split it in this same PR, so the
+        target tree is never crowded, not even for one merge. Nothing of the target's runs here (no tests): its
+        own CI runs the moved SOPs' tests. Refuses rather than open a PR that leaves the category crowded."""
+        from .tree import crowded, rebalance
+        category = target_id.rsplit(".", 1)[0]
+        if category not in crowded(base_dir):
+            return target_id, []
+        if self.llm is None:
+            raise RegistryError(f"{category} would hold more than {LIMIT} SOPs; reorganizing it needs a model")
+        target = Library([(base_dir, "private")])
+        out = rebalance(target, None, category, self.llm, self.jev)
+        if category in crowded(base_dir):
+            raise RegistryError(f"{category} would hold more than {LIMIT} SOPs and no grouping JEV confirmed was found; "
+                                "not proposed (a crowded category fails the registry's check)")
+        return target.resolve(target_id), out["split"] + out["folded"]
+
     def _place_in(self, base_dir: Path, sop: SOP) -> str:
         """The SOP's id in the target tree: kept if that SOP already lives there (an update), else the category
         JEV finds by walking the target's own categories, plus the SOP's name."""
@@ -402,6 +420,7 @@ class Registry:
             src = local_root / Path(*parts[:i]) / "_node.json"
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
+        target_id, reorganized = self._reorganize(base_dir, target_id)
         leftover = hard_findings(scrub_tree(repo, self.org, only=changed_files(repo)))
         if leftover:
             raise RegistryError("scan of the registry tree failed:\n  " + "\n  ".join(leftover))
@@ -433,7 +452,13 @@ class Registry:
                 + (f"; JEV judged {len(cls['benign'])} other finding(s) benign" if cls["benign"] else "") + "."
                 + ("\n\n**Needs verification by a Rameness developer before merging.** Built-in SOPs ship to "
                    "every Rameness user; this was proposed automatically and opened as a draft." if builtin else ""))
+        if reorganized:
+            body += ("\n\n**This PR also reorganizes the category it joins**, which would otherwise hold more than "
+                     f"{LIMIT} SOPs directly: the model proposed the groups, JEV confirmed each member. Moved SOPs are "
+                     "unchanged apart from their id and keep their old ids as aliases (`_aliases.json`).\n\n```\n"
+                     + "\n".join(reorganized) + "\n```")
         entry = {"id": sop.id, "registry_id": target_id, "key": key, "registry": url, "destination": dest["destination"],
+                 "reorganized": reorganized,
                  "fingerprint": fingerprint(sop),
                  "branch": branch, "head": head, "base": self._base, "title": f"SOP: {target_id}", "body": body,
                  "status": "pushed", "t": time.time(), "pushed": pushed, "pr": None,

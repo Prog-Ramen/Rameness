@@ -159,6 +159,52 @@ class RegistryTest(unittest.TestCase):
         pushed = sh(self.public, "show", f"{entry['head']}:sops/text/case/upper/sop.json")
         self.assertEqual(json.loads(pushed.stdout)["id"], "text.case.upper")
 
+    def seed_crowded_registry(self, n=8):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        (seed / "sops" / "text").mkdir(parents=True)
+        (seed / "sops" / "text" / "_node.json").write_text(json.dumps({"description": "Text transformations"}))
+        names = [f"case_{i}" for i in range(4)] + [f"slug_{i}" for i in range(n - 4)]
+        for name in names:
+            d = seed / "sops" / "text" / name
+            d.mkdir()
+            (d / "sop.json").write_text(json.dumps({"id": f"text.{name}", "description": name.replace("_", " ")}))
+            (d / "run.py").write_text("print('{}')\n")
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "a full text category")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        return names
+
+    def test_a_proposal_that_crowds_a_category_carries_the_reorganization(self):
+        names = self.seed_crowded_registry()
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        groups = {"groups": [
+            {"name": "case", "description": "change letter case",
+             "members": [f"text.{n}" for n in names if n.startswith("case")] + ["text.upper"]},
+            {"name": "slug", "description": "make url slugs", "members": [f"text.{n}" for n in names if n.startswith("slug")]}]}
+        reg = Registry({"registry": {"public": str(self.public), "min_tokens_saved": 0}}, self.tmp / "home", self.org,
+                       self.jev, llm=Mock(complete_json=Mock(return_value=groups)))
+        with patch("rameness.tree.place", return_value="text"), \
+                patch.object(self.jev, "yes", return_value=0.9):
+            entry = reg.propose(gen)
+        self.assertEqual(entry["registry_id"], "text.case.upper")          # it moved with the split
+        self.assertTrue(entry["reorganized"])
+        files = sh(self.public, "ls-tree", "-r", "--name-only", entry["head"]).stdout.split()
+        self.assertIn("sops/text/case/upper/sop.json", files)            # the new SOP...
+        self.assertIn("sops/text/slug/slug_0/sop.json", files)            # ...and the reorganization, one PR
+        self.assertIn("sops/_aliases.json", files)
+        self.assertNotIn("sops/text/case_0/sop.json", files)
+
+    def test_a_crowded_category_without_a_grouping_is_not_proposed(self):
+        self.seed_crowded_registry()
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        reg = Registry({"registry": {"public": str(self.public), "min_tokens_saved": 0}}, self.tmp / "home", self.org,
+                       self.jev, llm=Mock(complete_json=Mock(return_value={"groups": []})))
+        with patch("rameness.tree.place", return_value="text"), self.assertRaisesRegex(RegistryError, "no grouping"):
+            reg.propose(gen)
+
     def validated(self):
         from rameness.learning import register_sop
         lib = Library([(self.root, "private")])
