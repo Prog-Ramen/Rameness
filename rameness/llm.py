@@ -35,8 +35,15 @@ class Response:
     reasoning: str = ""          # the model's thinking (OpenAI-compatible reasoning_content), sent back next turn
 
 
+REPLY_TOOL = "reply"            # the tool a schema-constrained reply arrives through on Anthropic models
+
+
 def parse_json(text: str):
     text = text.strip()
+    try:
+        return json.loads(text)          # a schema-constrained reply is exactly JSON (its strings may hold ``` fences)
+    except json.JSONDecodeError:
+        pass
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
     if m:
         text = m.group(1)
@@ -68,22 +75,30 @@ class Provider:
         self.usage["calls"] += 1
 
     def chat(self, system: str, messages: list[dict], tools: list[dict], effort: str = "high",
-             max_tokens: int = 32000, fast: bool = False, thinking: int | None = None) -> Response:
-        """``thinking``: this turn's reasoning-token budget, for servers that take one (rameness.thinking)."""
+             max_tokens: int = 32000, fast: bool = False, thinking: int | None = None,
+             response_schema: dict | None = None) -> Response:
+        """``thinking``: this turn's reasoning-token budget, for servers that take one (rameness.thinking).
+        ``response_schema``: the reply must be JSON matching this schema (constrained decoding where the server
+        supports it)."""
         raise NotImplementedError
 
     request_timeout: float | None = None      # per-call time budget (used by JEV escalations)
 
-    def complete_json(self, system: str, prompt: str, max_tokens: int = 4000, timeout: float | None = None):
+    def complete_json(self, system: str, prompt: str, max_tokens: int = 4000, timeout: float | None = None,
+                      schema: dict | None = None, thinking: int = 1024):
+        """A utility call whose reply is JSON. With ``schema`` the server is asked to enforce it (constrained
+        decoding: once the thinking ends, only schema-valid JSON can be produced), so a model that keeps
+        deliberating cannot answer in prose instead; ``parse_json`` remains the fallback."""
         prev, self.request_timeout = self.request_timeout, timeout
         try:
             # utility calls (structuring a trace, writing a small script) need little reasoning: without a cap a
             # local reasoning model thinks until the server's limit (measured: ~3 min per learned run on Qwen)
             r = self.chat(system, [{"role": "user", "content": prompt}], [], effort="low",
-                          max_tokens=max_tokens, fast=True, thinking=1024)
+                          max_tokens=max_tokens, fast=True, thinking=thinking, response_schema=schema)
         finally:
             self.request_timeout = prev
-        return parse_json(r.text)
+        reply = next((c.input for c in r.tool_calls if c.name == REPLY_TOOL), None)
+        return reply if reply is not None else parse_json(r.text)
 
 
 # --------------------------------------------------------------------------- Anthropic
@@ -144,8 +159,14 @@ class AnthropicProvider(Provider):
     def _supports_effort(self, model: str) -> bool:
         return not model.startswith("claude-haiku")
 
-    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None):
+    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
+             response_schema=None):
         model = self.fast_model if fast else self.model
+        if response_schema and not tools:
+            # Anthropic does not allow forcing a tool while thinking is on: offer one reply tool whose input is the
+            # schema and ask for it; complete_json reads its input
+            tools = [{"name": REPLY_TOOL, "description": "Give your answer.", "input_schema": response_schema}]
+            system = f"{system}\n\nAnswer by calling the {REPLY_TOOL} tool."
         kw = dict(model=model, max_tokens=max_tokens, system=system, messages=self.to_wire(messages))
         if tools:
             kw["tools"] = tools
@@ -165,7 +186,7 @@ class AnthropicProvider(Provider):
         except self._anthropic.BadRequestError as e:
             if use_fb and "fallback" in str(e).lower():
                 self.fallbacks = False          # endpoint/proxy doesn't accept it; stop trying
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
             raise
         self._count(msg.usage.input_tokens, msg.usage.output_tokens)
         text = "".join(b.text for b in msg.content if b.type == "text")
@@ -206,6 +227,7 @@ class OpenAICompatProvider(Provider):
         self._props: dict | None = None
         self._model_card: dict | None = None
         self._budget_rejected = False          # the server refused the thinking-budget field once: stop sending it
+        self._format_rejected = False          # the server refused response_format once: stop sending it
         self.vision_failed = False             # set when the server failed a request because of its images
         # The message field the server returns the model's thinking in, and so reads it back from: llama.cpp,
         # TabbyAPI and ninfer use reasoning_content, current vLLM uses reasoning (and reads only that one back).
@@ -380,7 +402,8 @@ class OpenAICompatProvider(Provider):
                 continue
         return self._CALL.sub("", text).strip(), calls
 
-    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None):
+    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
+             response_schema=None):
         model = self.fast_model if fast else self.model
         prompted = bool(tools) and self.tool_mode == "prompt"
         sys_text = system + ("\n\n" + self.tool_prompt(tools) if prompted else "")
@@ -403,6 +426,11 @@ class OpenAICompatProvider(Provider):
         if field:
             # a per-request cap on reasoning tokens, in the field this server reads it from
             extra[field] = int(thinking)
+        fmt = response_schema is not None and not self._format_rejected and \
+            self.server_kind() in ("llama", "vllm", "tabby", "ninfer")
+        if fmt:
+            # constrained decoding: the reply (after any thinking) can only be JSON matching the schema
+            kw["response_format"] = {"type": "json_schema", "json_schema": {"name": "reply", "schema": response_schema}}
         if extra:
             kw["extra_body"] = extra
         client = self.client.with_options(timeout=self.request_timeout, max_retries=0) if self.request_timeout else self.client
@@ -410,15 +438,18 @@ class OpenAICompatProvider(Provider):
             r = client.chat.completions.create(**kw)
         except Exception as e:
             from openai import BadRequestError, InternalServerError
+            if fmt and isinstance(e, BadRequestError) and ("response_format" in str(e) or "json_schema" in str(e)):
+                self._format_rejected = True          # this server does not take a schema: ask in the prompt only
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
             if field and isinstance(e, BadRequestError) and field in str(e):
                 # the server does not take a thinking budget after all (e.g. no reasoning parser configured):
                 # stop sending it rather than fail the run
                 self._budget_rejected = True
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
             if (tools and not prompted and self.tool_mode == "auto"
                     and isinstance(e, (BadRequestError, InternalServerError)) and "tool" in str(e).lower()):
                 self.tool_mode = "prompt"
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
             if isinstance(e, (BadRequestError, InternalServerError)) and any(m.get("images") for m in messages):
                 # a server can advertise vision and still fail on images (e.g. llama-server with a speculative draft
                 # model that has no vision): drop the images, say so, and stop sending them for this session
@@ -426,7 +457,7 @@ class OpenAICompatProvider(Provider):
                 for m in messages:
                     if m.pop("images", None):
                         m["content"] = f"{m['content']} [not shown: the model server failed on images, so they are off]"
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
             raise
         ch = r.choices[0]
         u = r.usage
@@ -466,9 +497,11 @@ class FakeProvider(Provider):
         super().__init__("fake", "fake")
         self.script = list(script or [])
         self.json_script = list(json_script or [])
+        self.schemas: list = []                # the schema each complete_json call asked for
         self.seen: list[dict] = []
 
-    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None):
+    def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
+             response_schema=None):
         self.seen.append({"system": system, "messages": list(messages), "tools": [t["name"] for t in tools],
                           "effort": effort})
         self._count(sum(len(str(m.get("content", ""))) for m in messages) // 4, 10)
@@ -477,8 +510,9 @@ class FakeProvider(Provider):
         item = self.script.pop(0)
         return item(messages) if callable(item) else item
 
-    def complete_json(self, system, prompt, max_tokens=4000, timeout=None):
+    def complete_json(self, system, prompt, max_tokens=4000, timeout=None, schema=None, thinking=1024):
         self._count(len(prompt) // 4, 10)
+        self.schemas.append(schema)
         if not self.json_script:
             raise RuntimeError("FakeProvider: no scripted JSON")
         item = self.json_script.pop(0)

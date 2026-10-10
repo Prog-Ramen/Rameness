@@ -1,0 +1,65 @@
+{
+  "geo": {
+    "py_files": 5,
+    "lines": 89,
+    "todos": [
+      "mod0.py:17: validate the range",
+      "mod1.py:13: close the file",
+      "mod2.py:17: remove the hard-coded limit",
+      "mod3.py:14: support unicode",
+      "mod3.py:5: cache this lookup"
+    ],
+    "tests_pass": true
+  },
+  "mailer": {
+    "py_files": 3,
+    "lines": 47,
+    "todos": [
+      "mod0.py:9: cache this lookup"
+    ],
+    "tests_pass": false
+  },
+  "media": {
+    "py_files": 3,
+    "lines": 57,
+    "todos": [
+      "mod1.py:14: handle empty input",
+      "mod1.py:19: add retries",
+      "mod1.py:5: validate the range"
+    ],
+    "tests_pass": true
+  },
+  "metrics": {
+    "py_files": 4,
+    "lines": 53,
+    "todos": [
+      "mod0.py:5: add retries",
+      "mod1.py:9: handle empty input"
+    ],
+    "tests_pass": false
+  },
+  "sessions": {
+    "py_files": 5,
+    "lines": 75,
+    "todos": [
+      "mod0.py:5: cache this lookup",
+      "mod1.py:5: add retries",
+      "mod3.py:21: handle empty input"
+    ],
+    "tests_pass": false
+  },
+  "uploads": {
+    "py_files": 5,
+    "lines": 99,
+    "todos": [
+      "mod1.py:14: log the failure",
+      "mod1.py:23: log the failure",
+      "mod1.py:9: log the failure",
+      "mod2.py:13: check permissions",
+      "mod3.py:22: check permissions",
+      "mod3.py:9: check permissions",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  }
+}

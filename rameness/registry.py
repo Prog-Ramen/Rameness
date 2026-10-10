@@ -40,8 +40,9 @@ from pathlib import Path
 
 from .org import Org
 from .deps import describe
-from .publish import classify, destination, hard_findings, private_info, scrub, scrub_tree
+from .publish import changed_files, classify, destination, hard_findings, private_info, scrub, scrub_tree
 from .sops import SOP, Library
+from .tree import LIMIT
 
 GH_URL = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
 
@@ -91,14 +92,15 @@ def git(cwd: Path, *args: str, check: bool = True) -> str:
 
 
 def install_hook(repo: Path, subdir: str = "") -> None:
-    """pre-push: re-scan the tree (or only ``subdir``, where proposals go: the Rameness repo's own tests
-    carry fake secrets on purpose); any hard finding (secret, private term) blocks the push."""
+    """pre-push: scan every file the push adds or changes, wherever it is (not the repo's existing content:
+    the Rameness and RamenSOPs repos carry fake secrets in their own tests on purpose); any hard finding
+    (secret, private term) blocks the push."""
     hook = repo / ".git" / "hooks" / "pre-push"
     hook.parent.mkdir(parents=True, exist_ok=True)
-    where = "$(git rev-parse --show-toplevel)" + (f"/{subdir}" if subdir else "")
     hook.write_text(f"#!/bin/sh\n# installed by rameness: blocks pushes containing secrets or private data\n"
                     # -I: never import rameness from the clone itself (the Rameness repo has a rameness/ folder)
-                    f"exec \"{sys.executable}\" -I -m rameness sop scrub-tree \"{where}\"\n")
+                    f"exec \"{sys.executable}\" -I -m rameness sop scrub-tree \"$(git rev-parse --show-toplevel)\" "
+                    f"--changed\n")
     hook.chmod(0o755)
 
 
@@ -113,16 +115,67 @@ def sanitized_copy(sop: SOP, dest: Path) -> None:
     (dest / "sop.json").write_text(json.dumps(d, indent=2) + "\n")
 
 
+def publishable_tests(sop: SOP) -> list[str]:
+    """The tests ship with the SOP (inside sop.json) to wherever it is published, and must pass the checks there:
+    RamenSOPs CI (ci/review.py) for the registry, the Rameness test suite for a built-in. The same rules here, so
+    a proposal does not bounce: learning.test_quality (every test asserts something, two check concrete values,
+    required inputs given with their declared types), 2-40 tests, distinct cases, fixtures only at relative paths,
+    and every permission the code uses declared."""
+    from .learning import test_quality
+    from .review import used_permissions
+    tests = sop.tests or []
+    if not tests:
+        return ["no tests provided"]
+    problems = []
+    if not 2 <= len(tests) <= 40:
+        problems.append("provide between 2 and 40 tests, including a normal and an edge case")
+    problems += [p.replace("fewer than two tests check concrete expected values",
+                           "at least two tests must assert expected output values; output keys or error cases "
+                           "alone are insufficient") for p in test_quality(sop)]
+    for i, t in enumerate(tests):
+        if any(Path(k).is_absolute() or ".." in Path(k).parts for k in (t.get("files") or {})):
+            problems.append(f"test {i}: fixture files must use relative paths")
+    if len(tests) >= 2 and len({json.dumps([t.get("input"), t.get("files", {}), t.get("setup", "")], sort_keys=True)
+                                for t in tests}) < 2:
+        problems.append("tests must exercise distinct inputs")
+    undeclared = sorted(used_permissions(sop.path) - set(sop.permissions)) if sop.path.exists() else []
+    if undeclared:
+        problems.append(f"the code uses {undeclared} but does not declare it")
+    return problems
+
+
+def savings(sop: SOP, stats: dict | None = None) -> dict:
+    """What one use of ``sop`` saves: measured on its real uses when it has any (``Library.record_savings``),
+    else recorded when it was learned, else estimated from its code (what the model would otherwise write out,
+    at about 4 characters per token and 100 tokens per second)."""
+    st = (stats or {}).get(sop.id) or {}
+    if st.get("measured_uses"):
+        n = st["measured_uses"]
+        return {"tokens": round(st.get("tokens_saved", 0) / n), "seconds": round(st.get("seconds_saved", 0) / n, 1),
+                "measured": True, "uses": n}
+    recorded = (sop.origin or {}).get("saves_per_use")
+    if isinstance(recorded, dict) and "tokens" in recorded:
+        return recorded
+    code = "".join(f.read_text(errors="replace") for f in sop.path.glob("run.*") if f.is_file())
+    use_cost = 150 + len(json.dumps(sop.tool_schema())) // 4     # the call, plus reading its interface
+    tokens = len(code) // 4 - use_cost
+    return {"tokens": tokens, "seconds": round(max(0, tokens) / 100, 1), "measured": False}
+
+
 class Registry:
-    def __init__(self, cfg: dict, home: Path, org: Org, jev):
+    def __init__(self, cfg: dict, home: Path, org: Org, jev, llm=None):
         rc = cfg.get("registry") or {}
         self.public = rc.get("public")
         self.builtin = rc.get("builtin")          # the Rameness repo: built-in SOPs ship with Rameness itself
         self.builtin_min_share = rc.get("builtin_min_share", 0.5)
         self.builtin_min_runs = rc.get("builtin_min_runs", 10)
+        self.min_tokens_saved = rc.get("min_tokens_saved", 1000)   # only significant SOPs are worth sharing
+        self.stats: dict = {}                      # the library's measured uses (set by auto_propose)
+        self.fetch_seconds = rc.get("fetch_seconds", 1.0)          # finding + fetching a registry SOP, roughly
         self.fork = rc.get("fork")
         self.home = home / "registry"
         self.org, self.jev = org, jev
+        self.llm = llm                             # reads the whole script in the security review (code alone without)
         self.ledger = self.home / "proposals.json"
 
     # ---- helpers
@@ -200,6 +253,44 @@ class Registry:
             raise RegistryError("PR creation returned no URL")
         return p.stdout.strip()
 
+    def _reorganize(self, base_dir: Path, target_id: str) -> tuple[str, list[str]]:
+        """If the category the SOP joins now holds more than LIMIT SOPs directly, split it in this same PR, so the
+        target tree is never crowded, not even for one merge. Nothing of the target's runs here (no tests): its
+        own CI runs the moved SOPs' tests. Refuses rather than open a PR that leaves the category crowded."""
+        from .tree import crowded, rebalance
+        category = target_id.rsplit(".", 1)[0]
+        if category not in crowded(base_dir):
+            return target_id, []
+        if self.llm is None:
+            raise RegistryError(f"{category} would hold more than {LIMIT} SOPs; reorganizing it needs a model")
+        target = Library([(base_dir, "private")])
+        out = rebalance(target, None, category, self.llm, self.jev)
+        if category in crowded(base_dir):
+            raise RegistryError(f"{category} would hold more than {LIMIT} SOPs and no grouping JEV confirmed was found; "
+                                "not proposed (a crowded category fails the registry's check)")
+        return target.resolve(target_id), out["split"] + out["folded"]
+
+    def _place_in(self, base_dir: Path, sop: SOP) -> str:
+        """The SOP's id in the target tree: kept if that SOP already lives there (an update), else the category
+        JEV finds by walking the target's own categories, plus the SOP's name."""
+        if (base_dir.joinpath(*sop.id.split(".")) / "sop.json").exists() or not base_dir.exists():
+            return sop.id
+        from .tree import place
+        target = Library([(base_dir, "public")])
+        if not target.root.children:
+            return sop.id
+        name = sop.id.split(".")[-1]
+        new_id = f"{place(self.jev, target, sop)}.{name}"
+        return sop.id if (base_dir.joinpath(*new_id.split(".")) / "sop.json").exists() else new_id
+
+    def _pr_open(self, pr: str) -> bool:
+        """Is this PR still open (so a newer version of its SOP belongs on its branch)?"""
+        if not GH_URL.search(pr or "") or not shutil.which("gh"):
+            return False
+        p = subprocess.run(["gh", "pr", "view", pr, "--json", "state", "-q", ".state"],
+                           capture_output=True, text=True, timeout=60)
+        return p.returncode == 0 and p.stdout.strip() == "OPEN"
+
     def _compare_url(self, url: str, branch: str, base: str) -> str | None:
         m = GH_URL.search(url)
         return f"https://github.com/{m.group(1)}/{m.group(2)}/compare/{base}...{branch}?expand=1" if m else None
@@ -221,6 +312,16 @@ class Registry:
             raise RegistryError(f"{sop.id} is already public")
         if sop.status != "validated":
             raise RegistryError(f"{sop.id} is {sop.status}: only SOPs whose tests pass can be proposed")
+        from . import sopsafety
+        sec = sopsafety.current(sop)              # reviewed for the code as it is now?
+        if sec is None:
+            sec = sopsafety.review(sop, self.llm, self.jev)
+            sopsafety.record(sop, sec)
+        if sec["verdict"] != "safe":
+            top = sec["risks"][0] if sec["risks"] else {}
+            raise RegistryError(f"security review: {sec['verdict']}" + (
+                f" (line {top.get('line')}: {top.get('kind')}: {top.get('detail')})" if top else "")
+                + "; `rameness sop finish <id>` fixes what can be fixed")
         findings = scrub(sop, self.org)
         hard = hard_findings(findings)
         if hard:
@@ -234,6 +335,11 @@ class Registry:
             raise RegistryError(f"JEV classified {sop.id} as personal ({cls['reason']}); it stays private. "
                                 "If you are sure it is general, pass --override-personal (scans still apply).")
         cls["benign"] = leak["findings"]
+        saves = savings(sop, self.stats)
+        if self.min_tokens_saved > 0 and saves["tokens"] < self.min_tokens_saved and not override_personal:
+            raise RegistryError(f"{sop.id} saves about {saves['tokens']} tokens per use (registry.min_tokens_saved: "
+                                f"{self.min_tokens_saved}); too small to be worth sharing, so it stays private")
+        cls["saves"] = saves
         return cls
 
     def _push(self, repo: Path, url: str, branch: str) -> tuple[str, str]:
@@ -288,36 +394,73 @@ class Registry:
             self._record(entry)
             return entry
         repo = self._clone(url, dest["destination"] if dest["destination"] == "builtin" else "public", scan)
-        branch = f"sop/{sop.id}-{time.time_ns()}"
-        git(repo, "checkout", "-q", "-b", branch)
+        # a newer version of an SOP whose PR is still open updates that PR instead of opening another
+        update = next((p for p in reversed(self.proposals()) if p.get("id") == sop.id and p.get("registry") == url
+                       and p.get("status") == "proposed" and p.get("pushed") == url and p.get("pr")
+                       and self._pr_open(p["pr"])), None)
+        if update:
+            branch = update["branch"]
+            git(repo, "fetch", "-q", "origin", f"{branch}:{branch}")
+            git(repo, "checkout", "-q", branch)
+        else:
+            branch = f"sop/{sop.id}-{time.time_ns()}"
+            git(repo, "checkout", "-q", "-b", branch)
         base_dir = repo / prefix
-        sanitized_copy(sop, base_dir / Path(*sop.id.split(".")))
-        parts = sop.id.split(".")                # new categories travel with their SOP; the index is rebuilt on merge
+        # where it goes is decided by the TARGET's tree, not your private one: JEV walks the registry's (or the
+        # built-ins') categories level by level; an update to an SOP already there stays where it is
+        target_id = update.get("registry_id", sop.id) if update else self._place_in(base_dir, sop)
+        sanitized_copy(sop, base_dir / Path(*target_id.split(".")))
+        if target_id != sop.id:
+            meta = base_dir / Path(*target_id.split(".")) / "sop.json"
+            meta.write_text(json.dumps({**json.loads(meta.read_text()), "id": target_id}, indent=2) + "\n")
+        local_root = sop.path.parents[len(sop.id.split(".")) - 1]
+        parts = target_id.split(".")             # new categories travel with their SOP; the index is rebuilt on merge
         for i in range(1, len(parts)):
-            src, dst = sop.path.parents[len(parts) - 1 - i] / "_node.json", base_dir / Path(*parts[:i]) / "_node.json"
+            dst = base_dir / Path(*parts[:i]) / "_node.json"
+            src = local_root / Path(*parts[:i]) / "_node.json"
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
-        leftover = hard_findings(scrub_tree(repo / scan if scan else repo, self.org))
+        target_id, reorganized = self._reorganize(base_dir, target_id)
+        leftover = hard_findings(scrub_tree(repo, self.org, only=changed_files(repo)))
         if leftover:
             raise RegistryError("scan of the registry tree failed:\n  " + "\n  ".join(leftover))
         git(repo, "add", "-A")
-        git(repo, "commit", "-q", "-m", f"Propose SOP {sop.id}\n\n{sop.description}")
+        git(repo, "commit", "-q", "-m", (f"Update SOP {sop.id}" if update else f"Propose SOP {sop.id}")
+            + f"\n\n{sop.description}")
         head, pushed = self._push(repo, url, branch)
+        if update:
+            entry = {**update, "key": key, "fingerprint": fingerprint(sop), "head": head, "t": time.time(),
+                     "classification": cls["visibility"], "benign": cls["benign"], "updated": True}
+            self._record(entry)
+            return entry
         builtin = dest["destination"] == "builtin"
         kind = "built-in SOP (ships with Rameness)" if builtin else "SOP"
         needs = describe(sop.requirements)
-        body = (f"Proposed {kind} `{sop.id}`: {sop.description}\n\n"
+        sv = cls.get("saves") or savings(sop, self.stats)
+        # Fetching happens once, then the SOP is used again and again: report it as a payback point.
+        payback = "" if builtin or not sv["seconds"] else \
+            f" Fetching it (~{self.fetch_seconds} s, once) pays back after {max(1, -(-self.fetch_seconds // sv['seconds'])):.0f} use(s)."
+        worth = (f"Saves about {sv['tokens']} model tokens"
+                 + (f" and {sv['seconds']} s" if sv["seconds"] else "") + " per use, after reading its interface and "
+                 "calling it" + (" (measured)" if sv.get("measured") else " (estimated)") + "." + payback + "\n")
+        body = (f"Proposed {kind} `{target_id}`: {sop.description}\n\n"
                 f"Classification: {cls['visibility']} ({cls['reason']}).\n"
-                f"Destination: {dest['destination']} ({dest['reason']}).\n"
+                f"Destination: {dest['destination']} ({dest['reason']}).\n" + worth
                 + (f"{needs}\n" if needs else "Needs nothing beyond Python and a POSIX shell.\n") +
                 "Scans: rameness scrubber" + (" + gitleaks" if shutil.which("gitleaks") else "") +
                 (" + trufflehog" if shutil.which("trufflehog") else "") + ": no secrets or private terms"
                 + (f"; JEV judged {len(cls['benign'])} other finding(s) benign" if cls["benign"] else "") + "."
                 + ("\n\n**Needs verification by a Rameness developer before merging.** Built-in SOPs ship to "
                    "every Rameness user; this was proposed automatically and opened as a draft." if builtin else ""))
-        entry = {"id": sop.id, "key": key, "registry": url, "destination": dest["destination"],
+        if reorganized:
+            body += ("\n\n**This PR also reorganizes the category it joins**, which would otherwise hold more than "
+                     f"{LIMIT} SOPs directly: the model proposed the groups, JEV confirmed each member. Moved SOPs are "
+                     "unchanged apart from their id and keep their old ids as aliases (`_aliases.json`).\n\n```\n"
+                     + "\n".join(reorganized) + "\n```")
+        entry = {"id": sop.id, "registry_id": target_id, "key": key, "registry": url, "destination": dest["destination"],
+                 "reorganized": reorganized,
                  "fingerprint": fingerprint(sop),
-                 "branch": branch, "head": head, "base": self._base, "title": f"SOP: {sop.id}", "body": body,
+                 "branch": branch, "head": head, "base": self._base, "title": f"SOP: {target_id}", "body": body,
                  "status": "pushed", "t": time.time(), "pushed": pushed, "pr": None,
                  "classification": cls["visibility"],
                  "overridden": cls["visibility"] != "shareable", "benign": cls["benign"]}
@@ -331,6 +474,7 @@ class Registry:
 
     def auto_propose(self, lib: Library, executor) -> list[dict]:
         """Drain eligible private SOPs, including those left by a previous failed attempt."""
+        self.stats = lib.stats
         results = []
         for sop in list(lib.sops.values()):
             if sop.scope != "private" or sop.status != "validated" or sop.visibility != "shareable":
@@ -340,11 +484,9 @@ class Registry:
                 if any(p.get("key", "").endswith(f":{sop.id}:{fp}") and p.get("status") in ("proposed", "pushed_local")
                        for p in self.proposals()):
                     continue
-                if not sop.tests:
-                    raise RegistryError("no tests provided")
-                if not any(isinstance(t.get("expect"), dict) and t["expect"] for t in sop.tests):
-                    raise RegistryError("tests must assert expected output values before automatic publication; "
-                                        "output keys or error cases alone are insufficient")
+                problems = publishable_tests(sop)
+                if problems:
+                    raise RegistryError("; ".join(problems))
                 failures = executor.test(sop.id)
                 if failures:
                     raise RegistryError(f"tests failed: {failures}")

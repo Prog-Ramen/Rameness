@@ -115,6 +115,16 @@ class Backend(ABC):
         return [1 / len(raw)] * len(raw) if s <= 0 else [r / s for r in raw]
 
 
+def _activate_many_default(self, groups, query, context=""):
+    """Several activate questions about the same task: one request per group. Merging them into one request
+    was measured against Kev (2026-10-09): its answers changed with what else was in the request (by up to
+    0.71) and it was slower (365 s against 202 s on CPU), so every group keeps its own request."""
+    return [self.activate(q, query, opts, context) for q, opts in groups]
+
+
+Backend.activate_many = _activate_many_default
+
+
 class LexicalJev(Backend):
     """IDF-weighted token overlap mapped to a probability.
 
@@ -156,7 +166,7 @@ class LexicalJev(Backend):
 # (~4 chars per token). Laya: 512-token window on the base checkpoint, 1024 on typed-decisions /
 # multilingual (laya-serve doesn't expose multilingual's 8k mode). Kev and TypeSafe read far more,
 # but a decision should still only see what it needs (see ``fit`` and the call sites).
-STATE_BUDGET = {"laya": 1200, "laya-1024": 3000, "kev": 8000, "typesafe": 8000}
+STATE_BUDGET = {"laya": 1200, "laya-1024": 3000, "kev": 8000, "clef": 8000, "typesafe": 8000}
 
 
 def state_budget(preset: str, model: str | None) -> int:
@@ -196,6 +206,7 @@ class SystemOneJev(Backend):
 
     PRESETS = {
         "kev": {"url": "http://127.0.0.1:8008/v1/systemone", "model": "kev", "key_env": "KEV_API_KEY"},
+        "clef": {"url": "http://127.0.0.1:8010/v1/systemone", "model": "clef-flash", "key_env": "CLEF_API_KEY"},
         "laya": {"url": "http://127.0.0.1:8000/v1/systemone", "model": "typed-decisions", "key_env": "LAYA_API_KEY"},
         "typesafe": {"url": "https://api.typesafe.ai/v1/systemone", "model": "jev-latest", "key_env": "TYPESAFE_API_KEY"},
     }
@@ -285,11 +296,13 @@ class SystemOneJev(Backend):
             return self._fall(e, "choose", question, query, options, context)
 
 
-def laya_running(url: str = SystemOneJev.PRESETS["laya"]["url"], timeout: float = 1.0) -> bool:
-    """Is a Jev-compatible server (Laya) answering at ``url``? Asks it one real Noul question:
-    other servers on the same port (vLLM also defaults to :8000) don't speak /v1/systemone."""
-    body = json.dumps({"state": "ping",                   # no model name: servers reject names they don't serve
-                       "questions": {"up": {"type": "noul", "instructions": "Is this a ping?"}}}).encode()
+def laya_running(url: str = SystemOneJev.PRESETS["laya"]["url"], timeout: float = 1.0, model: str | None = None) -> bool:
+    """Is a Jev-compatible server answering at ``url``? Asks it one real Noul question: other servers on the
+    same port (vLLM also defaults to :8000) don't speak /v1/systemone. ``model`` is sent only for servers that
+    require it (Clef); Laya and Kev reject names they don't serve, so they get none."""
+    body = json.dumps({**({"model": model} if model else {}), "state": "ping",
+                       "questions": {"up": {"type": "noul", "instructions": "Is this a ping?",
+                                            "criteria": {"true": "It is a ping.", "false": "It is not."}}}}).encode()
     try:
         req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -434,6 +447,24 @@ class Jev:
         self._telemetry(question, "activate", d, len(options), t0, f0, query + context)
         return d
 
+    def activate_many(self, groups: list[tuple[str, list[Option]]], query: str, context: str = "") -> list[Decision]:
+        """Several activate decisions about the same task (one tree level), each in its own request, tuned,
+        logged and returned as its own decision: the same answers as asking them one by one."""
+        t0, f0 = time.time(), getattr(self.backend, "failures", 0)
+        tuned = [(q, self._tune(q, opts)) for q, opts in groups]
+        live = [(q, opts) for q, opts in tuned if opts]
+        raws = iter(self.backend.activate_many(live, query, context) if live else [])
+        out = []
+        for q, opts in tuned:
+            if not opts:
+                out.append(Decision("-", q, {}, self.backend.name))
+                continue
+            probs = [min(0.999, max(0.0, p * o.prior)) for p, o in zip(next(raws), opts)]
+            d = self._record(q, query, opts, probs, "activate", context)
+            self._telemetry(q, "activate", d, len(opts), t0, f0, query + context)
+            out.append(d)
+        return out
+
     def choose(self, question: str, query: str, options: list[Option], context: str = "") -> Decision:
         t0, f0 = time.time(), getattr(self.backend, "failures", 0)
         options = self._tune(question, options)
@@ -479,7 +510,12 @@ class Jev:
                 f.write(json.dumps({"feedback": decision_id, "t": time.time(), **outcome}) + "\n")
 
 
-LOCAL_ORDER = ["kev", "laya", "laya-local"]   # servers first (one shared copy), in-process last
+def ping_model(name: str, jc: dict) -> str | None:
+    """The model name a readiness ping must carry: Clef requires one; Laya and Kev reject one."""
+    return (jc.get("clef_model") or SystemOneJev.PRESETS["clef"]["model"]) if name == "clef" else None
+
+
+LOCAL_ORDER = ["clef", "kev", "laya", "laya-local"]   # servers first (one shared copy), in-process last
 
 
 def resolve_backend(jc: dict) -> str:
@@ -493,7 +529,7 @@ def resolve_backend(jc: dict) -> str:
         if local == "laya-local":
             if laya_importable():
                 return local
-        elif laya_running(jc.get(f"{local}_url") or SystemOneJev.PRESETS[local]["url"]):
+        elif laya_running(jc.get(f"{local}_url") or SystemOneJev.PRESETS[local]["url"], model=ping_model(local, jc)):
             return local
     return "typesafe" if os.environ.get("TYPESAFE_API_KEY") else "lexical"
 
@@ -511,7 +547,7 @@ def build(cfg: dict, llm=None, log_path: Path | None = None) -> Jev:
         backend: Backend = LayaLocalJev(jc.get("laya_model") or "typed-decisions", jc.get("laya_max_len"),
                                         jc.get("laya_head_max_len"), jc.get("laya_device"),
                                         fallback=fallback, option_text=style, max_state_chars=budget)
-    elif kind in ("laya", "kev"):       # a local model; TypeSafe covers an outage when a key is set
+    elif kind in ("laya", "kev", "clef"):   # a local model; TypeSafe covers an outage when a key is set
         fallback = SystemOneJev("typesafe", url=jc.get("typesafe_url"), model=jc.get("typesafe_model"),
                                 option_text=style, max_state_chars=budget) \
             if os.environ.get("TYPESAFE_API_KEY") else LexicalJev()
@@ -523,5 +559,5 @@ def build(cfg: dict, llm=None, log_path: Path | None = None) -> Jev:
     elif kind == "lexical":
         backend = LexicalJev()
     else:
-        raise ValueError(f"unknown jev.backend {kind!r}: use auto, laya-local, laya, kev, typesafe or lexical")
+        raise ValueError(f"unknown jev.backend {kind!r}: use auto, laya-local, laya, kev, clef, typesafe or lexical")
     return Jev(backend, log_path, tuning_path=log_path.parent / "jev_tuning.json" if log_path else None)

@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import py_compile
 import re
 import shutil
 import tempfile
@@ -27,8 +26,13 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import schemas
 from .jev import Jev, Option
-from .sops import SOP, Executor, Library
+from .sops import SOP, Executor, Library, keep_out_of_git
+
+
+SUBCOMMAND_TOOLS = {"git", "npm", "npx", "pnpm", "yarn", "pip", "pip3", "uv", "cargo", "go", "docker", "kubectl",
+                    "systemctl", "apt", "apt-get", "brew", "gh", "make", "poetry", "conda", "rustup", "terraform"}
 
 
 def shape(step: dict) -> str:
@@ -38,7 +42,26 @@ def shape(step: dict) -> str:
         cmd = re.sub(r"(['\"]).*?\1", "STR", cmd)
         cmd = re.sub(r"\b\d+(\.\d+)?\b", "N", cmd)
         cmd = re.sub(r"(?:\.{0,2}/)?[\w.-]+(?:/[\w.-]+)+", "PATH", cmd)
-        return "bash:" + " ".join(cmd.split()[:4])
+        words = cmd.split()[:4]
+        if not words:
+            return "bash:"
+        # bare arguments (`ls docs`, `pytest tests`) are parameters too; flags, operators and the subcommand of
+        # tools like git or npm (`git status` vs `git commit`) are what make it a different procedure
+        out, command, sub = [], True, False
+        for w in words:
+            if command:                                  # a command name: the first word, or after | && ; ||
+                out.append(w)
+                command, sub = False, w in SUBCOMMAND_TOOLS
+            elif w in ("|", "||", "&&", ";"):
+                out.append(w)
+                command = True
+            elif sub:                                    # git status / npm run: the subcommand stays
+                out.append(w)
+                sub = False
+            else:
+                out.append(w if w.startswith("-") or w in ("PATH", "STR", "N") or not re.match(r"^[\w.@:+-]+$", w)
+                           else "ARG")
+        return "bash:" + " ".join(out)
     if step["tool"].startswith("sop_"):
         return step["tool"]
     return step["tool"] + ":" + ",".join(sorted(step["input"]))
@@ -58,6 +81,10 @@ class Candidate:
     p_jev: float = 0.0
     score: float = 0.0
     params: list[str] = field(default_factory=list)
+    projects: set = field(default_factory=set)     # the project folders whose runs repeated it
+    key: tuple = ()                                # its step shapes (identifies it across checks)
+    occurrences: list = field(default_factory=list)  # each repetition's steps (within one run)
+    saves: dict = field(default_factory=dict)      # what one use would save: {"tokens", "seconds", "measured"}
 
     @property
     def text(self) -> str:
@@ -103,10 +130,12 @@ def mine_repeats(runs: list[dict], min_repeats: int = 2, max_n: int = 4) -> list
                 if key in local:
                     continue
                 local.add(key)
-                e = seen.setdefault(key, {"runs": 0, "example": seg, "exacts": set(), "tasks": []})
+                e = seen.setdefault(key, {"runs": 0, "example": seg, "exacts": set(), "tasks": [], "projects": set()})
                 e["runs"] += 1
                 e["exacts"].add(tuple(exact(s) for s in seg))
                 e["tasks"].append(r["task"][:120])
+                if r.get("project"):
+                    e["projects"].add(r["project"])
     cands = []
     for key, e in seen.items():
         if e["runs"] < min_repeats:
@@ -114,7 +143,8 @@ def mine_repeats(runs: list[dict], min_repeats: int = 2, max_n: int = 4) -> list
         if all(k.startswith(("write_file", "edit_file", "edit_lines")) for k in key):
             continue      # raw edits are content, not procedure
         cands.append(Candidate(name=" -> ".join(key), description=f"seen in {e['runs']} tasks: " + " | ".join(e["tasks"][:3]),
-                               steps=e["example"], count=e["runs"], exact_repeat=len(e["exacts"]) == 1))
+                               steps=e["example"], count=e["runs"], exact_repeat=len(e["exacts"]) == 1,
+                               projects=e["projects"], key=key))
     # prefer maximal sequences: drop a candidate contained in a longer one with the same count
     cands.sort(key=lambda c: (-len(c.steps), -c.count))
     kept: list[Candidate] = []
@@ -124,7 +154,62 @@ def mine_repeats(runs: list[dict], min_repeats: int = 2, max_n: int = 4) -> list
     return kept
 
 
-SEGMENT_SYSTEM = "You analyse agent execution traces and extract reusable procedures. Output JSON only."
+SOP_CALL_TOKENS = 150       # the model's output for one SOP call (the call and a line of text)
+SOP_INTERFACE_TOKENS = 150  # reading an SOP's tool description to use it, before the SOP exists to measure
+TOKENS_PER_SECOND = 100.0   # generation speed, for estimates where no timing was measured
+
+
+def estimate_savings(c: Candidate, turn_costs: dict | None = None) -> dict:
+    """What replacing one repetition of ``c`` with one SOP call saves, per use: the tokens the model spends
+    producing the steps, less what using the SOP costs it (reading its interface and writing the call).
+    Measured from the turns that produced the repetitions when their cost is known (mid-run); otherwise
+    estimated from the size of the steps."""
+    use_cost = SOP_CALL_TOKENS + SOP_INTERFACE_TOKENS
+    if turn_costs and c.occurrences:
+        per = []
+        for occ in c.occurrences:
+            turns = {s.get("turn") for s in occ if s.get("turn") is not None}
+            if turns and all(t in turn_costs for t in turns):
+                per.append((sum(turn_costs[t]["tokens"] for t in turns), sum(turn_costs[t]["seconds"] for t in turns),
+                            len(turns)))
+        if per:
+            tokens = sum(p[0] for p in per) / len(per)
+            seconds = sum(p[1] for p in per) / len(per)
+            turn_s = sum(p[1] for p in per) / max(1, sum(p[2] for p in per))     # one turn, on average
+            return {"tokens": int(tokens - use_cost), "seconds": round(max(0.0, seconds - turn_s), 1),
+                    "measured": True, "cost_tokens": int(tokens), "cost_seconds": round(seconds, 2)}
+    tokens = sum(len(json.dumps(s.get("input", {}))) // 4 + SOP_CALL_TOKENS for s in c.steps) - use_cost
+    return {"tokens": int(tokens), "seconds": round(max(0.0, tokens / TOKENS_PER_SECOND), 1), "measured": False}
+
+
+def measured_savings(occurrences: list[tuple[list[dict], dict]]) -> dict | None:
+    """Savings per use measured from the runs the repetitions came from: each run records what every model turn
+    cost (output tokens, seconds), and a repetition cost the turns that produced its steps."""
+    per = []
+    for steps, run in occurrences:
+        costs = {int(k): v for k, v in ((run or {}).get("turn_costs") or {}).items()}
+        turns = {st.get("turn") for st in steps if st.get("turn") is not None}
+        if turns and all(t in costs for t in turns):
+            per.append((sum(costs[t]["tokens"] for t in turns), sum(costs[t]["seconds"] for t in turns), len(turns)))
+    if not per:
+        return None
+    tokens = sum(x[0] for x in per) / len(per)
+    seconds = sum(x[1] for x in per) / len(per)
+    turn_s = sum(x[1] for x in per) / max(1, sum(x[2] for x in per))
+    return {"tokens": int(tokens - SOP_CALL_TOKENS - SOP_INTERFACE_TOKENS),
+            "seconds": round(max(0.0, seconds - turn_s), 1), "measured": True,
+            "cost_tokens": int(tokens), "cost_seconds": round(seconds, 2)}
+
+
+TEST_RULES = ("Tests must be self-contained and runnable as written: each runs in a fresh empty folder, so give any "
+              "input file as a fixture, \"files\": {\"relative/path\": \"text content\"}, and build anything else "
+              "(binary files such as images or archives) with \"setup\": \"<python that writes them in the current "
+              "folder>\"; inputs refer to fixtures by relative path. No absolute paths, placeholders or files that "
+              "do not exist. Expected values must be what the script really produces for that input.")
+
+
+REVIEW_SYSTEM = ("You review your own recent agent runs and point out the multi-step tasks you repeated, so they can "
+                 "become reusable standard procedures. Output JSON only.")
 
 GENERATE_SYSTEM = """You write small Python SOP scripts for an agent harness. Use only the Python standard library and
 programs every Linux system has (sh, grep, sed, awk, find, sort, git...); use an extra package or program only when
@@ -139,7 +224,7 @@ SIMPLIFY_SYSTEM = """You simplify SOP scripts (Occam's razor). Rewrite the scrip
 standard library and programs every Linux system has (sh, grep, sed, awk, find, sort, git...). For example: urllib.request
 instead of requests, json instead of jq, csv instead of pandas for simple tables, subprocess with base tools instead of
 extra binaries. Keep the exact same arguments, outputs and behaviour. If an extra package or program is truly
-unavoidable (no standard way exists), reply {"keep": true, "why": "..."}. Otherwise reply {"script": "<python source>"}.
+unavoidable (no standard way exists), reply {"keep": true, "why": "..."}. Otherwise reply {"script": "..."} with the complete new Python source.
 Output JSON only."""
 
 
@@ -156,14 +241,14 @@ def simplify_sop(lib: Library, ex: Executor, sop_id: str, llm) -> dict:
         r = llm.complete_json(SIMPLIFY_SYSTEM, (
             f"SOP {sop.id}: {sop.description}\nIt needs: {json.dumps(before)}\nInputs: {json.dumps(sop.inputs)}\n"
             f"Outputs: {json.dumps(sop.outputs)}\nTests: {json.dumps(sop.tests)[:3000]}\n"
-            f"Current {sop.entry}:\n{src[:12000]}"), max_tokens=8000)
+            f"Current {sop.entry}:\n{src[:12000]}"), max_tokens=8000, schema=schemas.SOP_SIMPLIFIED)
     except Exception as e:
         return {"simplified": False, "reason": f"rewrite failed: {e}"}
     if not isinstance(r, dict) or r.get("keep") or not isinstance(r.get("script"), str):
         return {"simplified": False, "reason": "kept: " + str((r or {}).get("why", "no rewrite offered"))[:200]}
     tmp = _write_temp(r["script"])
     try:
-        py_compile.compile(tmp, doraise=True)
+        _check_compiles(tmp)
     except Exception as e:
         return {"simplified": False, "reason": f"rewrite does not compile: {e}"}
     finally:
@@ -198,6 +283,16 @@ def simplify_sop(lib: Library, ex: Executor, sop_id: str, llm) -> dict:
     return {"simplified": True, "before": before, "after": after}
 
 
+class CloseSOPExists(Exception):
+    """A new procedure is close to an existing SOP (its id is the message), and extending that SOP failed."""
+
+
+def _check_compiles(path) -> None:
+    """Raise SyntaxError if the script does not compile. The builtin compile writes no .pyc, so a shared
+    __pycache__ owned by another user cannot make a good script look broken."""
+    compile(Path(path).read_text(errors="replace"), str(path), "exec")
+
+
 def _write_temp(source: str) -> str:
     fd, path = tempfile.mkstemp(suffix=".py", prefix="rameness-simplify-")
     with os.fdopen(fd, "w") as f:
@@ -208,9 +303,11 @@ def _write_temp(source: str) -> str:
 EXTEND_SYSTEM = """You extend an existing SOP script so it also covers a new, similar procedure. Keep everything it
 already does working exactly as before: keep every existing input and output; any new input must be optional with a
 default that reproduces the old behaviour. Change as little as possible, and use only the Python standard library and
-programs every Linux system has unless the existing script already needs more. Reply {"script": "<python source>",
+programs every Linux system has unless the existing script already needs more. Reply {"script": the complete Python source,
 "inputs": <full JSON schema>, "outputs": {...}, "description": str, "keywords": [..],
-"tests": [<new tests for the added behaviour, each {"input": {...}, "expect": {...}}>]}. Output JSON only."""
+"tests": [<new tests for the added behaviour, each {"input": {...}, "expect": {...}}>]}. Each test runs in a fresh
+empty folder: give input files as "files": {"relative/path": "text"} and build binary ones with "setup": "<python>";
+no absolute paths or placeholders. Output JSON only."""
 
 
 def _bump(version: str) -> str:
@@ -240,7 +337,8 @@ def extend_sop(lib: Library, ex: Executor, sop: SOP, spec: dict, llm, origin: di
             f"Existing {sop.entry}:\n{entry.read_text()[:12000]}\n\n"
             f"New procedure to cover as well: {spec.get('id', '')}: {spec.get('description', '')}\n"
             f"Its inputs: {json.dumps(spec.get('inputs') or {})}\nIts tests: {json.dumps(spec.get('tests') or [])[:3000]}\n"
-            f"Its code:\n{(spec.get('script') or spec.get('shell') or '')[:8000]}"), max_tokens=10000)
+            f"Its code:\n{(spec.get('script') or spec.get('shell') or '')[:8000]}"), max_tokens=10000,
+            schema=schemas.SOP_EXTENSION)
     except Exception:
         return None
     if not isinstance(r, dict) or not isinstance(r.get("script"), str):
@@ -282,6 +380,8 @@ def extend_sop(lib: Library, ex: Executor, sop: SOP, spec: dict, llm, origin: di
             data["origin"]["overrides"] = "builtin" if sop.path.is_relative_to(BUILTIN_ROOT) else "registry"
         (cand_dir / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
         target = lib.private_root.joinpath(*sop.id.split(".")) if sop.scope != "private" else sop.path
+        if sop.scope != "private":
+            keep_out_of_git(lib.private_root)
         if target.exists():
             shutil.rmtree(target)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -297,6 +397,244 @@ def extend_sop(lib: Library, ex: Executor, sop: SOP, spec: dict, llm, origin: di
     return lib.get(sop.id)
 
 
+COMPILE_FIX_SYSTEM = """A generated Python SOP script does not compile. Fix only what the compiler error points at
+(often a string literal broken by a newline that should be the two characters backslash and n). Keep everything else
+exactly as it is. Reply {"script": "..."} with the complete corrected Python source. Output JSON only."""
+
+
+REPAIR_SYSTEM = """You finish an SOP whose tests fail. You see its script, its tests, and what each test actually
+returned. Decide for each failure whether the script or the test is wrong, and fix it: a script bug gets fixed in the
+script; a wrong expectation, a missing fixture or an input the script can't read gets fixed in the test. Keep the tests
+checking real behaviour with concrete expected values (never delete them or empty their expectations to make them
+pass). A failure that starts with "security:" is a risk found in the script (the line is given): fix it in the
+script (e.g. pass arguments as a list instead of building a shell string, keep paths inside the working folder)
+without changing what the script does for valid input. The script must read a JSON object of arguments from stdin
+and print one JSON object to stdout. Reply with "script" (the complete Python source), "tests" (the full list) and
+"explanation" (one line). Output JSON only."""
+
+
+ASSERT_SYSTEM = """You finish the tests of an SOP. Each test below was run; you see its input, its fixtures and what
+the script actually returned (or the error). For each test, judge whether that result is correct for that input,
+from the SOP's description and what the input and fixtures contain (work it out yourself; do not trust the script).
+Then say what the test must assert: "expect" with the output fields that matter and their correct values (for a
+correct result, the values it returned; for a wrong one, the values it should have returned), or "expect_error":
+true if this input should make the SOP fail. Leave out fields that change from run to run (times, temporary paths,
+ports, process ids). At least two tests must check concrete values for different inputs (a normal case and an edge
+case): if there are fewer, add cases under "add" (input and fixtures only; they will be run and shown to you).
+Reply {"tests": [{"index": n, "correct": true, "expect": {...}, "why": "..."}], "add": [...]}. Output JSON only."""
+
+
+def repair_sop(lib: Library, ex: Executor, sop_id: str, failures: list[str], llm, rounds: int = 3) -> list[str]:
+    """Show the model what the failing tests actually returned and let it fix the script or the tests, then run
+    them again; up to ``rounds`` times. A repair that drops tests or their expected values is refused. Returns the
+    failures that remain (empty: the SOP now passes)."""
+    def note(outcome: str) -> None:             # every attempt and how it ended, on the SOP itself
+        path = lib.get(sop_id).path / "sop.json"
+        data = json.loads(path.read_text())
+        data.setdefault("origin", {}).setdefault("repair_attempts", []).append(outcome[:300])
+        path.write_text(json.dumps(data, indent=2) + "\n")
+        lib.reload()
+
+    for _ in range(rounds):
+        if not failures:
+            return []
+        sop = lib.get(sop_id)
+        if sop.kind != "script" or sop.entry != "run.py":
+            note(f"not repairable: {sop.kind} with entry {sop.entry}")
+            return failures
+        outputs = getattr(ex, "last_outputs", [])
+        try:
+            r = llm.complete_json(REPAIR_SYSTEM, (
+                f"SOP {sop.id}: {sop.description}\nInputs: {json.dumps(sop.inputs)}\nOutputs: {json.dumps(sop.outputs)}\n"
+                f"run.py:\n{(sop.path / 'run.py').read_text()[:12000]}\n\nTests: {json.dumps(sop.tests)[:6000]}\n\n"
+                f"Failures: {json.dumps(failures)[:3000]}\nWhat each test returned: {json.dumps(outputs, default=str)[:4000]}"
+                f"\n\n{TEST_RULES}"), max_tokens=10000, schema=schemas.SOP_REPAIR, thinking=2048)
+        except Exception as e:
+            note(f"model call failed: {type(e).__name__}: {e}")
+            return failures
+        tests = r.get("tests") if isinstance(r, dict) else None
+        if not isinstance(tests, list) or not isinstance(r.get("script"), str):
+            note("reply had no script or tests")
+            return failures
+        def checking(ts):                         # tests that assert something about the result
+            return sum(1 for t in ts if isinstance(t, dict) and (t.get("expect") or t.get("expect_keys")
+                                                                 or t.get("expect_error")))
+        if len(tests) < max(1, len(sop.tests) - 1) or checking(tests) < checking(sop.tests):
+            note(f"refused: the repair dropped tests or their expectations ({len(sop.tests)} -> {len(tests)} tests, "
+                 f"{checking(sop.tests)} -> {checking(tests)} that check something)")
+            return failures                      # a repair that guts the tests is not a repair
+        tmp = _write_temp(r["script"])
+        try:
+            _check_compiles(tmp)
+        except Exception as e:
+            note(f"repaired script does not compile: {str(e)[:200]}")
+            continue
+        finally:
+            os.unlink(tmp)
+        before_script = (sop.path / "run.py").read_text()
+        before_json = (sop.path / "sop.json").read_text()          # restored as written, notes included
+        (sop.path / "run.py").write_text(r["script"])
+        data = json.loads(before_json)
+        data["tests"] = tests
+        why = str(r.get("explanation", ""))[:200]
+        data.setdefault("origin", {}).setdefault("repairs", []).append(why)
+        (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
+        lib.reload()
+        new_failures = ex.test(sop_id)
+        if len(new_failures) > len(failures):          # worse than before: put it back
+            (sop.path / "run.py").write_text(before_script)
+            (sop.path / "sop.json").write_text(before_json)
+            lib.reload()
+            ex.test(sop_id)
+            note(f"reverted: {len(failures)} -> {len(new_failures)} failing ({why[:150]})")
+            continue
+        note(f"repair: {len(failures)} -> {len(new_failures)} failing ({why[:150]})")
+        failures = new_failures
+    return failures
+
+
+def asserts(t: dict) -> bool:
+    """A test that checks something: concrete values, output keys, or an expected error."""
+    return bool(t.get("expect") or t.get("expect_keys") or t.get("expect_error"))
+
+
+JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict,
+              "null": type(None)}
+
+
+def test_quality(sop: SOP) -> list[str]:
+    """What a validated SOP's tests must do (the same rules RamenSOPs CI applies): every test asserts something, at
+    least two check concrete values, and every test gives each required input, with the declared types."""
+    problems = [f"test {i}: asserts nothing (no expect, expect_keys or expect_error)"
+                for i, t in enumerate(sop.tests) if not asserts(t)]
+    if sum(1 for t in sop.tests if t.get("expect")) < 2:
+        problems.append("fewer than two tests check concrete expected values")
+    props, required = sop.inputs.get("properties", {}), sop.inputs.get("required", [])
+    for i, t in enumerate(sop.tests):
+        args = t.get("input") if isinstance(t.get("input"), dict) else {}
+        problems += [f"test {i}: missing required input {k}" for k in required if k not in args]
+        for k, v in args.items():
+            declared = props.get(k, {}).get("type") if isinstance(props.get(k), dict) else None
+            want = JSON_TYPES.get(declared) if isinstance(declared, str) else None
+            if k not in props and props:
+                problems.append(f"test {i}: input {k} is not declared in the SOP's inputs")
+            elif want and (not isinstance(v, want) or (declared in ("integer", "number") and isinstance(v, bool))):
+                problems.append(f"test {i}: input {k} should be {declared}")
+    return problems
+
+
+def complete_tests(lib: Library, ex: Executor, sop_id: str, llm, rounds: int = 2) -> dict:
+    """Run the tests, show the model what each actually returned, and have it write what each must assert
+    (judging whether the result is right; a wrong one becomes a failing test for repair_sop), adding cases until
+    at least two check concrete values. The model never removes a test."""
+    done = {"asserted": 0, "wrong": 0, "added": 0}
+    for _ in range(rounds):
+        sop = lib.get(sop_id)
+        if not sop.tests or not test_quality(sop):
+            break
+        shown = []
+        for i, t in enumerate(sop.tests):
+            try:
+                got = ex._run_test(sop_id, t)
+            except Exception as e:
+                got = {"error": str(e)[-600:]}
+            shown.append({"index": i, "input": t.get("input"), "files": {k: str(v)[:400] for k, v in
+                                                                         (t.get("files") or {}).items()},
+                          "setup": str(t.get("setup", ""))[:400],
+                          "asserts": {k: t[k] for k in ("expect", "expect_keys", "expect_error") if t.get(k)},
+                          "returned": json.loads(json.dumps(got, default=str)[:1500]) if len(json.dumps(got, default=str)) <= 1500
+                          else json.dumps(got, default=str)[:1500]})
+        try:
+            r = llm.complete_json(ASSERT_SYSTEM, (
+                f"SOP {sop.id}: {sop.description}\nInputs: {json.dumps(sop.inputs)[:1500]}\n"
+                f"Outputs: {json.dumps(sop.outputs)[:800]}\n\nTests as run:\n{json.dumps(shown, indent=1)[:24000]}"
+                f"\n\n{TEST_RULES}"), max_tokens=8000, schema=schemas.SOP_ASSERTIONS, thinking=2048)
+        except Exception as e:
+            done["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+            break
+        tests = [dict(t) for t in sop.tests]
+        for a in (r or {}).get("tests") or []:
+            i = a.get("index") if isinstance(a, dict) else None
+            if not isinstance(i, int) or not 0 <= i < len(tests):
+                continue
+            t = {k: v for k, v in tests[i].items() if k not in ("expect", "expect_keys", "expect_error")}
+            if a.get("expect_error"):
+                t["expect_error"] = True
+            elif isinstance(a.get("expect"), dict) and a["expect"]:
+                t["expect"] = a["expect"]
+            elif a.get("expect_keys"):
+                t["expect_keys"] = [str(k) for k in a["expect_keys"]]
+            else:
+                continue                                  # nothing usable: keep the test as it was
+            tests[i] = t
+            done["asserted"] += 1
+            done["wrong"] += not a.get("correct", True)
+        added = [t for t in (r or {}).get("add") or [] if isinstance(t, dict) and isinstance(t.get("input"), dict)]
+        tests += [{k: v for k, v in t.items() if k in ("input", "files", "setup")} for t in added[:6]]
+        done["added"] += len(added[:6])
+        data = json.loads((sop.path / "sop.json").read_text())
+        data["tests"] = tests
+        data.setdefault("origin", {})["test_completion"] = dict(done)
+        (sop.path / "sop.json").write_text(json.dumps(data, indent=2) + "\n")
+        lib.reload()
+    return done
+
+
+def finish_sop(lib: Library, ex: Executor, sop_id: str, llm=None, jev: Jev | None = None) -> list[str]:
+    """Take an SOP from written to validated without help: complete its tests from what the script really returns,
+    repair the script or the tests until they pass, require tests that check real values, then a security review
+    (code + model find the risks, JEV decides; a fix goes back through repair). Sets the status; returns what is
+    still wrong (empty: validated)."""
+    from .deps import requirements
+    failures: list[str] = []
+    for _ in range(2):
+        sop = lib.get(sop_id)
+        if not sop.tests:
+            failures = ["no tests provided"]
+            break
+        if llm is not None:
+            complete_tests(lib, ex, sop_id, llm)
+        failures = ex.test(sop_id)
+        failures += [p for p in test_quality(lib.get(sop_id)) if p not in failures]
+        if failures and llm is not None:
+            repair_sop(lib, ex, sop_id, failures, llm)            # test failures and rule breaks alike
+            failures = ex.test(sop_id)
+            failures += [p for p in test_quality(lib.get(sop_id)) if p not in failures]
+        if not failures or llm is None:
+            break
+    from . import sopsafety
+    from .review import used_permissions
+    sop = lib.get(sop_id)
+    src = "".join(f.read_text(errors="replace") for f in sorted(sop.path.glob("run.*")))
+    # declare what the code does (read by code, as RamenSOPs CI does): running programs needs exec, which asks for
+    # approval exactly as the agent's own bash does; writing files needs fs:write; and so on
+    used = used_permissions(sop.path) | ({"exec"} if sopsafety.runs_processes(src) else set())
+    missing = sorted(used - set(sop.permissions))
+    if missing:
+        sop.permissions = list(sop.permissions) + missing
+        sop.save()
+        lib.reload()
+    if not failures and llm is not None and jev is not None:
+        for attempt in range(3):
+            result = sopsafety.review(lib.get(sop_id), llm, jev)
+            sopsafety.record(lib.get(sop_id), result)
+            lib.reload()
+            if result["verdict"] != "fix" or attempt == 2:
+                break
+            ex.test(sop_id)                                  # what the tests return now, for the repair prompt
+            left = repair_sop(lib, ex, sop_id, [f"security: line {x['line']} {x['kind']}: {x['detail']}"
+                                                for x in result["risks"]], llm, rounds=1)
+            if ex.test(sop_id):                              # a security fix must not break the tests
+                failures = left or ["tests fail after the security fix"]
+                break
+    fresh = lib.get(sop_id)
+    fresh.requirements = {k: v for k, v in requirements(fresh.path).items() if v}
+    fresh.status = "validated" if not failures else "candidate"
+    fresh.save()
+    lib.reload()
+    return failures
+
+
 def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = None,
                  root: Path | None = None, jev: Jev | None = None, org=None, llm=None) -> tuple[SOP, list[str]]:
     """Write an SOP to the private library, compile + test it, set its status."""
@@ -304,6 +642,7 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
     if "." not in sop_id:
         sop_id = "learned." + sop_id
     root = root or lib.private_root
+    keep_out_of_git(root)
     path = root.joinpath(*sop_id.split("."))
     if path.exists() and (path / "sop.json").exists():
         sop_id += "_" + uuid.uuid4().hex[:4]
@@ -313,7 +652,21 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
         entry = "run.sh" if spec.get("shell") else "run.py"
         (tmp / entry).write_text(spec.get("shell") or spec["script"])
         if entry == "run.py":
-            py_compile.compile(str(tmp / entry), doraise=True)
+            for attempt in range(3 if llm is not None else 1):
+                try:
+                    _check_compiles(tmp / entry)
+                    break
+                except SyntaxError as e:
+                    if attempt == 2 or llm is None:
+                        raise
+                    # a script that does not compile (often JSON vs Python escaping): show the model the error
+                    fixed = llm.complete_json(COMPILE_FIX_SYSTEM, (
+                        f"Compiler error:\n{str(e)[-800:]}\n\nScript:\n{(tmp / entry).read_text()[:14000]}"),
+                        max_tokens=12000, schema=schemas.SOP_SIMPLIFIED, thinking=1024)
+                    if not isinstance(fixed, dict) or not isinstance(fixed.get("script"), str):
+                        raise
+                    (tmp / entry).write_text(fixed["script"])
+                    spec = {**spec, "script": fixed["script"]}
         sop = SOP(id=sop_id, path=path, description=spec["description"], kind="script", entry=entry,
                   inputs=spec.get("inputs") or {"type": "object", "properties": {}},
                   outputs=spec.get("outputs", {}), permissions=spec.get("permissions", ["exec"]),
@@ -328,29 +681,33 @@ def register_sop(lib: Library, ex: Executor, spec: dict, origin: dict | None = N
         shutil.rmtree(tmp, ignore_errors=True)
     lib.reload()
     if jev is not None:
-        # JEV files it under the category it belongs in (the generator only proposes one)
-        from .publish import categorize, recategorize
-        sop_id = recategorize(lib, lib.get(sop_id), categorize(jev, lib, lib.get(sop_id))).id
+        # JEV files it where it belongs, walking the tree level by level (the generator only proposes a path)
+        from .publish import recategorize
+        from .tree import place
+        sop_id = recategorize(lib, lib.get(sop_id), place(jev, lib, lib.get(sop_id))).id
     if llm is not None and sop.tests:
         simplify_sop(lib, ex, sop_id, llm)       # Occam's razor: nothing extra if the standard tools can do it
-    failures = ex.test(sop_id) if sop.tests else ["no tests provided"]
-    sop = lib.get(sop_id)
-    sop.status = "validated" if not failures else "candidate"
-    sop.save()
-    lib.reload()
+    failures = finish_sop(lib, ex, sop_id, llm, jev)   # the model finishes the SOP and its tests
     if jev is not None:
         # JEV decides personal vs general right away; anything uncertain stays private
         from .org import Org
         from .publish import classify
         classify(jev, lib.get(sop_id), org or Org())
         lib.reload()
+        # the category it joined may now be too large: split it (and keep the tree shallow and small per level)
+        from .tree import rebalance
+        rebalance(lib, ex, lib.get(sop_id).id.rsplit(".", 1)[0], llm, jev)
+        sop_id = lib.resolve(sop_id)
     return lib.get(sop_id), failures
 
 
 class Learner:
     def __init__(self, lib: Library, ex: Executor, jev: Jev, runs: RunStore, llm=None,
-                 min_repeats: int = 2, threshold: float = 0.6, auto_generate: bool = True, org=None):
+                 min_repeats: int = 2, threshold: float = 0.6, auto_generate: bool = True, org=None,
+                 min_saved: int = 500, creation_cost: int = 4000, review_n: int = 5):
         self.lib, self.ex, self.jev, self.runs, self.llm = lib, ex, jev, runs, llm
+        self.min_saved, self.creation_cost = min_saved, creation_cost   # see learning.min_tokens_saved_per_use
+        self.review_n = review_n                                         # runs the end-of-run review reads
         self.org = org
         self.min_repeats = min_repeats
         self.threshold = threshold
@@ -358,50 +715,108 @@ class Learner:
 
     # ---- candidate discovery
 
-    def _llm_segments(self, task: str, steps: list[dict]) -> list[Candidate]:
-        if not self.llm or len(steps) < 2:
+    @staticmethod
+    def _listing(steps: list[dict], limit: int = 150) -> list[str]:
+        """A compact, numbered listing of a run's steps (the most recent ``limit``) for the model to read."""
+        start = max(0, len(steps) - limit)
+        out = []
+        for i, st in enumerate(steps[start:], start):
+            inp = st.get("input") if isinstance(st.get("input"), dict) else {}
+            what = inp.get("command") or inp.get("path") or json.dumps(inp)
+            out.append(f"  {i}. {st['tool']}: {str(what)[:160]}" + ("" if st.get("ok", True) else "  [failed]"))
+        return out
+
+    def review_runs(self, runs: list[dict]) -> list[Candidate]:
+        """The model reads its recent runs (this one and the ones before it) and names the multi-step tasks it
+        repeated, pointing at the steps of each repetition. It identifies; Kev and the tests decide the rest."""
+        if not self.llm or not runs:
             return []
-        trace = "\n".join(f"{i}. {s['tool']} {json.dumps(s['input'])[:300]} -> {'ok' if s.get('ok', True) else 'error'}"
-                          for i, s in enumerate(steps))
+        labels = {f"R{k + 1}": r for k, r in enumerate(runs)}
+        text = "\n\n".join(f"{lab} ({'this run' if k == len(runs) - 1 else 'earlier'}; task: {r.get('task', '')[:160]})\n"
+                            + "\n".join(self._listing(r.get("steps") or []))
+                            for k, (lab, r) in enumerate(labels.items()))
         try:
-            data = self.llm.complete_json(SEGMENT_SYSTEM, (
-                f"Task: {task}\nTrace:\n{trace}\n\n"
-                "Group the successful steps into generic sub-procedures (ignore dead ends). For each give "
-                '{"name": snake_case, "description": generic one-liner, "steps": [indices], '
-                '"params": [names of values that would change next time], "p_reusable": 0..1}. '
-                'Reply {"procedures": [...]}'))
+            data = self.llm.complete_json(REVIEW_SYSTEM, (
+                f"Your most recent runs, oldest first:\n\n{text}\n\n"
+                "Which multi-step tasks did you carry out more than once, in one run or across runs, that a reusable "
+                "standard procedure could do next time? Count something as the same task even when it ran on other "
+                "files or for another language (e.g. syntax-checking Python and then Rust). Leave out single commands, "
+                "writing or editing the project's own content, exploration (reading or searching code), calls to "
+                "existing SOPs, and re-checks of what an SOP returned (its tests already verify it). For each give "
+                '{"name": snake_case, "description": generic one-liner, "params": [what changes between repetitions], '
+                '"occurrences": [{"run": "R1", "steps": [step numbers]}, ...]}. Reply {"procedures": [...]}: at most '
+                'the three clearest, and an empty list is a good answer when nothing qualifies.'),
+                max_tokens=6000, schema=schemas.REVIEW, thinking=2048)
         except Exception:
             return []
         out = []
-        for p in data.get("procedures", []):
-            idx = [i for i in p.get("steps", []) if isinstance(i, int) and 0 <= i < len(steps)]
-            if idx:
-                out.append(Candidate(p.get("name", "procedure"), p.get("description", ""), [steps[i] for i in idx],
-                                     params=p.get("params", []), p_jev=float(p.get("p_reusable", 0))))
+        for proc in (data or {}).get("procedures", []) if isinstance(data, dict) else []:
+            occs = []
+            for o in proc.get("occurrences") or []:
+                run = labels.get(str(o.get("run")))
+                steps = (run or {}).get("steps") or []
+                idx = sorted({i for i in o.get("steps") or [] if isinstance(i, int) and 0 <= i < len(steps)})
+                if idx:
+                    occs.append(([steps[i] for i in idx], run))
+            if len(occs) < 2 or max(len(st) for st, _ in occs) < 2:
+                continue                                # repeated, and more than a single command
+            longest = max(occs, key=lambda o: len(o[0]))[0]
+            exact_once = len({tuple(exact(st) for st in o) for o, _ in occs}) == 1   # literally the same commands
+            c = Candidate(proc.get("name", "procedure"), proc.get("description", ""), longest,
+                          count=len(occs), params=proc.get("params") or [], exact_repeat=exact_once,
+                          occurrences=[st for st, _ in occs],
+                          projects={r.get("project") for _, r in occs if r.get("project")})
+            c.saves = measured_savings(occs) or estimate_savings(c)
+            out.append(c)
         return out
 
     def candidates(self, task: str, steps: list[dict]) -> list[Candidate]:
-        cands = [c for c in mine_repeats(self.runs.all(), self.min_repeats)
-                 if any(shape(s) in {shape(x) for x in steps} for s in c.steps)]   # related to this run
-        cands += self._llm_segments(task, steps)
+        """End of a run: the model reviews this run and the four before it for repeated multi-step tasks,
+        and Kev scores how reusable each one is."""
+        recent = self.runs.all()[-self.review_n:]
+        cands = self.review_runs(recent)
         if not cands:
             return []
         d = self.jev.activate("Which of these steps is a standard, reusable procedure likely to recur in future tasks?",
                               task, [Option(str(i), c.text) for i, c in enumerate(cands)])
         for i, c in enumerate(cands):
             p_freq = 1 - math.exp(-(c.count - 1)) if c.count > 1 else 0.0
-            p_jev = max(c.p_jev, d.probs[str(i)])
-            c.score = 1 - (1 - p_jev) * (1 - p_freq)
+            c.score = 1 - (1 - d.probs[str(i)]) * (1 - p_freq)
         return sorted(cands, key=lambda c: -c.score)
 
     def _duplicate(self, c: Candidate) -> str | None:
+        """An existing SOP that already does this procedure, unchanged. Kev shortlists by description, then
+        confirms each shortlisted SOP pairwise against the procedure's actual steps and the SOP's own code: a
+        description-level match alone ("check", "verify") is not a duplicate."""
         existing = list(self.lib.sops.values())
         if not existing:
             return None
+        cmds = [str(s["input"].get("command")) for s in c.steps if isinstance(s.get("input"), dict)
+                and s["input"].get("command")]
+        if cmds and len(cmds) == len(c.steps):     # literally the same commands as an existing SOP's script
+            for s in existing:
+                code = "".join(f.read_text(errors="replace") for f in s.path.glob("run.*") if f.is_file()) \
+                    if s.path.exists() else ""
+                if code and all(cmd in code for cmd in cmds):
+                    return s.id
         d = self.jev.activate("Does an existing SOP already perform this procedure?", c.text,
                               [Option(s.id, s.text, desc=s.desc) for s in existing])
-        sid, p = d.top(1)[0]
-        return sid if p >= 0.8 else None
+        by_id = {s.id: s for s in existing}
+        steps = "\n".join(self._listing(c.steps, limit=20))
+        for sid, p in d.top(3):
+            if p < 0.5:
+                continue
+            state = (f"Procedure: {c.name}: {c.description}\nIts steps:\n{steps}\n\n"
+                     f"Existing SOP: {by_id[sid].digest()}\nInputs: {json.dumps(by_id[sid].inputs)}")
+            same = self.jev.yes("Does the existing SOP already do this whole procedure, as it is, so the procedure "
+                                "needs no new SOP?", state,
+                                "same procedure already does it covers every step identical purpose",
+                                "different purpose only shares a word or one step partial unrelated",
+                                yes_desc="Yes: the existing SOP already performs this procedure.",
+                                no_desc="No: it does something else, or only part of it.")
+            if same >= 0.8:
+                return sid
+        return None
 
     def _duplicate_generated(self, spec: dict) -> str | None:
         """Compare the generated behavior too: a trace's name can hide an existing procedure."""
@@ -455,15 +870,23 @@ class Learner:
                 return sop
         return None
 
-    def extend_or_register(self, spec: dict, origin: dict | None = None) -> tuple[SOP, list[str], bool]:
+    def extend_or_register(self, spec: dict, origin: dict | None = None, root: Path | None = None,
+                           new_if_close: bool = True) -> tuple[SOP, list[str], bool]:
         """Extend a close existing SOP when that works; otherwise register ``spec`` as a new SOP.
-        Returns (sop, test failures, extended)."""
+        Returns (sop, test failures, extended). With ``new_if_close=False`` (end-of-run learning) a procedure
+        close to an existing SOP, whose extension failed and which fails its own tests too, is not kept as a
+        near-duplicate: CloseSOPExists. One that passes is kept, in case the closeness call was wrong."""
         target = self.extension_target(spec)
         if target is not None:
             extended = extend_sop(self.lib, self.ex, target, spec, self.llm, origin)
             if extended is not None:
                 return extended, [], True
-        sop, failures = register_sop(self.lib, self.ex, spec, origin, jev=self.jev, org=self.org, llm=self.llm)
+        sop, failures = register_sop(self.lib, self.ex, spec, origin, root=root, jev=self.jev, org=self.org,
+                                     llm=self.llm)
+        if target is not None and not new_if_close and failures and failures != ["no tests provided"]:
+            shutil.rmtree(sop.path, ignore_errors=True)
+            self.lib.reload()
+            raise CloseSOPExists(target.id)
         return sop, failures, False
 
     # ---- generation
@@ -491,43 +914,85 @@ class Learner:
                 + f"\n\nExisting top-level categories: {cats}\n"
                 'Reply {"id": "category.name", "description": str, "keywords": [..], '
                 '"inputs": <JSON schema>, "outputs": {...}, "permissions": subset of '
-                '["fs:read","fs:write","network","exec","side-effect"], "script": <python source>, '
+                '["fs:read","fs:write","network","exec","side-effect"], "script": the complete Python source as one string (it '
+                'reads a JSON object of arguments from stdin and prints one JSON object), '
                 '"tests": [{"input": {...}, "expect": {"output_field": expected_value}}]}. '
                 'Tests must assert concrete output values for normal and edge cases, not just output keys. '
-                'Error cases may use "expect_error": true. Tests must pass offline in a temp dir.'),
-                max_tokens=8000)
-        except Exception:
+                'Error cases may use "expect_error": true. ' + TEST_RULES),
+                max_tokens=16000, schema=schemas.SOP_SPEC)   # thinking + the script + tests with their fixtures
+        except Exception as e:
+            self.last_spec_error = f"{type(e).__name__}: {str(e)[:200]}"
             return None
 
-    def observe(self, task: str, steps: list[dict], success: bool, extra: dict | None = None) -> list[dict]:
+    def observe(self, task: str, steps: list[dict], success: bool, extra: dict | None = None,
+                review: bool = True) -> list[dict]:
+        """After a run: save it to the history, then (``review``) have the model look for tasks it repeated."""
         self.runs.save(task, steps, success, extra)
-        if not success or not steps:
+        if not success or not steps or not review:
             return []
+        return self._learn(task, self.candidates(task, steps))
+
+    def _root_for(self, c: Candidate) -> Path | None:
+        """Repeats seen in two or more projects go to the user's own library, so every project can use them;
+        repeats from one project (or one run) stay with that project."""
+        roots = [r for r, scope in self.lib.roots if scope == "private"]
+        return roots[0] if len(c.projects) >= 2 and len(roots) >= 2 else None
+
+    def _learn(self, task: str, cands: list[Candidate], midrun: bool = False) -> list[dict]:
         created = []
         runs_total = sum(1 for r in self.runs.all() if r.get("success"))   # usage evidence for builtin vs registry
-        for c in self.candidates(task, steps):
+        for c in cands:
             if c.score < self.threshold:
                 break
+            c.saves = c.saves or estimate_savings(c)
+            # Worth it? A short procedure is quick for the model to write again; an SOP must save a real amount
+            # per use, and over the uses we expect (as many again) more than generating and testing it costs.
+            if (self.min_saved > 0 and c.saves["tokens"] < self.min_saved) or \
+                    (self.creation_cost > 0 and c.saves["tokens"] * c.count < self.creation_cost):
+                created.append({"candidate": c.name, "skipped": "too small to be worth an SOP",
+                                "saves_per_use": c.saves})
+                continue
             dup = self._duplicate(c)
             if dup:
-                created.append({"candidate": c.name, "skipped": f"duplicates {dup}"})
+                created.append({"candidate": c.name, "skipped": f"duplicates {dup}", "existing": dup})
                 continue
             spec = self._deterministic_spec(c) or (self._llm_spec(task, c) if self.auto_generate else None)
             if not spec:
-                created.append({"candidate": c.name, "score": round(c.score, 2), "skipped": "no generator available"})
+                why = getattr(self, "last_spec_error", None) if self.llm else None
+                self.last_spec_error = None
+                created.append({"candidate": c.name, "score": round(c.score, 2),
+                                "skipped": f"generation failed: {why}" if why else "no generator available"})
                 continue
             dup = self._duplicate_generated(spec)
             if dup:
-                created.append({"candidate": c.name, "skipped": f"generated procedure duplicates {dup}"})
+                created.append({"candidate": c.name, "skipped": f"generated procedure duplicates {dup}",
+                                "existing": dup})
                 continue
+            origin = {"task": task[:200], "score": c.score, "runs_seen": 0 if midrun else c.count,
+                      "saves_per_use": c.saves,
+                      "runs_total": runs_total, **({"repeats_in_run": c.count} if midrun else {}),
+                      **({"projects": len(c.projects)} if c.projects else {})}
             try:
-                sop, failures, extended = self.extend_or_register(
-                    spec, {"task": task[:200], "score": c.score, "runs_seen": c.count, "runs_total": runs_total})
+                sop, failures, extended = self.extend_or_register(spec, origin, root=self._root_for(c),
+                                                                  new_if_close=False)
+            except CloseSOPExists as e:
+                created.append({"candidate": c.name, "skipped": f"close to {e}; extending it and the new SOP both failed their tests",
+                                "existing": str(e)})
+                continue
             except Exception as e:
                 created.append({"candidate": c.name, "error": str(e)})
                 continue
+            base = sop.id.rsplit("_", 1)[0]
+            if failures and failures != ["no tests provided"] and base != sop.id and \
+                    getattr(self.lib.sops.get(base), "status", None) == "validated":
+                shutil.rmtree(sop.path, ignore_errors=True)    # a failing copy of a working SOP of the same name
+                self.lib.reload()
+                created.append({"candidate": c.name, "skipped": f"failing variant of the validated {base}",
+                                "existing": base})
+                continue
             created.append({"sop": sop.id, "status": sop.status, "visibility": sop.visibility,
-                            "score": round(c.score, 2), "failures": failures,
+                            "score": round(c.score, 2), "failures": failures, "tool": sop.tool_name,
+                            "repeats": c.count,
                             **({"extended": sop.version} if extended else {})})
             if len(created) >= 3:
                 break

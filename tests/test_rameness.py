@@ -40,6 +40,8 @@ class Env(unittest.TestCase):
         c["jev"]["backend"] = "lexical"
         c["permissions"]["mode"] = "auto"
         c["registry"]["auto_propose"] = False       # unit tests do not publish to the real registry
+        c["learning"].update(min_tokens_saved_per_use=0, sop_creation_tokens=0)   # tiny example procedures
+        c["registry"]["min_tokens_saved"] = 0
         for k, v in over.items():
             c[k] = v
         return c
@@ -210,13 +212,17 @@ class TestLearning(Env):
                 "permissions": ["compute"], "keywords": ["text", "generic", "utility"],
                 "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'words': len(a['text'].split())}))",
-                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}}]}
+                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}},
+                          {"input": {"text": ""}, "expect": {"words": 0}}]}
         llm = FakeProvider([
-            Response("", [ToolCall("1", "bash", {"command": "echo checking"})], "tool_use"),
-            Response("", [ToolCall("2", "bash", {"command": "echo checked"})], "tool_use"),
+            Response("", [ToolCall("1", "bash", {"command": "echo checking a"})], "tool_use"),
+            Response("", [ToolCall("2", "bash", {"command": "echo checked a"})], "tool_use"),
+            Response("", [ToolCall("3", "bash", {"command": "echo checking b"})], "tool_use"),
+            Response("", [ToolCall("4", "bash", {"command": "echo checked b"})], "tool_use"),
             Response("Done and verified.", [], "end_turn")], json_script=[
-                {"procedures": [{"name": "word_count", "description": "count words", "steps": [0],
-                                 "params": ["text"], "p_reusable": 0.9}]}, spec])
+                {"procedures": [{"name": "word_count", "description": "count words", "params": ["text"],
+                                 "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R1", "steps": [2, 3]}]}]},
+                spec] + [lambda prompt: {"risks": []}] * 3)    # the security review finds nothing
         h = Harness(cfg, llm=llm)
         with patch("rameness.registry.Registry._gh_pr", return_value="https://github.com/example/sops/pull/2") as pr:
             result = h.run("implement a reusable word counting utility", allow_direct=False)
@@ -236,14 +242,36 @@ class TestLearning(Env):
         spec = {"id": "text.upper", "description": "Generic reusable text conversion utility",
                 "inputs": {"type": "object", "properties": {"s": {"type": "string"}}, "required": ["s"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'s': a['s'].upper()}))",
-                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}}]}
+                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
+                                                      {"input": {"s": ""}, "expect": {"s": ""}}]}
         llm = FakeProvider([Response("", [ToolCall("1", "sop_save", spec)], "tool_use"),
-                            Response("done", [], "end_turn")])
+                            Response("done", [], "end_turn")],
+                           json_script=[lambda prompt: {"risks": []}] * 3)   # nothing to extend; no security risks
         h = Harness(cfg, llm=llm)
         with patch("rameness.registry.Registry._gh_pr", return_value="https://github.com/example/sops/pull/2"):
             result = h.run("implement a text conversion utility", allow_direct=False)
         self.assertEqual(result.learned, [])
         self.assertEqual(result.proposals[0]["status"], "proposed")
+
+    def test_failed_sop_save_retries_leave_one_sop_not_drafts(self):
+        cfg = self.cfg()
+        cfg["learning"]["enabled"] = False
+        cfg["registry"].update(remote_index=None, auto_propose=False)
+        good = "import json,sys; a=json.load(sys.stdin); print(json.dumps({'s': a['s'].upper()}))"
+        spec = {"id": "text.upper", "description": "Upper-case text",
+                "inputs": {"type": "object", "properties": {"s": {"type": "string"}}, "required": ["s"]},
+                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
+                                                      {"input": {"s": "bc"}, "expect": {"s": "BC"}}]}
+        bad = dict(spec, script=good.replace(".upper()", ""))
+        llm = FakeProvider([Response("", [ToolCall("1", "sop_save", bad)], "tool_use"),
+                            Response("", [ToolCall("2", "sop_save", bad)], "tool_use"),
+                            Response("", [ToolCall("3", "sop_save", dict(spec, id="text.to_upper", script=good))],
+                                     "tool_use"),
+                            Response("done", [], "end_turn")])
+        h = Harness(cfg, llm=llm)
+        h.run("implement a text conversion utility", allow_direct=False)
+        saved = sorted(s.id for s in h.lib.sops.values() if (s.origin or {}).get("via") == "sop_save")
+        self.assertEqual(saved, ["text.to_upper"])
 
     def test_proposal_failure_does_not_fail_completed_task(self):
         cfg = self.cfg()
@@ -274,10 +302,13 @@ class TestLearning(Env):
         lib = self.lib()
         ex = Executor(lib, ["exec"], cwd=self.cwd)
         runs = RunStore(self.cwd / ".rameness" / "runs")
-        learner = Learner(lib, ex, Jev(LexicalJev()), runs, None, min_repeats=2, threshold=0.5)
+        both = {"procedures": [{"name": "build_and_package", "description": "Build and package",
+                                "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R2", "steps": [0, 1]}]}]}
+        learner = Learner(lib, ex, Jev(LexicalJev()), runs, FakeProvider(json_script=[{"procedures": []}, both, both]),
+                          min_repeats=2, threshold=0.5, min_saved=0, creation_cost=0)  # tiny: tests the mechanics
         steps = [{"tool": "bash", "input": {"command": "echo build"}, "ok": True},
                  {"tool": "bash", "input": {"command": "echo package"}, "ok": True}]
-        self.assertEqual(learner.observe("build it", steps, True), [])
+        self.assertEqual(learner.observe("build it", steps, True), [])   # one run: nothing repeated yet
         out = learner.observe("build the thing again", steps, True)
         created = [o for o in out if "sop" in o]
         self.assertEqual(len(created), 1)
@@ -294,14 +325,16 @@ class TestLearning(Env):
         spec = {"id": "text.word_count", "description": "count words in text", "permissions": ["compute"],
                 "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'words': len(a['text'].split())}))",
-                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}}]}
+                "tests": [{"input": {"text": "a b c"}, "expect": {"words": 3}},
+                          {"input": {"text": ""}, "expect": {"words": 0}}]}
         llm = FakeProvider(json_script=[
-            {"procedures": [{"name": "word_count", "description": "count words", "steps": [0], "params": ["text"],
-                             "p_reusable": 0.9}]},
+            {"procedures": [{"name": "word_count", "description": "count words", "params": ["text"],
+                             "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R1", "steps": [2, 3]}]}]},
             spec])
-        learner = Learner(lib, ex, Jev(LexicalJev()), RunStore(self.cwd / "runs"), llm, threshold=0.6)
-        steps = [{"tool": "bash", "input": {"command": "wc -w notes.txt"}, "ok": True},
-                 {"tool": "bash", "input": {"command": "cat notes.txt"}, "ok": True}]
+        learner = Learner(lib, ex, Jev(LexicalJev()), RunStore(self.cwd / "runs"), llm, threshold=0.6,
+                          min_saved=0, creation_cost=0)
+        steps = [{"tool": "bash", "input": {"command": f"{c} {f}"}, "ok": True}
+                 for f in ("notes.txt", "todo.txt") for c in ("wc -w", "cat")]
         out = learner.observe("count the words in notes.txt", steps, True)
         self.assertEqual(out[0]["status"], "validated", out)
         self.assertEqual(ex.run("text.word_count", {"text": "x y"}), {"words": 2})
@@ -328,16 +361,17 @@ class TestLearning(Env):
     def test_generated_duplicate_is_checked_before_registration(self):
         lib = self.lib()
         llm = FakeProvider(json_script=[
-            {"procedures": [{"name": "different_trace_name", "description": "audit records", "steps": [0],
-                             "p_reusable": 0.9}]},
+            {"procedures": [{"name": "different_trace_name", "description": "audit records",
+                             "occurrences": [{"run": "R1", "steps": [0, 1]}, {"run": "R1", "steps": [2, 3]}]}]},
             {"id": "data.repeated_audit", "description": "Audit JSONL text", "script": "print('{}')",
              "tests": [{"input": {}, "expect": {"valid": True}}]}])
-        learner = Learner(lib, Executor(lib, []), Jev(LexicalJev()), RunStore(self.tmp / "runs"), llm)
+        learner = Learner(lib, Executor(lib, []), Jev(LexicalJev()), RunStore(self.tmp / "runs"), llm,
+                          min_saved=0, creation_cost=0)
         with patch.object(learner, "_duplicate", return_value=None), \
                 patch.object(learner, "_duplicate_generated", return_value="data.jsonl_audit") as check:
             rows = learner.observe("audit records", [
                 {"tool": "bash", "input": {"command": "echo inspect"}},
-                {"tool": "bash", "input": {"command": "echo verified"}}], True)
+                {"tool": "bash", "input": {"command": "echo verified"}}] * 2, True)
         self.assertEqual(rows[0]["skipped"], "generated procedure duplicates data.jsonl_audit")
         check.assert_called_once()
         self.assertNotIn("data.repeated_audit", lib.sops)
@@ -352,6 +386,32 @@ class TestLearning(Env):
 
 
 class TestHarness(Env):
+    def answer_route(self, h):
+        """Make JEV route the task as a plain question, with confidence."""
+        real = h.jev.choose
+        def choose(q, query, opts, context=""):
+            if q == "How should this task be executed?":
+                from rameness.jev import Decision
+                return Decision("r", q, {o.id: (0.9 if o.id == "answer" else 0.1 / (len(opts) - 1)) for o in opts}, "test")
+            return real(q, query, opts, context)
+        h.jev.choose = choose
+
+    def test_a_plain_question_skips_the_sop_search(self):
+        h = Harness(self.cfg(), llm=FakeProvider([Response("A list is mutable; a tuple is not.", [], "end_turn")]))
+        self.answer_route(h)
+        with patch("rameness.router.activate", side_effect=AssertionError("searched the SOP tree")):
+            r = h.run("what is the difference between a list and a tuple in python?")
+        self.assertEqual(r.route, "answer")
+        self.assertTrue(r.plan.activation_skipped)
+
+    def test_a_question_that_needs_tools_searches_then(self):
+        h = Harness(self.cfg(), llm=FakeProvider([Response("<tool_call><function=bash>", [], "end_turn"),
+                                                  Response("done", [], "end_turn")]))
+        self.answer_route(h)
+        r = h.run("what is in the git status of this project?")
+        self.assertEqual(r.route, "agent")                       # escalated: the model reached for a tool
+        self.assertFalse(r.plan.activation_skipped)              # and the SOP search ran at that point
+
     def test_direct_route_uses_no_model(self):
         (self.cwd / "sales.csv").write_text("region,amount\neu,10\nus,30\n")
         llm = FakeProvider()
@@ -378,7 +438,9 @@ class TestHarness(Env):
         self.assertIn('"ada"', tool_msgs[0]["content"])
         self.assertEqual(r.text, "The name is ada.")
         self.assertTrue(r.metrics["success"])
-        self.assertEqual(len(list((self.cwd / ".rameness" / "runs").glob("*.json"))), 1)
+        runs = list((config.user_home() / "runs").glob("*.json"))      # history is per user, across projects
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(json.loads(runs[0].read_text())["project"], str(self.cwd))
 
     def test_reply_cut_off_at_the_output_limit_continues(self):
         script = [
@@ -400,7 +462,8 @@ class TestHarness(Env):
                 "id": "text.upper", "description": "uppercase text",
                 "inputs": {"type": "object", "properties": {"s": {"type": "string"}}, "required": ["s"]},
                 "script": "import json,sys; a=json.load(sys.stdin); print(json.dumps({'s': a['s'].upper()}))",
-                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}}]})], "tool_use"),
+                "permissions": ["compute"], "tests": [{"input": {"s": "a"}, "expect": {"s": "A"}},
+                                                      {"input": {"s": ""}, "expect": {"s": ""}}]})], "tool_use"),
             Response("", [ToolCall("3", "sop_text__upper", {"s": "hey"})], "tool_use"),
             Response("done", [], "end_turn"),
         ]

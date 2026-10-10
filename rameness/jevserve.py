@@ -1,4 +1,4 @@
-"""Set up and run JEV's local decision servers: Laya and Kev.
+"""Set up and run JEV's local decision servers: Laya, Kev and Clef.
 
 One server per machine is shared by the manager and every fleet worker, so the model is in
 memory once. ``rameness up`` starts the configured one if it isn't running.
@@ -9,6 +9,9 @@ memory once. ``rameness up`` starts the configured one if it isn't running.
 * **kev**: Jared Palmer's Kev, cloned into ``~/.rameness/jev/kev`` with its own pinned Python and
   PyTorch (it needs Python 3.12-3.13 and ``torch<2.9``, which must not leak into rameness's
   environment). Serves ``jaredpalmer/kev-4b`` on ``127.0.0.1:8008``.
+* **clef**: Cloudflare's Clef-Flash (9B, Apache-2.0), in its own environment under ``~/.rameness/jev/clef``
+  (PyTorch, transformers, bitsandbytes), served by ``clef_serve.py`` on ``127.0.0.1:8010``. 8-bit by default,
+  so it fits a 16 GB GPU; weights (~18 GB) download on the first start.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import time
 from pathlib import Path
 
 from .config import user_home
-from .jev import SystemOneJev, laya_running
+from .jev import SystemOneJev, laya_running, ping_model
 
 KEV_REPO = "https://github.com/jaredpalmer/kev.git"
 
@@ -39,9 +42,19 @@ def port(name: str, jc: dict) -> int:
     return int(url(name, jc).split(":")[2].split("/")[0])
 
 
-def installed(name: str) -> bool:
+CLEF_PACKAGES = ["torch", "transformers>=4.57", "accelerate", "bitsandbytes", "fastapi", "uvicorn", "huggingface_hub",
+                 "safetensors", "pillow"]
+
+
+def clef_python(jc: dict | None = None) -> Path:
+    return Path((jc or {}).get("clef_python") or root() / "clef" / "venv" / "bin" / "python")
+
+
+def installed(name: str, jc: dict | None = None) -> bool:
     if name == "laya":
         return shutil.which("laya-serve", path=str(Path(sys.executable).parent)) is not None
+    if name == "clef":
+        return clef_python(jc).exists()
     return (root() / "kev" / "src" / ".venv" / "bin" / "python").exists()
 
 
@@ -51,8 +64,16 @@ def setup(name: str, out=print) -> None:
         out('installing Laya into rameness\'s environment: pip install "laya[serve]" (pulls PyTorch)')
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "laya[serve]"], check=True)
         return
+    if name == "clef":
+        venv = root() / "clef" / "venv"
+        if not (venv / "bin" / "python").exists():
+            out(f"creating Clef's environment in {venv}")
+            subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+        out("installing Clef's dependencies (PyTorch, transformers, bitsandbytes; a few GB)")
+        subprocess.run([str(venv / "bin" / "python"), "-m", "pip", "install", "-q", *CLEF_PACKAGES], check=True)
+        return
     if name != "kev":
-        raise ValueError(f"unknown decision model {name!r}: laya or kev")
+        raise ValueError(f"unknown decision model {name!r}: laya, kev or clef")
     src, tools = root() / "kev" / "src", root() / "kev" / "tools"
     if not (src / ".git").exists():
         out(f"cloning Kev into {src}")
@@ -84,6 +105,10 @@ def command(name: str, jc: dict) -> tuple[list[str], dict, Path | None]:
         if device:
             env["LAYA_DEVICE"] = device
         return [str(Path(sys.executable).parent / "laya-serve")], env, None
+    if name == "clef":
+        return ([str(clef_python(jc)), "-I", str(Path(__file__).with_name("clef_serve.py")),
+                 "--model", jc.get("clef_checkpoint") or "Cloudflare/clef-flash", "--port", str(port(name, jc)),
+                 "--bits", str(jc.get("clef_bits") or 8), "--device", "cpu" if device == "cpu" else "cuda"], env, None)
     src = root() / "kev" / "src"
     if device == "cpu":
         env["CUDA_VISIBLE_DEVICES"] = ""
@@ -112,10 +137,10 @@ def _pid(name: str) -> int | None:
 
 def up(name: str, jc: dict, wait: float = 900, out=print) -> str:
     """Start ``name`` in the background (no-op if it already answers). Waits until it answers:
-    the first start downloads weights (Laya ~2 GB, Kev-4B ~9 GB)."""
-    if laya_running(url(name, jc)):
+    the first start downloads weights (Laya ~2 GB, Kev-4B ~9 GB, Clef-Flash ~18 GB)."""
+    if laya_running(url(name, jc), model=ping_model(name, jc)):
         return f"{name} already answering at {url(name, jc)}"
-    if not installed(name):
+    if not installed(name, jc):
         raise RuntimeError(f"{name} is not installed: run `rameness jev setup {name}`")
     cmd, env, cwd = command(name, jc)
     root().mkdir(parents=True, exist_ok=True)
@@ -130,7 +155,7 @@ def up(name: str, jc: dict, wait: float = 900, out=print) -> str:
         if p.poll() is not None:
             tail = log.read_text(errors="replace")[-1500:]
             raise RuntimeError(f"{name} exited with code {p.returncode}:\n{tail}")
-        if laya_running(url(name, jc), timeout=5):
+        if laya_running(url(name, jc), timeout=5, model=ping_model(name, jc)):
             return f"{name} answering at {url(name, jc)} after {time.time() - t0:.0f}s"
         time.sleep(3)
     return f"{name} still loading after {wait:.0f}s; it keeps starting in the background (log: {log})"
@@ -156,8 +181,8 @@ def down(name: str) -> str:
 def status(jc: dict) -> list[str]:
     from .jev import laya_importable, resolve_backend
     lines = []
-    for name in ("kev", "laya"):
-        state = "answering" if laya_running(url(name, jc)) else ("installed" if installed(name) else "not installed")
+    for name in ("clef", "kev", "laya"):
+        state = "answering" if laya_running(url(name, jc), model=ping_model(name, jc)) else ("installed" if installed(name, jc) else "not installed")
         lines.append(f"{name:9s} {state:14s} {url(name, jc)}")
     lines.append(f"laya-local {'available' if laya_importable() else 'not installed':14s} (in-process)")
     key = jc.get("typesafe_key_env", "TYPESAFE_API_KEY")
@@ -169,7 +194,7 @@ def status(jc: dict) -> list[str]:
 def ensure(jc: dict, out=print) -> None:
     """For `rameness up`: start the configured local server if it's installed and not running."""
     name = jc.get("serve")
-    if name in ("kev", "laya") and installed(name) and not laya_running(url(name, jc)):
+    if name in ("kev", "laya", "clef") and installed(name, jc) and not laya_running(url(name, jc), model=ping_model(name, jc)):
         try:
             out(up(name, jc, out=out))
         except Exception as e:                    # never block the fleet on the decision server

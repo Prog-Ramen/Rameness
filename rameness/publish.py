@@ -18,6 +18,7 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -54,11 +55,33 @@ def scrub_text(text: str, terms: list[str], label: str) -> list[str]:
     return out
 
 
-def scrub_tree(root: Path, org: Org | None = None) -> list[str]:
-    """Scan every text file under ``root`` (skipping .git) - used by pre-push hooks and releases."""
+def changed_files(repo: Path) -> list[str]:
+    """Files a push from ``repo`` would add or change: committed since the remote's default branch, plus
+    anything not committed yet. Paths relative to the repo; deleted files left out."""
+    def run(*args):
+        p = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=60)
+        return p.stdout if p.returncode == 0 else None
+    head = (run("symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD") or "").strip()
+    base = None
+    for ref in [head] if head else ["origin/main", "origin/master"]:
+        base = (run("merge-base", "HEAD", ref) or "").strip() or None
+        if base:
+            break
+    names = set((run("diff", "--name-only", base, "HEAD") or "").splitlines()) if base else \
+        set((run("ls-files") or "").splitlines())               # nothing to compare against: all of it
+    for line in (run("status", "--porcelain", "--untracked-files=all") or "").splitlines():
+        names.add(line[3:].split(" -> ")[-1])
+    return sorted(n for n in names if n and (repo / n).is_file())
+
+
+def scrub_tree(root: Path, org: Org | None = None, only: list[str] | None = None) -> list[str]:
+    """Scan every text file under ``root`` (skipping .git), or only the ``only`` paths (relative to root) -
+    used by pre-push hooks and releases. A pre-push hook scans what the push changes, wherever it is, so the
+    target repo's own deliberate test fixtures (fake secrets) do not block it."""
     terms = [t for t in ((org.private_terms + ([org.name] if org.name else [])) if org else []) if t]
     findings = []
-    for f in sorted(root.rglob("*")):
+    files = [root / n for n in only] if only is not None else sorted(root.rglob("*"))
+    for f in files:
         if not f.is_file() or ".git" in f.relative_to(root).parts or f.suffix not in TEXT_SUFFIXES:
             continue
         text = f.read_text(errors="replace")
@@ -70,7 +93,14 @@ def scrub_tree(root: Path, org: Org | None = None) -> list[str]:
             except json.JSONDecodeError:
                 pass
         findings += scrub_text(text, terms, str(f.relative_to(root)))
-    return findings + external_scan(root)
+    if only is None:
+        return findings + external_scan(root)
+    with tempfile.TemporaryDirectory() as tmp:          # the external scanners see the same files
+        for n in only:
+            if (root / n).is_file():
+                (Path(tmp) / n).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(root / n, Path(tmp) / n)
+        return findings + external_scan(Path(tmp))
 
 
 def external_scan(root: Path) -> list[str]:
@@ -159,8 +189,9 @@ def classify(jev: Jev, sop: SOP, org: Org, save: bool = True) -> dict:
     leak = private_info(jev, sop, findings) if not hard else {"leak": False, "findings": []}
     d = jev.choose("Is this procedure personal to one user or organization, or general enough to share publicly?",
                    sop.digest(),                     # the SOP's own code; private terms are checked by the scrubber
-                   [Option("personal", PERSONAL_CUES, desc="Specific to one user or organization: its own systems, "
-                                                          "data, customers, accounts or business rules."),
+                   [Option("personal", PERSONAL_CUES, desc="Specific to one user, organization or narrow domain: its "
+                                                          "own systems, data, customers, accounts, business rules or "
+                                                          "specialist workflow."),
                     Option("general", GENERAL_CUES, desc="A generic, reusable procedure useful to anyone, with nothing "
                                                         "organization-specific in it.")])
     if hard:
@@ -205,7 +236,8 @@ def categorize(jev: Jev, lib: Library, sop: SOP, min_p: float = 0.5) -> str:
 
 
 def recategorize(lib: Library, sop: SOP, category: str) -> SOP:
-    """Move a private SOP to ``<category>.<name>`` (its folder and id), keeping everything else."""
+    """Move a private SOP to ``<category>.<name>`` (its folder and id), keeping everything else. ``category``
+    may be several levels deep (tree.place walks the tree); the SOP's own name is kept."""
     name = sop.id.split(".")[-1]
     new_id = f"{category}.{name}"
     if new_id == sop.id or sop.scope != "private":
@@ -239,11 +271,12 @@ def destination(jev: Jev, sop: SOP, runs_seen: int, runs_total: int, min_share: 
     procedure appeared in; it must reach ``min_share`` over at least ``min_runs`` runs, and JEV must
     also judge it broadly needed. Anything else goes to the registry, which costs only a pull."""
     share = runs_seen / runs_total if runs_total else 0.0
-    d = jev.choose("Should this procedure ship with the agent itself because almost every task uses it, or live "
-                   "in the public registry for the tasks that need it?",
+    d = jev.choose("Is this procedure so generic that almost every task uses it (ship it with the agent), or a "
+                   "significant procedure that only some tasks need (keep it in the public registry)?",
                    f"{sop.id}: {sop.description}. Used in {runs_seen} of {runs_total} recent successful runs.",
-                   [Option("builtin", BUILTIN_CUES, desc="A basic procedure almost every task uses; worth shipping "
-                                                         "with the agent so it never has to be downloaded."),
+                   [Option("builtin", BUILTIN_CUES, desc="Super generic: a basic procedure almost every task uses; "
+                                                         "worth shipping with the agent so it never has to be "
+                                                         "downloaded."),
                     Option("registry", REGISTRY_CUES, desc="Useful for some tasks; fetched from the registry when "
                                                            "a task needs it.")])
     if runs_total < min_runs:
@@ -288,12 +321,21 @@ def build_index(pkg_root: Path) -> Path:
 
     def entry(n) -> dict:
         if n.sop:
+            # columnar, like Dremel reading only the columns a query needs: a listing carries only what JEV
+            # chooses by; the rest (inputs, permissions, file hashes) is in the SOP's own _meta.json, fetched
+            # only for the SOPs JEV picks. The listing pins that file by its hash.
             s = n.sop
             files = [{"path": str(f.relative_to(pkg_root)), "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
-                     for f in sorted(s.path.rglob("*")) if f.is_file() and "__pycache__" not in f.parts]
-            return {"type": "sop", "id": s.id, "description": s.description, "keywords": s.keywords, "kind": s.kind,
-                    "permissions": s.permissions, "version": s.version, "inputs": s.inputs, "status": s.status,
-                    "path": str(s.path.relative_to(pkg_root)), "files": files}
+                     for f in sorted(s.path.rglob("*")) if f.is_file() and "__pycache__" not in f.parts
+                     and f.name != "_meta.json"]
+            meta = {"kind": s.kind, "permissions": s.permissions, "version": s.version, "inputs": s.inputs,
+                    "status": s.status, "files": files}
+            data = json.dumps(meta, indent=1, sort_keys=True).encode()
+            (s.path / "_meta.json").write_bytes(data)
+            return {"type": "sop", "id": s.id, "description": s.description, "keywords": s.keywords,
+                    "path": str(s.path.relative_to(pkg_root)),
+                    "meta": {"path": str((s.path / "_meta.json").relative_to(pkg_root)),
+                             "sha256": hashlib.sha256(data).hexdigest()}}
         return {"type": "node", "id": n.id, "description": n.description, "keywords": n.keywords,
                 "requires": [{"name": r.name, "hints": r.hints, "question": r.question} for r in n.requires],
                 "children": sorted(n.children)}
@@ -302,9 +344,11 @@ def build_index(pkg_root: Path) -> Path:
         if n.id and not n.sop:
             d = pkg_root.joinpath(*n.id.split("."))
             (d / "_index.json").write_text(json.dumps(
-                {"format": 3, "id": n.id, "entries": [entry(c) for _, c in sorted(n.children.items())]}, indent=1))
+                {"format": 4, "id": n.id, "entries": [entry(c) for _, c in sorted(n.children.items())]}, indent=1))
     p = pkg_root / "index.json"
-    p.write_text(json.dumps({"format": 3, "id": "", "entries": [entry(c) for _, c in sorted(lib.root.children.items())]},
+    aliases = pkg_root / "_aliases.json"                 # SOPs moved by a split still answer to their old ids
+    p.write_text(json.dumps({"format": 4, "id": "", "entries": [entry(c) for _, c in sorted(lib.root.children.items())],
+                             **({"aliases": json.loads(aliases.read_text())} if aliases.exists() else {})},
                             indent=1))
     return p
 

@@ -197,10 +197,21 @@ def behaviour(page, s: Shots, ok, out, res, r, shot):
         page.wait_for_timeout(300)
         page.mouse.move(W // 2, H // 2)
 
+    def press(button):
+        """Place with a click; break by HOLDING the button, as in Minecraft, where mining takes time (about 0.75 s
+        for dirt or grass by hand). A game that breaks on a single click breaks within the hold too."""
+        page.mouse.move(W // 2, H // 2)
+        if button == "right":
+            page.mouse.click(W // 2, H // 2, button="right")
+            return
+        page.mouse.down(button="left")
+        page.wait_for_timeout(2500)
+        page.mouse.up(button="left")
+
     def click_test(button):
         best = (False, 0.0, 0.0)
         for attempt in range(4):
-            got = responds(lambda: page.mouse.click(W // 2, H // 2, button=button), CENTER, ms=500)
+            got = responds(lambda: press(button), CENTER, ms=500)
             if got[0]:
                 return got, attempt + 1
             best = max(best, got, key=lambda g: g[1])

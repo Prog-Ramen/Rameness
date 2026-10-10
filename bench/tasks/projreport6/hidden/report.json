@@ -1,0 +1,68 @@
+{
+  "billing": {
+    "py_files": 5,
+    "lines": 109,
+    "todos": [
+      "mod1.py:13: check permissions",
+      "mod1.py:22: add a timeout",
+      "mod3.py:14: handle empty input",
+      "mod3.py:19: handle empty input",
+      "mod3.py:5: log the failure"
+    ],
+    "tests_pass": true
+  },
+  "cache": {
+    "py_files": 4,
+    "lines": 67,
+    "todos": [
+      "mod0.py:14: check permissions",
+      "mod0.py:5: handle empty input",
+      "mod1.py:14: cache this lookup",
+      "mod1.py:9: handle empty input"
+    ],
+    "tests_pass": false
+  },
+  "inventory": {
+    "py_files": 3,
+    "lines": 52,
+    "todos": [
+      "mod1.py:18: log the failure",
+      "mod1.py:9: close the file"
+    ],
+    "tests_pass": false
+  },
+  "metrics": {
+    "py_files": 3,
+    "lines": 58,
+    "todos": [
+      "mod0.py:14: cache this lookup",
+      "mod0.py:9: cache this lookup",
+      "mod1.py:5: handle empty input",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "notify": {
+    "py_files": 3,
+    "lines": 63,
+    "todos": [
+      "mod0.py:14: close the file",
+      "mod0.py:5: cache this lookup",
+      "mod1.py:14: remove the hard-coded limit",
+      "mod1.py:5: add retries",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "queue": {
+    "py_files": 5,
+    "lines": 84,
+    "todos": [
+      "mod1.py:17: handle empty input",
+      "mod2.py:5: support unicode",
+      "mod3.py:5: support unicode",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  }
+}

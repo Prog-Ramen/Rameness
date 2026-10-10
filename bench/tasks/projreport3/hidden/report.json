@@ -1,0 +1,75 @@
+{
+  "cache": {
+    "py_files": 4,
+    "lines": 74,
+    "todos": [
+      "mod1.py:10: close the file",
+      "mod1.py:5: log the failure",
+      "mod2.py:17: check permissions"
+    ],
+    "tests_pass": false
+  },
+  "notify": {
+    "py_files": 4,
+    "lines": 66,
+    "todos": [
+      "mod0.py:10: close the file",
+      "mod0.py:15: handle empty input",
+      "mod0.py:5: add a timeout",
+      "mod1.py:10: close the file",
+      "mod1.py:19: add a timeout",
+      "mod1.py:5: handle empty input",
+      "mod2.py:5: add retries"
+    ],
+    "tests_pass": false
+  },
+  "queue": {
+    "py_files": 3,
+    "lines": 63,
+    "todos": [
+      "mod0.py:10: cache this lookup",
+      "mod0.py:5: remove the hard-coded limit",
+      "mod1.py:14: support unicode",
+      "mod1.py:23: remove the hard-coded limit",
+      "mod1.py:9: remove the hard-coded limit"
+    ],
+    "tests_pass": true
+  },
+  "reports": {
+    "py_files": 5,
+    "lines": 85,
+    "todos": [
+      "mod0.py:13: close the file",
+      "mod0.py:22: support unicode",
+      "mod2.py:13: close the file",
+      "mod3.py:10: validate the range",
+      "mod3.py:5: cache this lookup"
+    ],
+    "tests_pass": true
+  },
+  "sessions": {
+    "py_files": 5,
+    "lines": 89,
+    "todos": [
+      "mod1.py:10: remove the hard-coded limit",
+      "mod1.py:15: close the file",
+      "mod1.py:5: remove the hard-coded limit",
+      "mod2.py:14: validate the range",
+      "mod2.py:19: handle empty input",
+      "mod2.py:24: cache this lookup",
+      "mod2.py:5: handle empty input",
+      "mod3.py:13: log the failure",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "uploads": {
+    "py_files": 3,
+    "lines": 52,
+    "todos": [
+      "mod0.py:9: support unicode",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  }
+}

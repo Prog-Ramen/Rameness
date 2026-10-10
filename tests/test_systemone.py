@@ -37,6 +37,8 @@ class FakeLaya(BaseHTTPRequestHandler):
         pass
 
 
+DOWN = "http://127.0.0.1:9/v1/systemone"
+
 OPTS = [Option("ship", "deploy the release"), Option("wait", "hold and do nothing"), Option("ask", "ask the user")]
 
 
@@ -170,9 +172,9 @@ class SystemOneTest(unittest.TestCase):
     def test_auto_prefers_laya_then_typesafe_then_lexical(self):
         self.assertTrue(laya_running(self.url))
         self.assertFalse(laya_running("http://127.0.0.1:9/v1/systemone"))
-        self.assertEqual(jev_mod.resolve_backend({"backend": "auto", "laya_url": self.url,
+        self.assertEqual(jev_mod.resolve_backend({"backend": "auto", "laya_url": self.url, "clef_url": DOWN,
                                                   "kev_url": "http://127.0.0.1:9/v1/systemone"}), "laya")
-        down = {"backend": "auto", "laya_url": "http://127.0.0.1:9/v1/systemone",
+        down = {"backend": "auto", "laya_url": "http://127.0.0.1:9/v1/systemone", "clef_url": DOWN,
                 "kev_url": "http://127.0.0.1:9/v1/systemone"}
         # no local model at all: servers down and in-process Laya not installed
         no_laya = mock.patch.object(jev_mod, "laya_importable", return_value=False)
@@ -183,10 +185,66 @@ class SystemOneTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {}, clear=True):
             self.assertEqual(jev_mod.resolve_backend(down), "lexical")
         no_laya.stop()
-        cfg = {"jev": {"backend": "auto", "laya_url": self.url, "kev_url": "http://127.0.0.1:9/v1/systemone"}}
+        cfg = {"jev": {"backend": "auto", "laya_url": self.url, "clef_url": DOWN,
+                       "kev_url": "http://127.0.0.1:9/v1/systemone"}}
         self.assertEqual(jev_mod.build(cfg, llm=object()).backend.name, "laya")   # an LLM never decides
         with self.assertRaisesRegex(ValueError, "unknown jev.backend"):
             jev_mod.build({"jev": {"backend": "cascade"}})
+
+
+class FakeClef(FakeLaya):
+    """Like Clef's server: a request without a model name is refused."""
+
+    def do_POST(self):
+        length = int(self.headers["Content-Length"])
+        body = self.rfile.read(length)
+        if "model" not in json.loads(body):
+            self.send_response(400)
+            self.end_headers()
+            return
+        import io
+        self.rfile = io.BytesIO(body)
+        self.headers.replace_header("Content-Length", str(length))
+        FakeLaya.do_POST(self)
+
+
+class ClefTest(unittest.TestCase):
+    """Clef is a first-class backend: swap it in for Kev with one setting."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = HTTPServer(("127.0.0.1", 0), FakeClef)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.url = f"http://127.0.0.1:{cls.srv.server_port}/v1/systemone"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def test_the_readiness_ping_carries_the_model_name_clef_requires(self):
+        self.assertFalse(laya_running(self.url))
+        self.assertTrue(laya_running(self.url, model="clef-flash"))
+
+    def test_backend_clef_sends_its_model_name_on_every_decision(self):
+        FakeLaya.seen = []
+        b = jev_mod.build({"jev": {"backend": "clef", "clef_url": self.url}}).backend
+        self.assertEqual((b.name, b.model), ("clef", "clef-flash"))
+        p = b.choose("What next?", "deploy the release now", OPTS)
+        self.assertEqual(max(range(3), key=p.__getitem__), 0)
+        self.assertEqual(FakeLaya.seen[-1]["model"], "clef-flash")
+
+    def test_auto_finds_a_running_clef(self):
+        self.assertEqual(jev_mod.resolve_backend({"backend": "auto", "clef_url": self.url, "kev_url": DOWN,
+                                                  "laya_url": DOWN}), "clef")
+
+    def test_jev_up_clef_runs_the_bundled_server_in_its_own_python(self):
+        from rameness import jevserve
+        cmd, _, _ = jevserve.command("clef", {"clef_python": "/opt/clef/bin/python", "clef_bits": 8})
+        self.assertEqual(cmd[:2], ["/opt/clef/bin/python", "-I"])               # isolated: nothing shadows imports
+        self.assertTrue(cmd[2].endswith("clef_serve.py"))
+        self.assertEqual(cmd[cmd.index("--model") + 1], "Cloudflare/clef-flash")
+        self.assertEqual((cmd[cmd.index("--port") + 1], cmd[cmd.index("--bits") + 1]), ("8010", "8"))
+        self.assertTrue(jevserve.installed("clef", {"clef_python": __file__}))
 
 
 if __name__ == "__main__":
