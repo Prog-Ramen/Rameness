@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import schemas
 from .jev import Jev, Option
 from .org import Org
 from .sops import SOP, Activation, Library, Requirement, activate, validate_args
@@ -71,6 +72,7 @@ class Plan:
     pulls: list[dict] = field(default_factory=list)   # remote-registry pull decisions made for this task
     scope: str = "specific"         # specific | open_ended (task_scope: build to the requirements, or feature cycles)
     scope_probs: dict = field(default_factory=dict)
+    activation_skipped: bool = False   # a plain question: the SOP tree was not searched (activation_for, if needed)
 
     def describe(self) -> str:
         lines = [f"route:  {self.route}  {fmt(self.route_probs)}  [decided by: {self.gate}]",
@@ -139,6 +141,14 @@ class Router:
         self.validator = validator           # sop_id -> list of test failures
         self.on_decision = None              # (kind, decision, detail) -> None, for the fleet shadow view
 
+    def activation_for(self, task: str, resolved: dict | None = None) -> Activation:
+        """The SOP-tree search for a task, on its own: for a plan that skipped it because the task looked like a
+        plain question, once it turns out to need tools."""
+        jc = self.cfg["jev"]
+        return activate(self.lib, self.jev, self.org.expand(task), self.org.render(),
+                        {**self.org.defaults, **(resolved or {})}, jc["activate_threshold"], jc["explore_threshold"],
+                        jc["beam"], jc["max_sops"])
+
     def _pull_remote(self, task: str, ctx: str, defaults: dict) -> list[dict]:
         """Coverage gap: let JEV pick SOPs from the remote registry, gated and verified."""
         from .remote import PULL_Q, pull_options
@@ -195,7 +205,7 @@ class Router:
                 "Extract tool arguments from a request. Output JSON only.",
                 f"Request: {task}\nKnown defaults: {defaults}\nTool: {sop.interface()}\n"
                 f"Schema: {sop.inputs}\nReply with the arguments object; use null for anything not stated.",
-                max_tokens=1000)
+                max_tokens=1000, schema=schemas.SOP_ARGS)
         except Exception:
             return None
         args.update({k: v for k, v in got.items() if v is not None and k in sop.inputs.get("properties", {})})
@@ -206,10 +216,14 @@ class Router:
         jc = self.cfg["jev"]
         org_ctx = self.org.render()
         task_x = self.org.expand(task)
-        act = activate(self.lib, self.jev, task_x, org_ctx, {**self.org.defaults, **resolved},
-                       jc["activate_threshold"], jc["explore_threshold"], jc["beam"], jc["max_sops"])
         rd = self.jev.choose("How should this task be executed?", task, ROUTES)
         ed = self.jev.choose("How much reasoning does this task need?", task, EFFORT)
+        # a plain question uses no tools, so searching the SOP tree would be wasted: skip it, and search only if
+        # the route turns out to need tools after all (activation_for)
+        skip = decisive(rd, "agent") == "answer" and rd.probs.get("answer", 0) >= 0.6
+        act = Activation() if skip else activate(self.lib, self.jev, task_x, org_ctx, {**self.org.defaults, **resolved},
+                                                 jc["activate_threshold"], jc["explore_threshold"], jc["beam"],
+                                                 jc["max_sops"])
         pulls = []
         rc = self.cfg.get("registry") or {}
         best = act.selected[0][1] if act.selected else 0.0
@@ -221,7 +235,7 @@ class Router:
                                jc["activate_threshold"], jc["explore_threshold"], jc["beam"], jc["max_sops"])
         # err towards thinking hard: high effort whenever JEV gives it a real chance, not only when it wins
         effort = "high" if ed.probs.get("high", 0) > jc.get("high_effort_above", 0.10) else decisive(ed, "medium")
-        plan = Plan(task, decisive(rd, "agent"), effort, act, rd.probs, ed.probs, pulls=pulls)
+        plan = Plan(task, decisive(rd, "agent"), effort, act, rd.probs, ed.probs, pulls=pulls, activation_skipped=skip)
         ts = self.cfg.get("task_scope") or {}
         if ts.get("mode", "jev") == "jev":
             sd = self.jev.choose(SCOPE_Q, task, SCOPES)
@@ -236,6 +250,9 @@ class Router:
             else:
                 plan.gate = "jev-noted"
 
+        if plan.activation_skipped and plan.route != "answer":   # the user chose another route: search after all
+            act = plan.activation = self.activation_for(task, resolved)
+            plan.activation_skipped = False
         if act.missing:
             plan.route = "clarify"
             plan.questions = act.missing

@@ -41,7 +41,7 @@ class RegistryTest(unittest.TestCase):
         return Library([(self.root, "private")]).get(sid)
 
     def reg(self, **over):
-        cfg = {"registry": {"public": str(self.public), **over}}
+        cfg = {"registry": {"public": str(self.public), "min_tokens_saved": 0, **over}}   # tiny example SOPs
         return Registry(cfg, self.tmp / "home", self.org, self.jev)
 
     def test_classification(self):
@@ -125,6 +125,86 @@ class RegistryTest(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("BLOCKED", p.stderr)
 
+    def test_existing_fixture_secrets_in_the_target_repo_do_not_block_a_proposal(self):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        (seed / "tests").mkdir()
+        (seed / "tests" / "test_ci.py").write_text('TOKEN = "ghp_abcdefghijklmnopqrstuvwxyz123456"\n')
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "CI tests with a fake token")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        self.assertIn(self.reg().propose(gen)["status"], ("proposed", "pushed_local"))
+
+    def test_a_proposal_is_placed_in_the_registry_tree_not_the_private_one(self):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        for cid, desc in (("text", "Text transformations"), ("text.case", "upper lower title case conversion of text")):
+            d = seed / "sops" / Path(*cid.split("."))
+            d.mkdir(parents=True)
+            (d / "_node.json").write_text(json.dumps({"description": desc}))
+        lower = seed / "sops" / "text" / "case" / "lower"
+        lower.mkdir()
+        (lower / "sop.json").write_text(json.dumps({"id": "text.case.lower", "description": "lower case text"}))
+        (lower / "run.py").write_text("print('{}')\n")
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "a registry with a case subcategory")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        with patch("rameness.tree.place", return_value="text.case"):      # JEV's walk (tested in test_tree)
+            entry = self.reg().propose(gen)
+        self.assertEqual(entry["registry_id"], "text.case.upper")
+        pushed = sh(self.public, "show", f"{entry['head']}:sops/text/case/upper/sop.json")
+        self.assertEqual(json.loads(pushed.stdout)["id"], "text.case.upper")
+
+    def seed_crowded_registry(self, n=8):
+        seed = self.tmp / "seed"
+        subprocess.run(["git", "clone", "-q", str(self.public), str(seed)], check=True, capture_output=True)
+        (seed / "sops" / "text").mkdir(parents=True)
+        (seed / "sops" / "text" / "_node.json").write_text(json.dumps({"description": "Text transformations"}))
+        names = [f"case_{i}" for i in range(4)] + [f"slug_{i}" for i in range(n - 4)]
+        for name in names:
+            d = seed / "sops" / "text" / name
+            d.mkdir()
+            (d / "sop.json").write_text(json.dumps({"id": f"text.{name}", "description": name.replace("_", " ")}))
+            (d / "run.py").write_text("print('{}')\n")
+        sh(seed, "add", "-A")
+        sh(seed, "commit", "-qm", "a full text category")
+        sh(seed, "push", "-q", "origin", "HEAD:main")
+        return names
+
+    def test_a_proposal_that_crowds_a_category_carries_the_reorganization(self):
+        names = self.seed_crowded_registry()
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        groups = {"groups": [
+            {"name": "case", "description": "change letter case",
+             "members": [f"text.{n}" for n in names if n.startswith("case")] + ["text.upper"]},
+            {"name": "slug", "description": "make url slugs", "members": [f"text.{n}" for n in names if n.startswith("slug")]}]}
+        reg = Registry({"registry": {"public": str(self.public), "min_tokens_saved": 0}}, self.tmp / "home", self.org,
+                       self.jev, llm=Mock(complete_json=Mock(return_value=groups)))
+        with patch("rameness.tree.place", return_value="text"), \
+                patch.object(self.jev, "yes", return_value=0.9):
+            entry = reg.propose(gen)
+        self.assertEqual(entry["registry_id"], "text.case.upper")          # it moved with the split
+        self.assertTrue(entry["reorganized"])
+        files = sh(self.public, "ls-tree", "-r", "--name-only", entry["head"]).stdout.split()
+        self.assertIn("sops/text/case/upper/sop.json", files)            # the new SOP...
+        self.assertIn("sops/text/slug/slug_0/sop.json", files)            # ...and the reorganization, one PR
+        self.assertIn("sops/_aliases.json", files)
+        self.assertNotIn("sops/text/case_0/sop.json", files)
+
+    def test_a_crowded_category_without_a_grouping_is_not_proposed(self):
+        self.seed_crowded_registry()
+        gen = self.sop("text.upper", "Convert text to upper case: a generic reusable text utility",
+                       GENERIC, ["text", "convert", "format", "utility", "generic"])
+        reg = Registry({"registry": {"public": str(self.public), "min_tokens_saved": 0}}, self.tmp / "home", self.org,
+                       self.jev, llm=Mock(complete_json=Mock(return_value={"groups": []})))
+        with patch("rameness.tree.place", return_value="text"), self.assertRaisesRegex(RegistryError, "no grouping"):
+            reg.propose(gen)
+
     def validated(self):
         from rameness.learning import register_sop
         lib = Library([(self.root, "private")])
@@ -133,7 +213,8 @@ class RegistryTest(unittest.TestCase):
             "id": "text.upper", "description": "Convert text to upper case: a generic reusable text utility",
             "script": GENERIC, "permissions": ["compute"], "keywords": ["text", "utility", "generic"],
             "inputs": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
-            "tests": [{"input": {"text": "ab"}, "expect": {"upper": "AB"}}]},
+            "tests": [{"input": {"text": "ab"}, "expect": {"upper": "AB"}},
+                      {"input": {"text": ""}, "expect": {"upper": ""}}]},
             root=self.root, jev=self.jev, org=self.org)
         self.assertEqual(failures, [])
         self.assertEqual(sop.visibility, "shareable")
@@ -192,6 +273,18 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(rows[0]["status"], "failed")
         self.assertIn("private terms", rows[0]["error"])
         push.assert_not_called()
+
+    def test_every_kind_of_test_ships_with_the_proposal_and_meets_ramensops_rules(self):
+        from rameness.registry import publishable_tests
+        lib, executor, sop = self.validated()
+        sop.tests += [{"input": {"text": "x"}, "expect_keys": ["upper"]},
+                      {"input": {"text": "y"}, "files": {"in.txt": "y"}, "expect": {"upper": "Y"}}]
+        self.assertEqual(publishable_tests(sop), [])
+        sop.tests = [sop.tests[0], dict(sop.tests[0])]                # the same case twice
+        self.assertIn("tests must exercise distinct inputs", publishable_tests(sop))
+        sop.tests = [{"input": {"text": "a"}, "expect": {"upper": "A"}},
+                     {"input": {"text": "b"}, "files": {"../x": ""}, "expect": {"upper": "B"}}]
+        self.assertIn("test 1: fixture files must use relative paths", publishable_tests(sop))
 
     def test_missing_tests_cannot_auto_publish(self):
         lib, executor, sop = self.validated()

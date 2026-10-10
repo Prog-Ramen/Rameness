@@ -1,5 +1,9 @@
 # Rameness iteration history
 
+**In brief:** Rameness went from 0% to 100% on the Minecraft benchmark between 2026-09-25 and
+2026-10-07. This is the version-by-version record: what changed, why, how the next runs scored, and whether
+each change actually reached them.
+
 How Rameness changed between 2026-09-25 and 2026-10-07, what each change was meant to fix, how the runs that
 followed scored, and whether each change actually reached those runs. Everything here comes from the run records
 (copied into [`bench/minecraft/runs/`](../bench/minecraft/runs/README.md): scores, judge verdicts, event and request

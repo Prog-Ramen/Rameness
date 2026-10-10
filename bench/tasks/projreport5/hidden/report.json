@@ -1,0 +1,63 @@
+{
+  "geo": {
+    "py_files": 5,
+    "lines": 89,
+    "todos": [
+      "mod0.py:5: support unicode",
+      "mod2.py:17: add a timeout",
+      "mod3.py:14: check permissions",
+      "mod3.py:5: cache this lookup",
+      "tests/test_basics.py:1: cover the error cases"
+    ],
+    "tests_pass": true
+  },
+  "media": {
+    "py_files": 3,
+    "lines": 58,
+    "todos": [],
+    "tests_pass": false
+  },
+  "parser": {
+    "py_files": 3,
+    "lines": 54,
+    "todos": [
+      "mod0.py:17: close the file",
+      "mod1.py:10: add retries",
+      "mod1.py:15: support unicode",
+      "mod1.py:5: add retries"
+    ],
+    "tests_pass": true
+  },
+  "reports": {
+    "py_files": 5,
+    "lines": 73,
+    "todos": [
+      "mod0.py:13: validate the range",
+      "mod2.py:10: add retries",
+      "mod2.py:5: handle empty input",
+      "mod3.py:18: add a timeout",
+      "mod3.py:5: support unicode"
+    ],
+    "tests_pass": true
+  },
+  "search": {
+    "py_files": 4,
+    "lines": 56,
+    "todos": [
+      "mod0.py:9: add a timeout"
+    ],
+    "tests_pass": false
+  },
+  "uploads": {
+    "py_files": 5,
+    "lines": 85,
+    "todos": [
+      "mod0.py:9: log the failure",
+      "mod1.py:14: cache this lookup",
+      "mod1.py:19: log the failure",
+      "mod1.py:24: remove the hard-coded limit",
+      "mod1.py:5: check permissions"
+    ],
+    "tests_pass": false
+  }
+}

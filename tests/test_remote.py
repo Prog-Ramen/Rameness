@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rameness import config
 from rameness.harness import Harness
-from rameness.llm import FakeProvider
+from rameness.llm import FakeProvider, Response, ToolCall
 from rameness.publish import build_index
 from rameness.sops import BUILTIN_ROOT
 
@@ -57,8 +57,21 @@ class RemotePullTest(unittest.TestCase):
         self.assertEqual({e["type"] for e in root["entries"]}, {"node"})          # categories only, no SOPs
         self.assertTrue((self.reg / "text" / "_index.json").exists())
         sub = json.loads((self.reg / "text" / "_index.json").read_text())
-        self.assertEqual(sub["entries"][0]["id"], "text.slugify")
-        self.assertTrue(sub["entries"][0]["files"][0]["sha256"])
+        e = sub["entries"][0]
+        self.assertEqual(e["id"], "text.slugify")
+        # columnar: the listing holds only what JEV chooses by; the rest is in _meta.json, pinned by its hash
+        self.assertEqual(sorted(e), ["description", "id", "keywords", "meta", "path", "type"])
+        meta = (self.reg / e["meta"]["path"]).read_bytes()
+        import hashlib
+        self.assertEqual(hashlib.sha256(meta).hexdigest(), e["meta"]["sha256"])
+        self.assertTrue(json.loads(meta)["files"][0]["sha256"])
+
+    def test_tampered_metadata_is_refused(self):
+        e = json.loads((self.reg / "text" / "_index.json").read_text())["entries"][0]
+        (self.reg / e["meta"]["path"]).write_text('{"files": [], "permissions": []}')
+        h = self.harness()
+        plan = h.plan("slugify this blog post title into a url slug")
+        self.assertNotIn("text.slugify", [x["id"] for x in plan.pulls if x["result"] == "pulled"])
 
     def test_pulls_only_the_needed_sop_and_only_explored_branches(self):
         h = self.harness()
@@ -112,6 +125,29 @@ class RemotePullTest(unittest.TestCase):
         h = self.harness(remote_index=(self.tmp / "nowhere" / "index.json").as_uri())
         plan = h.plan("slugify this blog post title into a url slug")
         self.assertEqual(plan.pulls, [])
+
+    def run_with_search(self, query, task="write a short blog post about our ramen shop", **reg):
+        """A task that planning gives no registry SOP; mid-run the agent searches, then calls what it found."""
+        h = self.harness(**reg)
+        h.llm = FakeProvider([Response("", [ToolCall("1", "sop_search", {"query": query})], "tool_use"),
+                              Response("", [ToolCall("2", "sop_text__slugify", {"text": "Ramen Is Good"})], "tool_use"),
+                              Response("done", [], "end_turn")])
+        h.router.llm = h.llm
+        h.run(task, allow_direct=False)
+        results = [m for m in h.messages if m.get("role") in ("tool", "user")]
+        return h, json.dumps(results, default=str)
+
+    def test_a_weak_local_search_pulls_from_the_registry_mid_run(self):
+        h, seen = self.run_with_search("convert a title into a url slug")
+        self.assertIn("pulled from the registry just now", seen)
+        self.assertIn("ramen-is-good", seen)                      # the pulled SOP was callable at once
+        self.assertIn("text.slugify", h.lib.sops)
+        self.assertNotIn("media", h.router.remote.fetched)        # still only the branches JEV opened
+
+    def test_mid_run_pulls_respect_the_off_switch(self):
+        h, seen = self.run_with_search("convert a title into a url slug", auto_pull="off")
+        self.assertNotIn("text.slugify", h.lib.sops)
+        self.assertNotIn("pulled from the registry", seen)
 
     def test_off_switch(self):
         h = self.harness(auto_pull="off")

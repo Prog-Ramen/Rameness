@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import os
 import re
 import sys
@@ -76,8 +77,9 @@ How to work:
   improving is not proof that the problem is gone.
 - Do not stop early. Keep going until every part of the task is done and checked, and every todo is completed.
   If time allows, improve quality and fix rough edges.
-- Tools named sop_* are tested standard procedures from the SOP library; prefer them when one fits. sop_search may
-  find more. Only save a new SOP (sop_save) after the task itself works, and only for a procedure likely to recur.
+- Tools named sop_* are tested standard procedures from the SOP library; prefer them when one fits, and call one
+  instead of doing its steps by hand first. Its tests already verify its output: do not recompute or re-check what
+  it returns; check only what the SOP does not cover. sop_search may find more. Only save a new SOP (sop_save) after the task itself works, and only for a procedure likely to recur.
 - Large tool outputs are stored and shown as a preview with a ref; use recall(ref, ...) to read more.
 - Search narrowly and read only what you need: grep with a specific pattern (and a glob), leave vendored,
   minified and generated files out, and read the ranges of a large file you need rather than all of it.
@@ -231,7 +233,10 @@ class Harness:
         self.llm = llm
         self.jev = jev_mod.build(self.cfg, llm, self.state / "decisions.jsonl")
         self.org = Org.load(self.cwd, self.home)
-        self.lib = Library.default(self.cwd, self.home)
+        sops_cfg = self.cfg.get("sops") or {}
+        private = list(sops_cfg.get("private") or []) + [d for d in os.environ.get("RAMENESS_SOPS", "").split(os.pathsep) if d]
+        self.lib = Library.default(self.cwd, self.home, private,
+                                   sops_cfg.get("save_to") or (private[-1] if private else None))
         self.approver = approver or Approver(self.cfg["permissions"]["mode"])
         self.executor = Executor(self.lib, self.cfg["permissions"]["sop_allow"],
                                  approve=lambda s, a: self.approver(f"sop {s.id} [{', '.join(s.permissions)}]",
@@ -247,8 +252,11 @@ class Harness:
                                   cc.get("compact_at", 0.93), cc.get("reply_tokens", 32000))
         self.last_context = 0                    # prompt + reply tokens of the last model call, as reported
         lc = self.cfg["learning"]
-        self.learner = Learner(self.lib, self.executor, self.jev, RunStore(self.state / "runs"), llm,
-                               lc["min_repeats"], lc["sop_threshold"], lc["auto_generate"], org=self.org)
+        # run history is per user (still local), so procedures that recur across projects are noticed
+        self.learner = Learner(self.lib, self.executor, self.jev, RunStore(self.home / "runs"), llm,
+                               lc["min_repeats"], lc["sop_threshold"], lc["auto_generate"], org=self.org,
+                               min_saved=lc.get("min_tokens_saved_per_use", 500),
+                               creation_cost=lc.get("sop_creation_tokens", 4000), review_n=lc.get("review_runs", 5))
         rc = self.cfg.get("registry") or {}
         remote = None
         if rc.get("remote_index") and rc.get("auto_pull", "gated") != "off":
@@ -353,20 +361,29 @@ class Harness:
                 self.messages = self.messages[:-2]
                 self.event("route_escalated", frm="answer", to="agent")
                 plan.route = "agent"
+                if plan.activation_skipped:          # a plain question after all needs tools: search the SOPs now
+                    plan.activation = self.router.activation_for(task, resolved)
+                    plan.activation_skipped = False
+                self.hooks.select(self.jev, task)    # the agent loop's lifecycle hooks, as for any agent run
                 res = self._agent(task, plan)
         else:
             res = self._agent(task, plan)
 
         if self.cfg["learning"]["enabled"] and res.route in ("agent", "direct"):
             res.learned = self.learner.observe(task, res.steps, res.metrics.get("success", False),
-                                               {"route": res.route, "sops": [s.id for s, _ in plan.activation.selected]})
+                                               {"route": res.route, "sops": [s.id for s, _ in plan.activation.selected],
+                                                "project": str(self.cwd),
+                                                "turn_costs": getattr(self, "last_turn_costs", {})},
+                                               review=res.route == "agent")   # the direct route uses no model
             if res.learned:
                 self.out(f"[rameness] learned: {res.learned}")
+                for item in res.learned:
+                    self.event("sop_learned" if item.get("sop") else "sop_skipped", stage="end", **item)
         rc = self.cfg.get("registry") or {}
         if (rc.get("auto_propose", True) and rc.get("public") and res.metrics.get("success")
                 and res.route in ("agent", "direct") and self.cfg["permissions"]["mode"] != "readonly"):
             from .registry import Registry
-            registry = Registry(self.cfg, self.home, self.org, self.jev)
+            registry = Registry(self.cfg, self.home, self.org, self.jev, self.llm)
             try:
                 res.proposals = registry.auto_propose(self.lib, self.executor)
             except Exception as e:
@@ -500,12 +517,15 @@ class Harness:
         if self.llm is None:
             return Result("none", "No model provider configured.", plan)
         active: dict[str, SOP] = {s.tool_name: s for s, _ in plan.activation.selected if s.kind != "skill"}
+        self._sop_drafts: list[SOP] = []         # this run's sop_save attempts that failed their tests
         system = self._system(plan)
         # What this run actually used, so a later comparison can tell which prompt and code each run had.
         self.event("system_prompt", sha=hashlib.sha256(system.encode()).hexdigest()[:16], chars=len(system),
                    code=code_version())
         self.messages.append({"role": "user", "content": task})
         steps: list[dict] = []
+        turn_costs: dict[int, dict] = {}         # what each model turn cost (output tokens, seconds)
+        self.last_turn_costs = turn_costs        # saved with the run, so the end-of-run review can measure savings
         text, success = "", False
         guard = LoopGuard(self.jev) if self.loop_guard_enabled else None
         pc = self.progress_cfg
@@ -532,7 +552,7 @@ class Harness:
             if self.cfg.get("batch_workflow"):     # the tool's own description must not contradict the prompt
                 builtin = [{**t, "description": t["description"].replace(TODO_ONE_DESC, TODO_WHOLE_DESC)}
                            if t["name"] == "todo_write" else t for t in builtin]
-            tools = (builtin + [s.tool_schema() for s in active.values()]
+            tools = (builtin + [s.tool_schema(self.lib.ok_uses(s.id)) for s in active.values()]
                      + [schema for schema, _ in self.extra_tools.values()])
             # JEV: how hard does the next step need thinking about (local reasoning models don't pace themselves)
             t_decide = time.time()
@@ -566,6 +586,7 @@ class Harness:
             self.messages.append({"role": "assistant", "content": r.text, "tool_calls": r.tool_calls, "raw": r.raw,
                                   "reasoning": getattr(r, "reasoning", "")})
             self.last_context = (r.usage.get("input") or 0) + (r.usage.get("output") or 0)
+            turn_costs[turn] = {"tokens": int((r.usage or {}).get("output") or 0), "seconds": time.time() - t_call}
             self.event("llm", turn=turn, seconds=round(time.time() - t_call, 2), stop_reason=r.stop_reason,
                        text=(r.text or "")[:4000], reasoning=(getattr(r, "reasoning", "") or "")[:6000],
                        tools=[c.name for c in r.tool_calls], usage=r.usage,
@@ -659,9 +680,12 @@ class Harness:
                 self.event("tool", turn=turn, tool=call.name, input=json.dumps(call.input)[:3000], ok=not err,
                            seconds=round(time.time() - t_tool, 2), output=out[:3000], output_chars=len(out))
                 self.log_tool_call(turn, call.name, call.input, not err)
+                if call.name in active and not err:
+                    self._measure_sop_use(active[call.name], turn, turn_costs.get(turn), len(r.tool_calls),
+                                          time.time() - t_tool)
                 results.append((out, err))
                 steps.append({"tool": call.name, "input": call.input, "ok": not err, "out": out[:200],
-                              "errs": error_lines(out)})
+                              "errs": error_lines(out), "turn": turn})
                 msg = {"role": "tool", "tool_call_id": call.id, "name": call.name,
                        "content": self.ctx.ingest(call.name, out), "is_error": err}
                 if call.name == "read_file" and not err and not stub:
@@ -910,7 +934,7 @@ class Harness:
                         "finish with a brief summary.")
             return ("[rameness] Before you finish, review the work against the task." + look + " Re-read the original task, list "
                     "everything its user would expect from the result, and for each item say how you verified it "
-                    "(the check you ran, what it showed, whether it exercised the real thing or a stand-in, and whether "
+                    "(a tested SOP that produced it counts as verified; otherwise the check you ran, what it showed, whether it exercised the real thing or a stand-in, and whether "
                     "it started from a fresh start the way its user would). "
                     "Then, for each check, name a flaw its user would notice (wrong, missing or mixed-up content, "
                     "not just an empty result) and say whether that check would have caught it; where it would not, "
@@ -958,29 +982,102 @@ class Harness:
                 return f"ERROR: {e}", True
         if name == "sop_search":
             hits = self.lib.search(self.jev, args["query"])
+            pulled = self._search_registry(args["query"], hits)
+            if pulled:
+                hits = self.lib.search(self.jev, args["query"])       # the pulled SOPs are local now
             for s, _ in hits:
                 if s.kind == "skill":
                     continue
                 active[s.tool_name] = s
             if not hits:
                 return "no matching SOPs", False
-            return "\n".join(f"{s.tool_name}: {s.interface()}" + (f"\n{s.instructions}" if s.kind == "skill" else "")
-                             for s, _ in hits), False
+            return "\n".join(f"{s.tool_name}: {s.interface()}" + (" [pulled from the registry just now]"
+                                                                  if s.id in pulled else "")
+                             + (f"\n{s.instructions}" if s.kind == "skill" else "") for s, _ in hits), False
         if name == "sop_save":
             if not self.approver("sop_save", f"{args.get('id')}: {args.get('description')}"):
                 return "DENIED", True
+            drafts = getattr(self, "_sop_drafts", [])
+            self._drop_drafts([d for d in drafts if args.get("id") in (d.id, d.id.rsplit("_", 1)[0])])  # a retry
             try:
                 sop, failures, extended = self.learner.extend_or_register(args, {"via": "sop_save"})
             except Exception as e:
                 return f"ERROR: {e}", True
+            real_failures = bool(failures and failures != ["no tests provided"])
+            if real_failures and not extended:
+                drafts.append(sop)
+            elif sop.status == "validated":
+                self._drop_drafts(list(drafts))           # it passed: the failed attempts before it are not SOPs
             active[sop.tool_name] = sop
             msg = (f"extended the existing {sop.id} (now version {sop.version}) instead of adding a near-duplicate; "
                    f"callable as {sop.tool_name}" if extended else
                    f"saved {sop.id} as {sop.status}; callable as {sop.tool_name}")
-            return msg + (f"\ntest failures: {failures}" if failures else ""), bool(failures and failures != ["no tests provided"])
+            return msg + (f"\ntest failures: {failures}" if failures else ""), real_failures
         if name.startswith("sop_"):
             return f"ERROR: {name} is not loaded; use sop_search first", True
         return self._with_hooks(name, args)
+
+    def _search_registry(self, query: str, hits: list) -> set[str]:
+        """sop_search mid-run: when no local SOP clearly matches, look in the registry the same way planning does
+        (JEV walks it level by level, decides each pull, the comfort gate asks when needed, the install is
+        hash-checked and its tests must pass). Returns the ids pulled."""
+        router, rc, jc = self.router, self.cfg.get("registry") or {}, self.cfg["jev"]
+        best = max((p for _, p in hits), default=0.0)
+        if router.remote is None or rc.get("auto_pull", "gated") == "off" or \
+                best >= jc["activate_threshold"] + rc.get("coverage_margin", 0.15):
+            return set()
+        try:
+            pulls = router._pull_remote(self.org.expand(query), self.org.render(), dict(self.org.defaults))
+        except Exception as e:                    # registry unreachable: local results only, never a failed search
+            self.event("sop_pull_error", query=query[:200], error=f"{type(e).__name__}: {e}"[:300])
+            return set()
+        for p in pulls:
+            self.event("sop_pull", query=query[:200], during="sop_search", **p)
+        return {p["id"] for p in pulls if p.get("result") == "pulled"}
+
+    def _drop_drafts(self, drafts: list[SOP]) -> None:
+        """Remove failed sop_save attempts of this run; never a validated SOP or one saved by another run."""
+        removed = False
+        for d in drafts:
+            if d.status != "validated" and (d.origin or {}).get("via") == "sop_save" and d.path.exists():
+                shutil.rmtree(d.path, ignore_errors=True)
+                removed = True
+            if d in getattr(self, "_sop_drafts", []):
+                self._sop_drafts.remove(d)
+        if removed:
+            self.lib.reload()
+
+    def _measure_sop_use(self, sop: SOP, turn: int, turn_cost: dict | None, calls_in_turn: int,
+                         exec_seconds: float) -> dict | None:
+        """What one SOP call actually saved, measured.
+
+        Without it the model would generate the procedure itself (its baseline: the measured cost of the
+        repetitions it was learned from, else the size of its code), then run it. With it the model identifies
+        the SOP and writes the call (its share of this turn's output) and the SOP runs. Execution happens either
+        way, so the time saved is the baseline's generation time less this turn's share."""
+        if not turn_cost:
+            return None
+        share = max(1, calls_in_turn)
+        call_tokens = turn_cost["tokens"] / share
+        call_gen_s = turn_cost["seconds"] / share
+        tps = (turn_cost["tokens"] / turn_cost["seconds"]) if turn_cost["seconds"] > 0 and turn_cost["tokens"] else 100.0
+        recorded = (sop.origin or {}).get("saves_per_use") or {}
+        if recorded.get("cost_tokens"):
+            base_tokens, base_gen_s, source = recorded["cost_tokens"], recorded.get("cost_seconds") or \
+                recorded["cost_tokens"] / tps, "measured"
+        else:
+            code = "".join(f.read_text(errors="replace") for f in sop.path.glob("run.*") if f.is_file())
+            base_tokens, source = len(code) / 4, "code size"
+            base_gen_s = base_tokens / tps
+        use = {"sop": sop.id, "turn": turn, "baseline": source,
+               "baseline_tokens": round(base_tokens), "call_tokens": round(call_tokens),
+               "tokens_saved": round(base_tokens - call_tokens),
+               "baseline_seconds": round(base_gen_s + exec_seconds, 2),
+               "call_seconds": round(call_gen_s + exec_seconds, 2), "exec_seconds": round(exec_seconds, 2),
+               "seconds_saved": round(base_gen_s - call_gen_s, 2)}
+        self.event("sop_use", **use)
+        self.lib.record_savings(sop.id, use["tokens_saved"], use["seconds_saved"])
+        return use
 
     def _with_hooks(self, name: str, args: dict) -> tuple[str, bool]:
         """A built-in tool call plus the lifecycle hooks on what it produced (after_output)."""

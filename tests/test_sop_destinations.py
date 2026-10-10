@@ -11,7 +11,7 @@ from rameness import deps, publish
 from rameness.jev import Jev, LexicalJev
 from rameness.org import Org
 from rameness.registry import Registry
-from rameness.learning import Learner, RunStore, extend_sop, register_sop
+from rameness.learning import CloseSOPExists, Learner, RunStore, extend_sop, register_sop
 from rameness.llm import FakeProvider
 from rameness.sops import BUILTIN_ROOT, Executor, Library
 
@@ -101,7 +101,8 @@ class Destinations(unittest.TestCase):
         git(self.tmp, "clone", "-q", "--bare", str(src), str(bare))
         s = self.sop("data.read_json", "Read a JSON file and check its format: a common basic file utility",
                      ["json", "file", "read", "check", "format"], origin={"runs_seen": 24, "runs_total": 30})
-        reg = Registry({"registry": {"public": str(self.tmp / "unused.git"), "builtin": str(bare)}},
+        reg = Registry({"registry": {"public": str(self.tmp / "unused.git"), "builtin": str(bare),
+                                     "min_tokens_saved": 0}},
                        self.tmp / "home", self.org, self.jev)
         r = reg.propose(s)
         self.assertEqual(r["destination"], "builtin")
@@ -138,7 +139,8 @@ class Simplify(unittest.TestCase):
         self.ex = Executor(self.lib, [], cwd=self.tmp)
         self.spec = {"id": "data.count_keys", "description": "Count the keys of a JSON object", "script": JQ_SCRIPT,
                      "inputs": {"type": "object", "properties": {"obj": {"type": "object"}}},
-                     "tests": [{"input": {"obj": {"a": 1, "b": 2}}, "expect": {"count": 2}}]}
+                     "tests": [{"input": {"obj": {"a": 1, "b": 2}}, "expect": {"count": 2}},
+                               {"input": {"obj": {}}, "expect": {"count": 0}}]}
 
     def test_a_standard_rewrite_that_passes_replaces_the_extra_program(self):
         sop, failures = register_sop(self.lib, self.ex, self.spec, llm=FakeProvider(json_script=[{"script": STD_SCRIPT}]))
@@ -236,6 +238,157 @@ class Extend(unittest.TestCase):
         sop, failures, extended = learner.extend_or_register({**spec, "id": "data.count_deep"})
         self.assertFalse(extended)                                    # ...so a new SOP is created instead
         self.assertEqual(sop.id, "data.count_deep")
+
+    def test_end_of_run_learning_drops_a_failing_near_duplicate_when_extension_fails(self):
+        lib, ex = self.make(self.private, "private")
+        learner = Learner(lib, ex, Jev(LexicalJev()), RunStore(self.tmp / "runs"), self.reply(script=WRONG_SCRIPT))
+        learner.extension_target = lambda spec: lib.get("data.count_keys")
+        with self.assertRaises(CloseSOPExists) as e:
+            learner.extend_or_register({**NESTED_SPEC, "id": "data.count_deep", "script": WRONG_SCRIPT,
+                                        "tests": COUNT_TESTS}, new_if_close=False)
+        self.assertEqual(str(e.exception), "data.count_keys")
+        self.assertEqual(sorted(p.name for p in (self.private / "data").iterdir()), ["count_keys"])
+
+
+class TrustedSops(unittest.TestCase):
+    """The agent sees only SOPs that pass their tests, and their interface says so, so it need not re-check them."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        root = self.tmp / "sops"
+        for name, status in (("counted", "validated"), ("draft", "candidate")):
+            d = root / "data" / name
+            d.mkdir(parents=True)
+            (d / "run.py").write_text(STD_SCRIPT)
+            (d / "sop.json").write_text(json.dumps({"id": f"data.{name}", "description": "Count the keys of a JSON object",
+                                                    "status": status, "tests": COUNT_TESTS}))
+        self.lib = Library([(root, "private")])
+
+    def test_candidates_are_not_offered(self):
+        found = [s.id for s, _ in self.lib.search(Jev(LexicalJev()), "count the keys of a JSON object")]
+        self.assertIn("data.counted", found)
+        self.assertNotIn("data.draft", found)
+
+    def test_a_tested_sop_says_its_output_is_verified(self):
+        desc = self.lib.get("data.counted").tool_schema(uses=4)["description"]
+        self.assertIn("tests pass, used successfully 4 times", desc)
+        self.assertNotIn("Tested", self.lib.get("data.draft").tool_schema()["description"])
+
+
+class PrivateFolders(unittest.TestCase):
+    """The user picks private SOP folders per use case or session; private SOPs and their tests never reach git."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.cwd, self.home = self.tmp / "project", self.tmp / "home"
+        self.cwd.mkdir()
+
+    def spec(self, sid):
+        return {"id": sid, "description": "Count the keys of a JSON object", "script": STD_SCRIPT, "tests": COUNT_TESTS}
+
+    def test_session_folders_are_searched_and_receive_new_sops(self):
+        work, research = self.tmp / "work-sops", self.tmp / "research-sops"
+        lib = Library.default(self.cwd, self.home, [str(work), str(research)], str(research))
+        self.assertEqual(lib.private_root, research.resolve())
+        register_sop(lib, Executor(lib, [], cwd=self.cwd), self.spec("data.count_keys"))
+        self.assertTrue((research / "data" / "count_keys" / "sop.json").exists())
+        self.assertFalse((self.cwd / ".rameness" / "sops" / "data").exists())
+        other = Library.default(self.cwd, self.home, [str(work)])          # another session does not see it
+        self.assertNotIn("data.count_keys", other.sops)
+
+    def test_relative_folders_resolve_against_the_project(self):
+        lib = Library.default(self.cwd, self.home, ["~/x", "team-sops"])
+        self.assertIn(((self.cwd / "team-sops").resolve(), "private"), lib.roots)
+        self.assertIn((Path("~/x").expanduser().resolve(), "private"), lib.roots)
+
+    def test_a_private_folder_inside_a_git_repo_is_ignored_by_git(self):
+        subprocess.run(["git", "init", "-q", str(self.cwd)], check=True)
+        lib = Library.default(self.cwd, self.home)
+        register_sop(lib, Executor(lib, [], cwd=self.cwd), self.spec("data.count_keys"))
+        status = subprocess.run(["git", "-C", str(self.cwd), "status", "--porcelain", "--untracked-files=all"],
+                                capture_output=True, text=True, check=True).stdout
+        self.assertNotIn("count_keys", status)                            # code and tests both stay local
+
+    def test_a_folder_outside_git_gets_no_gitignore(self):
+        lib = Library.default(self.cwd, self.home)
+        register_sop(lib, Executor(lib, [], cwd=self.cwd), self.spec("data.count_keys"))
+        self.assertFalse((self.cwd / ".rameness" / "sops" / ".gitignore").exists())
+
+
+READ_PAGE = ("import json, sys\nargs = json.load(sys.stdin)\ntext = open(args['path']).read()\n"
+             "print(json.dumps({'chars': len(text), 'has_script': '<script' in text}))\n")
+PNG_SIZE = ("import json, struct, sys\nargs = json.load(sys.stdin)\ndata = open(args['path'], 'rb').read()\n"
+            "w, h = struct.unpack('>II', data[16:24])\nprint(json.dumps({'width': w, 'height': h}))\n")
+MAKE_PNG = ("import struct, zlib\n"
+            "def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))\n"
+            "raw = b''.join(b'\\x00' + b'\\xff\\x00\\x00' * 3 for _ in range(2))\n"
+            "open('img.png', 'wb').write(b'\\x89PNG\\r\\n\\x1a\\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 3, 2, 8, 2, 0, 0, 0))"
+            " + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))\n")
+
+
+MAKE_PNG_5x1 = MAKE_PNG.replace("3, 2, 8", "5, 1, 8")
+SECOND_PNG = {"input": {"path": "img.png"}, "setup": MAKE_PNG_5x1, "expect": {"width": 5, "height": 1}}
+
+
+class FinishingSops(unittest.TestCase):
+    """The model finishes an SOP with tests that run: fixtures for files, setup code for binary data, and repair
+    rounds that see what the tests actually returned."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.root = self.tmp / ".rameness" / "sops"
+        self.root.mkdir(parents=True)
+        self.lib = Library([(self.root, "private")])
+        self.ex = Executor(self.lib, [], cwd=self.tmp)
+
+    def test_fixture_files_and_setup_code_make_tests_runnable(self):
+        sop, failures = register_sop(self.lib, self.ex, {
+            "id": "web.read_page", "description": "Read an HTML page", "script": READ_PAGE,
+            "tests": [{"input": {"path": "page.html"}, "files": {"page.html": "<html><script>x</script></html>"},
+                       "expect": {"chars": 31, "has_script": True}},
+                      {"input": {"path": "plain.html"}, "files": {"plain.html": "<p>hi</p>"},
+                       "expect": {"chars": 9, "has_script": False}}]})
+        self.assertEqual((failures, sop.status), ([], "validated"))
+        sop, failures = register_sop(self.lib, self.ex, {
+            "id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
+            "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}, SECOND_PNG]})
+        self.assertEqual((failures, sop.status), ([], "validated"))     # a real PNG, built by code, not by hand
+
+    def test_a_wrong_expectation_is_repaired_after_seeing_the_real_output(self):
+        spec = {"id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
+                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}, SECOND_PNG]}
+        fixed = {"script": PNG_SIZE, "explanation": "the image built by setup is 3x2",
+                 "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 3, "height": 2}}, SECOND_PNG]}
+        llm = FakeProvider([], json_script=[fixed])
+        sop, failures = register_sop(self.lib, self.ex, spec, llm=llm)
+        self.assertEqual((failures, sop.status), ([], "validated"))
+        self.assertEqual(sop.origin["repairs"], ["the image built by setup is 3x2"])
+        self.assertEqual(llm.schemas[-1]["required"], ["script", "tests"])
+
+    def test_tests_never_run_in_the_project_directory(self):
+        (self.ex.cwd / "report.json").write_text("the real report")
+        writes = "import json,sys; a=json.load(sys.stdin); open('report.json','w').write('sample'); print('{}')"
+        register_sop(self.lib, self.ex, {"id": "x.writer", "description": "writes a report", "script": writes,
+                                         "tests": [{"input": {}, "expect_keys": []}]})
+        self.assertEqual((self.ex.cwd / "report.json").read_text(), "the real report")
+
+    def test_a_script_that_does_not_compile_is_fixed_from_the_compiler_error(self):
+        broken = "import json, sys\nprint(json.dumps({'ok': 'yes\n'}))\n"     # a newline inside the literal
+        fixed = {"script": "import json, sys\nprint(json.dumps({'ok': 'yes'}))\n"}
+        sop, failures = register_sop(self.lib, self.ex, {"id": "x.ok", "description": "ok", "script": broken,
+                                                         "tests": [{"input": {}, "expect": {"ok": "yes"}},
+                                                                   {"input": {"x": 1}, "expect": {"ok": "yes"}}]},
+                                     llm=FakeProvider([], json_script=[fixed]))
+        self.assertEqual((failures, sop.status), ([], "validated"))
+
+    def test_a_repair_that_guts_the_tests_is_refused(self):
+        spec = {"id": "data.png_size", "description": "Size of a PNG", "script": PNG_SIZE,
+                "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG, "expect": {"width": 4, "height": 4}}, SECOND_PNG]}
+        gutted = {"script": PNG_SIZE, "tests": [{"input": {"path": "img.png"}, "setup": MAKE_PNG}]}
+        sop, failures = register_sop(self.lib, self.ex, spec, llm=FakeProvider([], json_script=[gutted, gutted]))
+        self.assertTrue(failures)
+        self.assertEqual(sop.status, "candidate")
+        self.assertEqual(sop.tests[0]["expect"], {"width": 4, "height": 4})   # the original test stays
 
 if __name__ == "__main__":
     unittest.main()

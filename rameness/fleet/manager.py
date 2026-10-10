@@ -30,6 +30,7 @@ from pathlib import Path
 
 from .. import config as config_mod
 from .. import jev as jev_mod
+from .. import schemas
 from ..jev import Option
 from ..router import decisive
 from . import envs as envs_mod
@@ -475,7 +476,8 @@ class Fleet:
             try:
                 d = self.planner.complete_json("Propose genuinely different approaches. JSON only.",
                                                f"Task: {task}\nGive {n} distinct approaches as "
-                                               '{"approaches": ["one sentence each", ...]}', max_tokens=800)
+                                               '{"approaches": ["one sentence each", ...]}', max_tokens=800,
+                                               schema=schemas.APPROACHES)
                 v = [x for x in d.get("approaches", []) if isinstance(x, str)]
                 if len(v) >= n:
                     return v[:n]
@@ -579,7 +581,7 @@ class Fleet:
             plan = self.planner.complete_json(DECOMPOSE_SYSTEM, (
                 f"Request: {text}\n\nReply {{\"subtasks\": [{{\"title\": str, \"task\": str, "
                 '"kind": "deliver"|"research", "depends_on": [indices], "size": "small"|"large", '
-                '"needs": ["gpu"|"network"|...]}]}'), max_tokens=6000)
+                '"needs": ["gpu"|"network"|...]}]}'), max_tokens=6000, schema=schemas.SUBTASKS)
             subs = plan.get("subtasks") or []
         except Exception as e:
             self.store.event(parent, "warning", f"decomposition failed ({e}); delegating whole")

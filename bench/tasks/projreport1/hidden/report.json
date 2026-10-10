@@ -1,0 +1,67 @@
+{
+  "billing": {
+    "py_files": 5,
+    "lines": 83,
+    "todos": [
+      "mod0.py:17: handle empty input",
+      "mod2.py:17: close the file",
+      "mod3.py:5: add retries"
+    ],
+    "tests_pass": false
+  },
+  "geo": {
+    "py_files": 3,
+    "lines": 52,
+    "todos": [
+      "mod1.py:10: cache this lookup",
+      "mod1.py:5: add a timeout"
+    ],
+    "tests_pass": false
+  },
+  "mailer": {
+    "py_files": 4,
+    "lines": 77,
+    "todos": [
+      "mod0.py:18: cache this lookup",
+      "mod0.py:23: handle empty input",
+      "mod0.py:9: close the file",
+      "mod1.py:13: add a timeout",
+      "mod2.py:18: handle empty input",
+      "mod2.py:5: log the failure"
+    ],
+    "tests_pass": false
+  },
+  "parser": {
+    "py_files": 4,
+    "lines": 71,
+    "todos": [
+      "mod1.py:10: validate the range",
+      "mod1.py:19: support unicode",
+      "mod1.py:5: log the failure",
+      "mod2.py:5: add retries"
+    ],
+    "tests_pass": false
+  },
+  "routing": {
+    "py_files": 3,
+    "lines": 63,
+    "todos": [
+      "mod0.py:14: close the file",
+      "mod0.py:9: add a timeout",
+      "mod1.py:10: log the failure",
+      "mod1.py:15: check permissions",
+      "mod1.py:5: check permissions"
+    ],
+    "tests_pass": false
+  },
+  "weather": {
+    "py_files": 5,
+    "lines": 59,
+    "todos": [
+      "mod0.py:5: check permissions",
+      "mod1.py:9: cache this lookup",
+      "mod3.py:9: check permissions"
+    ],
+    "tests_pass": false
+  }
+}

@@ -25,6 +25,8 @@ import uuid
 from collections import defaultdict
 from pathlib import Path
 
+from . import schemas
+
 
 class Tuner:
     def __init__(self, state: Path):
@@ -159,7 +161,7 @@ class Tuner:
                         '"rationale": "one paragraph"}')
             try:
                 d = llm.complete_json("You tune a decision model's option descriptions. JSON only.", prompt,
-                                      max_tokens=1500)
+                                      max_tokens=1500, schema=schemas.CUES)
             except Exception as e:
                 d = {"cues": {}, "rationale": f"model call failed: {e}"}
             new.append({"id": "p-" + uuid.uuid4().hex[:6], "t": time.time(), "question": q, "examples": len(ex),

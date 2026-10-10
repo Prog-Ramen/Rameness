@@ -72,11 +72,11 @@ DEFAULTS: dict = {
         "min_confidence": 0.5,        # intervene (drifting / stalled / finish) only on a verdict this probable
     },
     "jev": {
-        "backend": "auto",            # auto | laya-local | laya | kev | typesafe | lexical. auto: the first local model
+        "backend": "auto",            # auto | laya-local | laya | kev | clef | typesafe | lexical. auto: the first local model
                                       # in local_order whose server answers, else typesafe if
                                       # TYPESAFE_API_KEY is set, else lexical (offline, degraded)
-        "local_order": ["kev", "laya", "laya-local"],   # servers first (one shared copy), then in-process
-        "serve": "laya",              # the local decision server `rameness up` starts: laya | kev | None
+        "local_order": ["clef", "kev", "laya", "laya-local"],   # servers first (one shared copy), then in-process
+        "serve": "laya",              # the local decision server `rameness up` starts: laya | kev | clef | None
         "serve_device": None,         # cuda | cpu | None (GPU if visible). cpu if the GPU is busy with a big model
         "kev_checkpoint": "jaredpalmer/kev-4b",
         "option_text": "keywords",    # what the model reads per option: keywords | sentences (Option.desc)
@@ -90,6 +90,11 @@ DEFAULTS: dict = {
         "laya_device": None,          # laya-local only: cuda | cpu | None (auto)
         "kev_url": None,              # default http://127.0.0.1:8008/v1/systemone (`python -m kev.serve`)
         "kev_model": None,
+        "clef_url": None,             # default http://127.0.0.1:8010/v1/systemone (`rameness jev up clef`)
+        "clef_model": None,           # default clef-flash
+        "clef_checkpoint": "Cloudflare/clef-flash",   # Hugging Face repo id or a local folder
+        "clef_bits": 8,               # 8 fits a 16 GB GPU (bitsandbytes); 16 needs ~20 GB
+        "clef_python": None,          # an existing Python with Clef's packages; default ~/.rameness/jev/clef/venv
         "typesafe_url": None,         # TypeSafe's hosted Jev (subscription): https://api.typesafe.ai/v1/systemone
         "typesafe_model": None,       # default "jev-latest"
         "high_effort_above": 0.10,    # use high reasoning effort when JEV gives "high" more than this probability
@@ -116,12 +121,24 @@ DEFAULTS: dict = {
         "min_repeats": 2,
         "sop_threshold": 0.6,
         "auto_generate": True,
+        "review_runs": 5,                 # at the end of a run the model reviews this many recent runs for
+                                          # repeated multi-step tasks; Kev and the tests decide what becomes an SOP
+        "min_tokens_saved_per_use": 500,  # an SOP must save at least this much model output per use...
+        "sop_creation_tokens": 4000,      # ...and over its expected uses more than it costs to generate and test
+    },
+    "sops": {
+        "private": [],                    # more private SOP folders (~ or relative to the project), e.g. one per
+                                          # use case; searched after ~/.rameness/sops and ./.rameness/sops, so they
+                                          # win on the same id. Also RAMENESS_SOPS (os.pathsep-separated) or --sops.
+        "save_to": None,                  # where new private SOPs go; default: the last of `private`, else
+                                          # ./.rameness/sops. Private folders are kept out of git (a .gitignore).
     },
     "registry": {
         "public": "https://github.com/Prog-Ramen/RamenSOPs.git",   # `sop propose` opens PRs here
         "builtin": "https://github.com/Prog-Ramen/Rameness.git",   # ...or here, for SOPs most runs use (built-in)
         "builtin_min_share": 0.5,         # built-in only if the procedure appeared in at least this share of runs
         "builtin_min_runs": 10,           # ...measured over at least this many successful runs
+        "min_tokens_saved": 1000,         # only SOPs saving this much per use (after reading and calling them) are shared; 0 = off
         "auto_propose": True,             # after successful tasks, propose validated, shareable private SOPs
         "fork": None,                     # push proposals to this fork; default: origin, else a `gh repo fork`
         "remote_index": "https://raw.githubusercontent.com/Prog-Ramen/RamenSOPs/registry/sops/index.json",
