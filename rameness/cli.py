@@ -10,9 +10,9 @@ from pathlib import Path
 
 from . import __version__
 from . import config as config_mod
+from .settings import ConfigError
 from . import publish as pub
 from .harness import Harness
-from .tools import Approver
 
 
 def _harness(a, need_llm=True) -> Harness:
@@ -317,9 +317,21 @@ def cmd_learn(a):
 
 # ---------------------------------------------------------------- fleet
 
-def _fleet(probe=False):
-    from .fleet.manager import Fleet
-    return Fleet(Path.cwd(), probe=probe)
+def _fleet(probe=False, home=False):
+    from .fleet.manager import Fleet, load_fleet_cfg
+    if not home:
+        return Fleet(Path.cwd(), probe=probe)
+    cfg = load_fleet_cfg(home_dir())
+    cfg["general"] = True                    # not tied to a project: agents find the one a task is about
+    cfg["agent_dirs"] = cfg["agent_dirs"] or ["~"]
+    return Fleet(home_dir(), cfg, probe=probe)
+
+
+def home_dir() -> Path:
+    """The general manager's own folder: its database, logs and a scratch folder per chat (work/<chat>)."""
+    d = config_mod.user_home() / "home"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _print_tree(node, prefix="", last=True, root=True):
@@ -339,17 +351,18 @@ def cmd_fleet(a):
         from .fleet.server import serve
         from .jevserve import ensure
         ensure(config_mod.load()["jev"], out=lambda m: print(f"jev: {m}", file=sys.stderr))
-        f = _fleet(probe=True)
+        f = _fleet(probe=True, home=a.home)
         if a.open:
             import webbrowser
             webbrowser.open(f"http://{a.host}:{a.port or f.cfg['port']}")
         serve(f, a.host, a.port or f.cfg["port"])
         return
-    f = _fleet(probe=act in ("envs", "slots"))
+    f = _fleet(probe=act in ("envs", "slots"), home=a.home)
     args = a.args
     if act == "ask":
         cycles = a.cycles if a.cycles == "godmode" else int(a.cycles or 0)
-        r = f.ask(" ".join(args), cycles=cycles, categories=a.focus.split(",") if a.focus else None, on=a.on)
+        r = f.ask(" ".join(args), cycles=cycles, categories=a.focus.split(",") if a.focus else None, on=a.on,
+                  chat=a.chat, mode=a.mode)
         print(json.dumps(r, indent=1, default=str))
         if r["route"] == "awaiting-director":
             print("JEV deferred this decision to you: see `rameness fleet needs`.", file=sys.stderr)
@@ -448,6 +461,19 @@ def cmd_fleet(a):
         _print_tree(f.tree())
 
 
+def cmd_config(a):
+    from .fleet.manager import load_fleet_cfg
+    from .settings import config_schema, fleet_schema
+    if a.action == "schema":
+        print(json.dumps(config_schema() if a.which == "config" else fleet_schema(), indent=2))
+        return
+    files = [config_mod.user_home() / "config.json", config_mod.project_dir() / "config.json",
+             config_mod.user_home() / "fleet.json", Path.cwd() / ".rameness" / "fleet.json"]
+    config_mod.load()                          # raises ConfigError with every problem of a file
+    load_fleet_cfg(Path.cwd())
+    print("ok: " + (", ".join(str(f) for f in files if f.exists()) or "no config files; defaults only"))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="rameness", description="adaptive agent harness driven by a JEV decision model")
     ap.add_argument("--version", action="version", version=__version__)
@@ -500,6 +526,11 @@ def main(argv=None):
     p.add_argument("--cycles", help="ask: number of refinement/testing cycles after the draft, or 'godmode'")
     p.add_argument("--focus", help="ask: comma-separated categories or groups (see `fleet categories`), e.g. testing,ui")
     p.add_argument("--on", help="ask: cycle on existing work instead of drafting: HEAD or an agent id")
+    p.add_argument("--home", action="store_true",
+                   help="the general manager (~/.rameness/home): any request, in whichever project it is about")
+    p.add_argument("--chat", help="ask: the conversation this belongs to (follow-ups, project and replies stay in it)")
+    p.add_argument("--mode", choices=["team", "direct"],
+                   help="ask: team (the manager routes and delegates) or direct (one agent per chat does the work)")
     p.set_defaults(fn=cmd_fleet)
     p = sub.add_parser("up", help="shortcut for `fleet up --open`")
     p.set_defaults(fn=lambda a: cmd_fleet(argparse.Namespace(action="up", host="127.0.0.1", port=None, open=True)))
@@ -530,11 +561,18 @@ def main(argv=None):
     p.add_argument("--override-personal", action="store_true",
                    help="propose: an SOP JEV classified as personal (all scans still apply)")
     p.set_defaults(fn=cmd_sop)
+    p = sub.add_parser("config", help="check the config files, or write their JSON Schema (for editors)")
+    p.add_argument("action", choices=["check", "schema"])
+    p.add_argument("which", nargs="?", choices=["config", "fleet"], default="config",
+                   help="schema: config.json (default) or fleet.json")
+    p.set_defaults(fn=cmd_config)
     a = ap.parse_args(argv)
     try:
         a.fn(a)
     except KeyboardInterrupt:
         sys.exit(130)
+    except ConfigError as e:
+        sys.exit(f"rameness: invalid configuration in {e}")
     except Exception as e:
         if a.verbose:
             raise

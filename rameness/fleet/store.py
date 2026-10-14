@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS escalations (id TEXT PRIMARY KEY, t REAL, agent TEXT,
 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, t REAL, agent TEXT, sender TEXT,
   text TEXT, delivered INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS stats (key TEXT PRIMARY KEY, uses INTEGER, ok INTEGER);
+CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, created REAL, updated REAL, title TEXT, mode TEXT,
+  agent TEXT);
 CREATE INDEX IF NOT EXISTS ev_agent ON events(agent);
 """
 
@@ -44,11 +46,13 @@ class Store:
             c.executescript(SCHEMA)
             for table, col, typ in (("decisions", "query", "TEXT"), ("decisions", "gate", "TEXT"),
                                     ("decisions", "significance", "REAL"), ("decisions", "reason", "TEXT"),
-                                    ("escalations", "dkey", "TEXT"), ("escalations", "payload", "TEXT")):
+                                    ("escalations", "dkey", "TEXT"), ("escalations", "payload", "TEXT"),
+                                    ("events", "chat", "TEXT")):
                 try:
                     c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
                 except sqlite3.OperationalError:
                     pass
+            c.execute("CREATE INDEX IF NOT EXISTS ev_chat ON events(chat)")     # after the column exists
 
     @property
     def db(self) -> sqlite3.Connection:
@@ -127,15 +131,21 @@ class Store:
 
     # ---- events / decisions / escalations / messages
 
-    def event(self, agent: str | None, type_: str, message: str) -> None:
-        self.db.execute("INSERT INTO events (t, agent, type, message) VALUES (?,?,?,?)",
-                        (time.time(), agent, type_, message[:2000]))
+    def event(self, agent: str | None, type_: str, message: str, chat: str | None = None) -> None:
+        if chat is None and agent:                 # an agent's events belong to the chat it works for
+            r = self.db.execute("SELECT meta FROM agents WHERE id=?", (agent,)).fetchone()
+            chat = json.loads(r["meta"] or "{}").get("chat") if r else None
+        self.db.execute("INSERT INTO events (t, agent, type, message, chat) VALUES (?,?,?,?,?)",
+                        (time.time(), agent, type_, message[:2000], chat))
 
-    def events(self, since: int = 0, agent: str | None = None, limit: int = 200) -> list[dict]:
+    def events(self, since: int = 0, agent: str | None = None, limit: int = 200, chat: str | None = None) -> list[dict]:
         q, a = "SELECT * FROM events WHERE id>?", [since]
         if agent:
             q += " AND agent=?"
             a.append(agent)
+        if chat:
+            q += " AND chat=?"
+            a.append(chat)
         rows = self.db.execute(q + " ORDER BY id DESC LIMIT ?", [*a, limit]).fetchall()
         return [dict(r) for r in reversed(rows)]
 
@@ -200,13 +210,33 @@ class Store:
 
     def send(self, agent: str, text: str, sender: str = "director") -> None:
         self.db.execute("INSERT INTO messages (t, agent, sender, text) VALUES (?,?,?,?)", (time.time(), agent, sender, text))
-        self.event(agent, "message", f"{sender}: {text[:200]}")
+        self.event(agent, "message", f"{sender}: {text}")
 
     def inbox(self, agent: str) -> list[dict]:
         rows = self.db.execute("SELECT * FROM messages WHERE agent=? AND delivered=0 ORDER BY id", (agent,)).fetchall()
         if rows:
             self.db.execute(f"UPDATE messages SET delivered=1 WHERE id IN ({','.join(str(r['id']) for r in rows)})")
         return [dict(r) for r in rows]
+
+    # ---- chats: one conversation with the manager (a client's conversation, a CLI session)
+
+    def chat(self, cid: str) -> dict | None:
+        r = self.db.execute("SELECT * FROM chats WHERE id=?", (cid,)).fetchone()
+        return dict(r) if r else None
+
+    def ensure_chat(self, cid: str, title: str = "") -> dict:
+        now = time.time()
+        self.db.execute("INSERT OR IGNORE INTO chats (id, created, updated, title) VALUES (?,?,?,?)",
+                        (cid, now, now, title[:120]))
+        return self.chat(cid)
+
+    def update_chat(self, cid: str, **f) -> dict:
+        f["updated"] = time.time()
+        self.db.execute(f"UPDATE chats SET {', '.join(f'{k}=?' for k in f)} WHERE id=?", [*f.values(), cid])
+        return self.chat(cid)
+
+    def chats(self, limit: int = 100) -> list[dict]:
+        return [dict(r) for r in self.db.execute("SELECT * FROM chats ORDER BY updated DESC LIMIT ?", (limit,))]
 
     # ---- outcome stats (priors for the JEV)
 

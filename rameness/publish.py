@@ -19,7 +19,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import urllib.request
 from pathlib import Path
 
 from .jev import Jev, Option

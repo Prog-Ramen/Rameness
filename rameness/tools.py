@@ -12,7 +12,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -64,6 +63,11 @@ BUILTIN_SCHEMAS = [
         "Fetch a web page or file over HTTP(S) and return its text (HTML is converted to plain text). Use it to "
         "research: read documentation, specifications, and how things are usually built or tested."),
      "input_schema": _schema({"url": {"type": "string"}}, ["url"])},
+    {"name": "web_search", "description": (
+        "Search the web (results from Google, Bing and other engines). Returns titles, URLs and snippets; read a "
+        "result in full with web_fetch. Use it to find current information, documentation and sources."),
+     "input_schema": _schema({"query": {"type": "string"}, "max_results": {"type": "integer", "description": "default 8"}},
+                             ["query"])},
     {"name": "edit_lines", "description": (
         "Replace a range of lines using the anchors shown by read_file (e.g. start \"12:a3\", end \"20:f1\", "
         "inclusive). Cheaper and safer than edit_file for larger changes: the anchors are checked against the "
@@ -297,11 +301,13 @@ class Toolbox:
     pending_images: list = field(default_factory=list)   # images read by the current call (take_images)
     branches: object = None                # featurebranch.FeatureBranches during a feature cycle (path redirection)
     handlers: dict[str, Callable[[dict], str]] = field(default_factory=dict)
+    search_url: str | None = None          # a SearXNG instance for web_search (config web.search_url); None: no tool
 
     def __post_init__(self):
         self.handlers.update({"bash": self.bash, "read_file": self.read_file, "write_file": self.write_file,
                               "edit_file": self.edit_file, "grep": self.grep, "glob": self.glob,
-                              "web_fetch": self.web_fetch, "edit_lines": self.edit_lines})
+                              "web_fetch": self.web_fetch, "web_search": self.web_search,
+                              "edit_lines": self.edit_lines})
 
     @property
     def remote(self) -> bool:
@@ -468,6 +474,25 @@ class Toolbox:
         if "html" in ctype or text.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
             text = _html_text(text)
         return f"URL: {final}\nContent-Type: {ctype}\n\n{text}"
+
+    def web_search(self, a: dict) -> str:
+        import urllib.parse
+        import urllib.request
+        if not self.search_url:
+            return "ERROR: web search is not configured (web.search_url)"
+        query = str(a.get("query", "")).strip()
+        if not query:
+            return "ERROR: empty query"
+        if not self.approve("web_search", query):
+            return "DENIED: user did not approve this search"
+        url = self.search_url.rstrip("/") + "/search?" + urllib.parse.urlencode({"q": query, "format": "json"})
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept": "application/json"}), timeout=30) as r:
+            data = json.loads(r.read())
+        results = data.get("results", [])[:max(1, min(int(a.get("max_results") or 8), 20))]
+        if not results:
+            return f"No results for {query!r}."
+        return "\n\n".join(f"{i}. {x.get('title', '').strip()}\n   {x.get('url')}\n   {(x.get('content') or '').strip()[:300]}"
+                            for i, x in enumerate(results, 1))
 
     def grep(self, a: dict) -> str:
         if self.remote:

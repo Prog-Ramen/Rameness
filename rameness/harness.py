@@ -268,7 +268,8 @@ class Harness:
         self.router.on_decision = lambda *a: self.on_decision(*a) if self.on_decision else None
         self.toolbox = Toolbox(Path(workdir) if workdir else self.cwd, self.approver, env,
                                line_anchors=bool(self.cfg.get("line_anchors")), vision=self._vision(llm),
-                               edit_fuzzy=bool(self.cfg.get("edit_fuzzy")))
+                               edit_fuzzy=bool(self.cfg.get("edit_fuzzy")),
+                               search_url=(self.cfg.get("web") or {}).get("search_url"))
         self.hooks = hooks_mod.Hooks(self.executor, self.cfg, self.toolbox.cwd, on_event=self.event)
         self.messages: list[dict] = []           # persists across run() calls for chat sessions
         self.todos: list[dict] = []              # the agent's plan (todo_write)
@@ -548,7 +549,8 @@ class Harness:
                 self.messages.append({"role": "user", "content": note})
             builtin = [t for t in BUILTIN_SCHEMAS if (t["name"] != "edit_lines" or self.toolbox.line_anchors)
                        and (t["name"] != "note" or self.cfg.get("state_ledger"))
-                       and (t["name"] != "delegate" or (self.cfg.get("delegation") and self.depth == 0))]
+                       and (t["name"] != "delegate" or (self.cfg.get("delegation") and self.depth == 0))
+                       and (t["name"] != "web_search" or self.toolbox.search_url)]
             if self.cfg.get("batch_workflow"):     # the tool's own description must not contradict the prompt
                 builtin = [{**t, "description": t["description"].replace(TODO_ONE_DESC, TODO_WHOLE_DESC)}
                            if t["name"] == "todo_write" else t for t in builtin]

@@ -5,7 +5,7 @@ Sources:
 * configured endpoints in fleet.json ``slots``::
 
       {"id": "opus", "kind": "anthropic", "model": "claude-opus-5", "capacity": 4, "traits": "strongest reasoning"}
-      {"id": "gpu-llama", "kind": "llama-server", "url": "http://10.0.0.7:8080", "traits": "local private"}
+      {"id": "gpu-llama", "kind": "llama-server", "url": "http://192.0.2.10:8080", "traits": "local private"}
       {"id": "ds", "kind": "openai", "url": "https://api.deepseek.com", "model": "deepseek-chat",
        "api_key_env": "DEEPSEEK_API_KEY"}
 
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -34,13 +35,34 @@ DEFAULT_PORTS = {8080: "llama-server", 8081: "llama-server", 8082: "llama-server
 CLI_AGENTS = {
     # name: (argv template for a headless one-shot run, traits)
     "claude": (["claude", "-p", "{task}", "--permission-mode", "acceptEdits"], "claude code agent strong coding reasoning tools"),
-    "codex": (["codex", "exec", "--full-auto", "{task}"], "openai codex agent coding"),
+    "codex": (["codex", "exec", "--sandbox", "workspace-write", "{task}"], "openai codex agent coding"),
     "pi": (["pi", "-p", "{task}"], "pi coding agent"),
     "opencode": (["opencode", "run", "{task}"], "opencode coding agent"),
     "aider": (["aider", "--yes-always", "--message", "{task}"], "aider pair programming edits git"),
     "gemini": (["gemini", "-p", "{task}"], "gemini cli agent large context"),
     "goose": (["goose", "run", "-t", "{task}"], "goose agent"),
 }
+
+# CLI agents that print their whole transcript, then repeat the final answer after a marker
+REPORT_AFTER = {"codex": re.compile(r"\ntokens used\n[\d,]+\n")}
+
+
+# CLI agents sandboxed to the folder they start in, and their flag for allowing another
+ADD_DIR = {"claude": "--add-dir", "codex": "--add-dir"}
+
+
+def add_dir_args(slot: Slot, dirs: list[str]) -> list[str]:
+    """Extra folders a CLI agent may work in (fleet agent_dirs), in its own flag; [] for the others."""
+    flag = ADD_DIR.get(slot.model) if slot.is_cli else None
+    return [x for d in dirs for x in (flag, os.path.expanduser(d))] if flag else []
+
+
+def cli_report(runtime: str, output: str) -> str:
+    """A CLI agent's final answer, without the transcript it printed before it (when we know its format)."""
+    marker = REPORT_AFTER.get(runtime.removeprefix("cli:"))
+    parts = marker.split(output) if marker else [output]
+    return parts[-1].strip() if len(parts) > 1 and parts[-1].strip() else output
+
 
 API_TRAITS = {
     "claude-opus": "strongest reasoning planning architecture hard debugging large context 1m",

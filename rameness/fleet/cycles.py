@@ -277,7 +277,7 @@ CREATE TABLE IF NOT EXISTS programs (id TEXT PRIMARY KEY, lead TEXT, goal TEXT, 
     # ---- create
 
     def create(self, goal: str, cycles: int | None, categories: list[str] | None = None,
-               draft: bool = True, from_agent: str | None = None) -> dict:
+               draft: bool = True, from_agent: str | None = None, meta: dict | None = None) -> dict:
         f = self.f
         if cycles is None and f.autonomy != "godmode":
             raise ValueError("open-ended cycling needs godmode (set autonomy to godmode; requires allow_godmode)")
@@ -290,7 +290,7 @@ CREATE TABLE IF NOT EXISTS programs (id TEXT PRIMARY KEY, lead TEXT, goal TEXT, 
         pid = "p-" + uuid.uuid4().hex[:6]
         label = f"{cycles} cycles" if cycles is not None else "godmode"
         lead = f.spawn(goal, role="lead", kind="deliver", title=f"{label} · {goal[:48]}",
-                       meta={"program": pid, "program_lead": True, "role_decided": True})
+                       meta={"program": pid, "program_lead": True, "role_decided": True, **(meta or {})})
         f.store.update_agent(lead["id"], status="running", runtime="manager", env="local")
         base = None
         state: dict = {"extensions": 0}

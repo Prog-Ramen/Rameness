@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from rameness.fleet import envs, sessions
@@ -148,6 +149,95 @@ class TestFleetLifecycle(FleetEnv):
                                        and sum(f.get(i)["meta"].get("integrated", False) for i in group) == 1, 25))
         self.assertEqual(sum(1 for i in group if f.get(i)["meta"].get("fork_lost")), 2)
 
+    def test_a_follow_up_returns_to_the_runtime_that_did_the_work_with_a_fresh_log(self):
+        f = self.fleet()
+        f.slots.append(replace(f.slots[0], id="cli:other", model="other"))
+        aid = f.spawn("fix the version string printed by app.py", role_explicit=True)["id"]
+        self.assertTrue(self.run_until(f, lambda: f.get(aid)["status"] == "done"), f.store.events())
+        first = f.get(aid)
+        self.assertEqual(f.prompt(aid, "also print the date"), "reopened")
+        self.assertTrue(f.get(aid)["meta"]["pinned_slot"])
+        self.assertTrue(self.run_until(f, lambda: f.get(aid)["status"] == "done" and f.get(aid)["meta"].get("finalized")))
+        again = f.get(aid)
+        self.assertEqual(again["slot"], first["slot"])
+        self.assertIn("also print the date", again["result"])
+        self.assertEqual(again["result"].count("edited:"), 1)            # this run's output only
+        self.assertTrue(Path(again["handle"]["log"]).with_name(f"{aid}.prev.log").exists())
+        f.retire(aid)                                                      # closing a finished agent keeps its outcome
+        self.assertEqual(f.get(aid)["status"], "done")
+        self.assertTrue(f.get(aid)["meta"]["closed"])
+        self.assertIsNone(f.get(aid)["worktree"])
+
+    def test_with_no_runtime_left_the_director_is_asked_once_and_nothing_is_re_decided(self):
+        f = self.fleet()
+        aid = f.spawn("fix the version string printed by app.py", role_explicit=True,
+                      meta={"exclude_slots": ["cli:editor"], "fork_decided": True})["id"]
+        f.tick()
+        made = len(f.store.decisions(agent=aid))
+        for _ in range(5):
+            f.tick()
+        esc = [e for e in f.store.escalations() if e["agent"] == aid]
+        self.assertEqual(len(esc), 1)
+        self.assertIn("no runtime is left", esc[0]["question"])
+        self.assertEqual(len(f.store.decisions(agent=aid)), made)     # waiting is not a decision
+        self.assertFalse([d for d in f.store.decisions(agent=aid) if d["question"].startswith("Which environment")])
+        f.answer(esc[0]["id"], "retry")                                  # clears the exclusions
+        self.assertTrue(self.run_until(f, lambda: f.get(aid)["status"] == "done"), f.store.events())
+
+    def test_a_director_retry_after_failure_runs_and_reports_again(self):
+        f = self.fleet(max_attempts=0)
+        f.slots[0].argv = ["bash", "-c", "test -e .ok || { echo nope; exit 1; }; echo \"print('v2')\" > app.py", "{task}"]
+        aid = f.spawn("fix the version string printed by app.py", role_explicit=True, meta={"fork_decided": True})["id"]
+        self.assertTrue(self.run_until(f, lambda: any(e["agent"] == aid and e["kind"] == "failure"
+                                                      for e in f.store.escalations())), f.store.events())
+        f.slots[0].argv = ["bash", "-c", "echo \"print('v2')\" > app.py; echo fixed", "{task}"]
+        f.answer([e for e in f.store.escalations() if e["agent"] == aid][0]["id"], "retry")
+        self.assertTrue(self.run_until(f, lambda: any(e["kind"] == "merge" for e in f.store.escalations())),
+                        f.store.events())                                # finished for real: offered for merge
+
+    def test_a_follow_up_after_a_merge_builds_on_the_merged_work(self):
+        f = self.fleet()
+        f.slots[0].argv = ["bash", "-c", "git rev-parse --git-dir >/dev/null || exit 3; echo \"$0\" | grep -o '[a-z]* note' | tail -1 >> notes.txt",
+                           "{task}"]
+        aid = f.spawn("first note", role_explicit=True, meta={"fork_decided": True})["id"]
+        merge = lambda: [e for e in f.store.escalations() if e["kind"] == "merge"]
+        self.assertTrue(self.run_until(f, lambda: merge()), f.store.events())
+        f.answer(merge()[0]["id"], "merge")
+        self.assertIsNone(f.get(aid)["worktree"])
+        f.prompt(aid, "second note")
+        self.assertTrue(self.run_until(f, lambda: merge()), f.store.events())
+        self.assertEqual(f.get(aid)["status"], "done")
+        self.assertTrue(f.get(aid)["worktree"])                          # isolated again, in a fresh worktree
+        self.assertNotIn("second note", (self.repo / "notes.txt").read_text())   # nothing lands before the merge
+        f.answer(merge()[0]["id"], "merge")
+        notes = (self.repo / "notes.txt").read_text()
+        self.assertIn("first note", notes)
+        self.assertIn("second note", notes)
+
+    def test_a_conversational_message_is_answered_by_the_manager_without_an_agent(self):
+        from rameness.llm import Response
+
+        class Planner:
+            slot_id = "local"
+            seen = []
+
+            def chat(self, system, messages, tools, **kw):
+                self.seen.append(messages)
+                return Response("Doing well. Two agents are idle; ask me for work any time.", [], "end_turn")
+        f = self.fleet()
+        f.planner = Planner()
+        r = f.ask("hey, how are you?")
+        self.assertEqual(r["route"], "answer")
+        self.assertTrue(self.run_until(f, lambda: any(e["type"] == "reply" for e in f.store.events(agent="manager"))))
+        self.assertEqual([a for a in f.store.agents() if a["role"] != "manager"], [])     # nobody was started
+        self.assertIn("Doing well", [e for e in f.store.events(agent="manager") if e["type"] == "reply"][0]["message"])
+        self.assertEqual(Planner.seen[0][-1], {"role": "user", "content": "hey, how are you?"})
+
+    def test_without_a_model_of_its_own_the_manager_delegates_a_conversational_message(self):
+        f = self.fleet()
+        r = f.ask("hey, how are you?")
+        self.assertEqual(r["route"], "delegate")
+
 
 class TestComfortGate(FleetEnv):
     def test_director_policy_defers_then_applies_answer(self):
@@ -226,6 +316,39 @@ class TestEnvsAndSessions(unittest.TestCase):
         p = Path(tempfile.mkdtemp()) / "f.db"
         Store(p).create_agent(id="x", role="associate", title="t", task="t")
         self.assertEqual(Store(p).agent("x")["title"], "t")
+
+
+@unittest.skipUnless(sessions.TmuxBackend.available(), "tmux not installed")
+class TmuxSessions(unittest.TestCase):
+    def test_a_rerun_replaces_the_agents_window(self):
+        class Tmux(sessions.TmuxBackend):
+            SESSION = f"rameness-test-{os.getpid()}"
+        b = Tmux(Path(tempfile.mkdtemp()))
+        try:
+            for _ in range(2):
+                h = b.start("a-1", ["true"], tempfile.gettempdir())
+            names = b._tmux("list-windows", "-t", Tmux.SESSION, "-F", "#{window_name}").stdout.split()
+            self.assertEqual(names.count("a-1"), 1)
+            b.stop(h)
+            self.assertFalse(b.alive(h))
+        finally:
+            b._tmux("kill-session", "-t", Tmux.SESSION)
+
+class ReportsAndTitles(unittest.TestCase):
+    def test_a_cli_agents_report_is_its_final_answer_not_its_transcript(self):
+        from rameness.fleet.slots import cli_report
+        out = ("model: gpt\n--------\nuser\nCreate hello.txt\ncodex\nI'll create it.\nexec\nprintf hi > hello.txt\n"
+               "codex\nCreated hello.txt.\ntokens used\n3,791\nCreated hello.txt.\n")
+        self.assertEqual(cli_report("cli:codex", out), "Created hello.txt.")
+        self.assertEqual(cli_report("cli:codex", "error: unexpected argument"), "error: unexpected argument")
+        self.assertEqual(cli_report("cli:claude", "Done: added the test."), "Done: added the test.")
+
+    def test_titles_end_on_a_word(self):
+        from rameness.fleet.manager import short_title
+        self.assertEqual(short_title("Fix the typo"), "Fix the typo")
+        self.assertEqual(short_title("Create a file hello.txt containing the single line: hello from rameness"),
+                         "Create a file hello.txt containing the single line: hello…")
+        self.assertEqual(short_title("Build the API\n\nwith tests and docs"), "Build the API")
 
 
 if __name__ == "__main__":

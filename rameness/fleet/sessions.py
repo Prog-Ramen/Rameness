@@ -48,6 +48,8 @@ class Backend:
     def start(self, name: str, argv: list[str], cwd: str, env: dict | None = None) -> dict:
         log, exitf = self._files(name)
         exitf.unlink(missing_ok=True)
+        if log.exists():                  # a rerun: its report must come from this run's output only
+            log.replace(log.with_name(f"{name}.prev.log"))
         h = {"backend": self.name, "name": name, "log": str(log), "exit": str(exitf)}
         h.update(self._start(name, wrapper(argv, log, exitf), cwd, env or {}))
         return h
@@ -132,6 +134,10 @@ class TmuxBackend(Backend):
     def _start(self, name, script, cwd, env):
         if self._tmux("has-session", "-t", self.SESSION).returncode:
             self._tmux("new-session", "-d", "-s", self.SESSION, "-n", "fleet", check=True)
+        # a rerun replaces the agent's previous window: one window per agent, so its name stays unambiguous
+        old = self._tmux("list-windows", "-t", self.SESSION, "-F", "#{window_id} #{window_name}").stdout.split("\n")
+        for wid in [w.split(" ", 1)[0] for w in old if w.split(" ", 1)[-1] == name]:
+            self._tmux("kill-window", "-t", wid)
         envargs = [x for k, v in env.items() for x in ("-e", f"{k}={v}")]
         self._tmux("new-window", "-d", "-t", f"{self.SESSION}:", "-n", name, "-c", cwd, *envargs,
                    "bash", "-c", script + "; echo '[session ended - press enter]'; read", check=True)

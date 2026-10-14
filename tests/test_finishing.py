@@ -1,13 +1,12 @@
 """An SOP gets from written to validated without help: tests completed from what the script really returns,
 tests that check real values, and a security review whose findings go back to the model to fix."""
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from rameness import sopsafety
 from rameness.jev import Jev, LexicalJev
-from rameness.learning import complete_tests, finish_sop, register_sop
+from rameness.learning import complete_tests, register_sop
 from rameness.llm import FakeProvider
 from rameness.sops import Executor, Library
 

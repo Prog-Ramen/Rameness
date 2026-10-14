@@ -15,7 +15,6 @@ from rameness.llm import AnthropicProvider, FakeProvider, OpenAICompatProvider, 
 from rameness.org import Org
 from rameness.publish import publish, scrub
 from rameness.sops import Executor, Library, SOPError, activate
-from rameness.tools import Approver
 
 
 def write_sop(root: Path, sop_id: str, spec: dict, script: str | None = None, node: dict | None = None):

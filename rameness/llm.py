@@ -73,13 +73,18 @@ class Provider:
         self.usage["input"] += i
         self.usage["output"] += o
         self.usage["calls"] += 1
+        from . import metrics
+        metrics.inc("rameness_model_requests_total", provider=self.name, model=self.model)
+        metrics.inc("rameness_model_tokens_total", i, provider=self.name, model=self.model, direction="input")
+        metrics.inc("rameness_model_tokens_total", o, provider=self.name, model=self.model, direction="output")
 
     def chat(self, system: str, messages: list[dict], tools: list[dict], effort: str = "high",
              max_tokens: int = 32000, fast: bool = False, thinking: int | None = None,
-             response_schema: dict | None = None) -> Response:
+             response_schema: dict | None = None, on_text=None) -> Response:
         """``thinking``: this turn's reasoning-token budget, for servers that take one (rameness.thinking).
         ``response_schema``: the reply must be JSON matching this schema (constrained decoding where the server
-        supports it)."""
+        supports it). ``on_text``: called with each piece of the reply's text as it is generated (streaming; the
+        thinking and tool calls are not passed to it); the full Response is still returned."""
         raise NotImplementedError
 
     request_timeout: float | None = None      # per-call time budget (used by JEV escalations)
@@ -111,16 +116,16 @@ class AnthropicProvider(Provider):
         import anthropic
         self._anthropic = anthropic
         self.client = anthropic.Anthropic(base_url=base_url) if base_url else anthropic.Anthropic()
+        if not (self.client.api_key or self.client.auth_token):
+            raise RuntimeError("no Anthropic credentials: set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN), "
+                               "or run `ant auth login`, or pick another --provider")
+        self.fallbacks = fallbacks
 
     def context_window(self) -> int | None:
         return 200000
 
     def supports_vision(self) -> bool:
         return True
-        if not (self.client.api_key or self.client.auth_token):
-            raise RuntimeError("no Anthropic credentials: set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN), "
-                               "or run `ant auth login`, or pick another --provider")
-        self.fallbacks = fallbacks
 
     @staticmethod
     def to_wire(messages: list[dict]) -> list[dict]:
@@ -160,7 +165,7 @@ class AnthropicProvider(Provider):
         return not model.startswith("claude-haiku")
 
     def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
-             response_schema=None):
+             response_schema=None, on_text=None):
         model = self.fast_model if fast else self.model
         if response_schema and not tools:
             # Anthropic does not allow forcing a tool while thinking is on: offer one reply tool whose input is the
@@ -179,14 +184,18 @@ class AnthropicProvider(Provider):
             if use_fb:
                 with client.beta.messages.stream(betas=["server-side-fallback-2026-07-01"],
                                                       fallbacks="default", **kw) as s:
+                    for piece in (s.text_stream if on_text else ()):
+                        on_text(piece)
                     msg = s.get_final_message()
             else:
                 with client.messages.stream(**kw) as s:
+                    for piece in (s.text_stream if on_text else ()):
+                        on_text(piece)
                     msg = s.get_final_message()
         except self._anthropic.BadRequestError as e:
             if use_fb and "fallback" in str(e).lower():
                 self.fallbacks = False          # endpoint/proxy doesn't accept it; stop trying
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema, on_text)
             raise
         self._count(msg.usage.input_tokens, msg.usage.output_tokens)
         text = "".join(b.text for b in msg.content if b.type == "text")
@@ -235,6 +244,10 @@ class OpenAICompatProvider(Provider):
         self.sampling: dict = {}               # per-request sampling (sampling_for); empty: the server's defaults
         self.reasoning_effort = reasoning_effort
         self.tool_mode = tool_mode
+
+    @staticmethod
+    def _collect(r, on_text):
+        return _collect_stream(r, on_text)
 
     def _server_props(self) -> dict:
         """llama-server's /props (window, modalities); {} for servers without it."""
@@ -403,7 +416,7 @@ class OpenAICompatProvider(Provider):
         return self._CALL.sub("", text).strip(), calls
 
     def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
-             response_schema=None):
+             response_schema=None, on_text=None):
         model = self.fast_model if fast else self.model
         prompted = bool(tools) and self.tool_mode == "prompt"
         sys_text = system + ("\n\n" + self.tool_prompt(tools) if prompted else "")
@@ -434,22 +447,28 @@ class OpenAICompatProvider(Provider):
         if extra:
             kw["extra_body"] = extra
         client = self.client.with_options(timeout=self.request_timeout, max_retries=0) if self.request_timeout else self.client
+        stream = on_text is not None and not prompted     # prompted tool calls arrive as text: no streaming
+        if stream:
+            kw["stream"] = True
+            kw["stream_options"] = {"include_usage": True}
         try:
             r = client.chat.completions.create(**kw)
+            if stream:
+                r = self._collect(r, on_text)
         except Exception as e:
             from openai import BadRequestError, InternalServerError
             if fmt and isinstance(e, BadRequestError) and ("response_format" in str(e) or "json_schema" in str(e)):
                 self._format_rejected = True          # this server does not take a schema: ask in the prompt only
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema, on_text)
             if field and isinstance(e, BadRequestError) and field in str(e):
                 # the server does not take a thinking budget after all (e.g. no reasoning parser configured):
                 # stop sending it rather than fail the run
                 self._budget_rejected = True
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema, on_text)
             if (tools and not prompted and self.tool_mode == "auto"
                     and isinstance(e, (BadRequestError, InternalServerError)) and "tool" in str(e).lower()):
                 self.tool_mode = "prompt"
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema, on_text)
             if isinstance(e, (BadRequestError, InternalServerError)) and any(m.get("images") for m in messages):
                 # a server can advertise vision and still fail on images (e.g. llama-server with a speculative draft
                 # model that has no vision): drop the images, say so, and stop sending them for this session
@@ -457,7 +476,7 @@ class OpenAICompatProvider(Provider):
                 for m in messages:
                     if m.pop("images", None):
                         m["content"] = f"{m['content']} [not shown: the model server failed on images, so they are off]"
-                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema)
+                return self.chat(system, messages, tools, effort, max_tokens, fast, thinking, response_schema, on_text)
             raise
         ch = r.choices[0]
         u = r.usage
@@ -478,12 +497,49 @@ class OpenAICompatProvider(Provider):
             except json.JSONDecodeError:
                 args = {"_invalid_json": tc.function.arguments}
             calls.append(ToolCall(tc.id, tc.function.name, args))
+        if stream is False and on_text and text:       # prompted tool mode: no streaming, the text in one piece
+            on_text(text)
         if not calls and "<tool_call>" in text and tools:     # model used the text protocol anyway
             text, calls = self._parse_prompted(text, tools)
         stop = "tool_use" if calls else ("max_tokens" if ch.finish_reason == "length" else "end_turn")
         return Response(text, calls, stop,
                         {"input": getattr(u, "prompt_tokens", 0), "output": getattr(u, "completion_tokens", 0)},
                         reasoning=(reasoning or "").strip())
+
+
+def _ns(**kw):
+    from types import SimpleNamespace
+    return SimpleNamespace(**kw)
+
+
+def _collect_stream(chunks, on_text):
+    """A streamed chat.completions reply put back together as the non-streamed shape the parser reads."""
+    text, reasoning, field, finish, usage = [], [], None, None, None
+    calls: dict[int, dict] = {}
+    for ch in chunks:
+        usage = getattr(ch, "usage", None) or usage
+        if not ch.choices:
+            continue
+        c = ch.choices[0]
+        finish = c.finish_reason or finish
+        d = c.delta
+        for f in ("reasoning_content", "reasoning"):
+            v = getattr(d, f, None) or (getattr(d, "model_extra", None) or {}).get(f)
+            if isinstance(v, str) and v:
+                reasoning.append(v)
+                field = f
+        if d.content:
+            text.append(d.content)
+            on_text(d.content)
+        for tc in d.tool_calls or []:
+            slot = calls.setdefault(tc.index, {"id": None, "name": "", "arguments": ""})
+            slot["id"] = tc.id or slot["id"]
+            if tc.function:
+                slot["name"] += tc.function.name or ""
+                slot["arguments"] += tc.function.arguments or ""
+    tool_calls = [_ns(id=c["id"], function=_ns(name=c["name"], arguments=c["arguments"])) for _, c in sorted(calls.items())]
+    msg = _ns(content="".join(text), tool_calls=tool_calls or None, model_extra={field: "".join(reasoning)} if field else {})
+    return _ns(choices=[_ns(message=msg, finish_reason=finish)], usage=usage or _ns(prompt_tokens=0, completion_tokens=0))
 
 
 # --------------------------------------------------------------------------- scripted (tests / demos)
@@ -501,14 +557,19 @@ class FakeProvider(Provider):
         self.seen: list[dict] = []
 
     def chat(self, system, messages, tools, effort="high", max_tokens=32000, fast=False, thinking=None,
-             response_schema=None):
+             response_schema=None, on_text=None):
         self.seen.append({"system": system, "messages": list(messages), "tools": [t["name"] for t in tools],
                           "effort": effort})
         self._count(sum(len(str(m.get("content", ""))) for m in messages) // 4, 10)
         if not self.script:
-            return Response("done", [], "end_turn")
-        item = self.script.pop(0)
-        return item(messages) if callable(item) else item
+            r = Response("done", [], "end_turn")
+        else:
+            item = self.script.pop(0)
+            r = item(messages) if callable(item) else item
+        if on_text and r.text:
+            for word in re.findall(r"\S+\s*", r.text):      # streamed word by word
+                on_text(word)
+        return r
 
     def complete_json(self, system, prompt, max_tokens=4000, timeout=None, schema=None, thinking=1024):
         self._count(len(prompt) // 4, 10)

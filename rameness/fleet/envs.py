@@ -1,6 +1,6 @@
 """Execution environments: where an agent's tools run, independent of where its model runs.
 
-    {"id": "gpu-box", "kind": "ssh", "host": "me@10.0.0.7", "workdir": "/srv/work",
+    {"id": "gpu-box", "kind": "ssh", "host": "me@192.0.2.10", "workdir": "/srv/work",
      "tags": ["gpu", "cuda"], "ssh_opts": ["-p", "2222"]}
     {"id": "sandbox", "kind": "container", "engine": "docker", "container": "dev", "workdir": "/work"}
     {"id": "k8s-job", "kind": "exec", "prefix": ["kubectl", "exec", "-i", "pod/x", "--"], "workdir": "/w"}

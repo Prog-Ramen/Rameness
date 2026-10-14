@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import sys
 import threading
 import time
@@ -35,7 +36,7 @@ from ..jev import Option
 from ..router import decisive
 from . import envs as envs_mod
 from . import sessions, worktree
-from .slots import Slot, discover, provider_for
+from .slots import Slot, add_dir_args, cli_report, discover, provider_for
 from .store import ACTIVE, Store
 
 FLEET_DEFAULTS = {
@@ -57,6 +58,15 @@ FLEET_DEFAULTS = {
     "fork_width": 2,
     "worker_permissions": "auto",      # permission mode inside worker harnesses (they're sandboxed to a worktree)
     "port": 7788,
+    # team: the manager routes each request (answer it, delegate, split it up, research) |
+    # direct: no hierarchy, one agent per chat does the work and takes every follow-up
+    "work_mode": "team",
+    # general: a manager for any request (rameness fleet up --home). It is not tied to a project: each chat's
+    # agents start in a folder of the chat's own and find the project a task is about themselves.
+    "general": False,
+    # folders CLI agents (claude, codex) may also work in, beyond the one they start in (--add-dir);
+    # a general manager defaults to the home folder
+    "agent_dirs": [],
     # comfort gate: before any decision takes effect, JEV asks itself whether it is the director's to make
     "gate": {"significance": 0.55, "margin_floor": 0.06, "uncertain_significance": 0.3},
     # per-question override: "auto" (gate decides) | "jev" (never ask) | "director" (always ask); "*" = default
@@ -99,15 +109,18 @@ QUESTION_CLASS = {
 
 INTAKE = [
     Option("delegate", "fix add implement change update write rename bug feature file function test single focused task",
-           desc="A single focused task one agent can do directly."),
+           desc="A concrete change to make in code or files: fix, add, implement or update something; one agent can do it."),
     Option("decompose", "build system project app platform multiple several parts components and also then plus "
                         "end to end migrate across modules frontend backend pipeline full",
-           desc="A large task with several parts that should be split into sub-tasks for multiple agents."),
+           desc="A large build with several parts that should be split between multiple agents."),
     Option("research", "investigate research find out compare evaluate analyze why explore report survey options "
                        "audit review understand benchmark",
-           desc="A question to investigate, compare or analyze and report on, rather than something to build."),
+           desc="Needs looking things up: current information, comparing sources or products, or investigating, then reporting back."),
     Option("clarify", "something stuff thing it that help improve better do make",
-           desc="The request is too vague to act on; ask the director what they want first."),
+           desc="Too vague to act on; the director must first say what they want."),
+    Option("answer", "hi hello hey how are you thanks thank you good morning who are you what can you do status "
+                     "how is it going quick question what is explain meaning chat",
+           desc="Small talk, or a question answerable right away from general knowledge: a fact, a definition or a short explanation."),
 ]
 ROLE = [
     Option("associate", "small focused single file function fix test one step quick",
@@ -151,11 +164,24 @@ independent, delegable subtasks (1-6). Each subtask's "task" must be self-contai
 acceptance criteria. Output JSON only."""
 
 
+GENERAL_NOTE = ("\n\nYou start in a scratch folder of your own. If the task is about a project on this machine, "
+                "find it yourself (e.g. search with find or ls) and work in it.")
+
+
+def short_title(task: str, n: int = 60) -> str:
+    """The task's first line, cut at a word boundary."""
+    line = task.strip().splitlines()[0] if task.strip() else task
+    if len(line) <= n:
+        return line
+    return line[:n].rsplit(" ", 1)[0].rstrip(" ,.;:") + "…"
+
+
 def load_fleet_cfg(cwd: Path) -> dict:
     cfg = json.loads(json.dumps(FLEET_DEFAULTS))
+    from ..settings import fleet_schema, read
     for p in (config_mod.user_home() / "fleet.json", cwd / ".rameness" / "fleet.json"):
         if p.exists():
-            config_mod._merge(cfg, json.loads(p.read_text()))
+            config_mod._merge(cfg, {k: v for k, v in read(p, fleet_schema()).items() if k != "$schema"})
     return cfg
 
 
@@ -352,9 +378,11 @@ class Fleet:
             depth = int(p["meta"].get("depth", 0)) + 1
             if depth > self.cfg["max_depth"] and role == "lead":
                 role = "associate"
-            meta = {"depth": depth, "pinned_slot": bool(slot), "pinned_env": bool(env), **(meta or {})}
+            meta = {"depth": depth, "pinned_slot": bool(slot), "pinned_env": bool(env),
+                    # sub-agents work for the same chat, in the same project, as their parent
+                    **{k: p["meta"][k] for k in ("chat", "workdir") if p["meta"].get(k)}, **(meta or {})}
             meta.setdefault("role_decided", role_explicit)
-            a = self.store.create_agent(parent=parent, role=role, kind=kind, title=title or task[:60], task=task,
+            a = self.store.create_agent(parent=parent, role=role, kind=kind, title=title or short_title(task), task=task,
                                         slot=slot, env=env, depends=depends or [], meta=meta)
             return a
 
@@ -396,8 +424,10 @@ class Fleet:
                 return "sent to session" if ok else "this session backend can't accept input"
             if a["status"] in ("done", "failed", "retired"):
                 self.store.send(aid, text, sender)
+                # a follow-up goes back to the runtime that did the work; after a failure, any may take it
+                pinned = a["meta"].get("pinned_slot") or (a["status"] == "done" and bool(a["slot"]))
                 self.store.update_agent(aid, meta={**a["meta"], "resume": True, "finalized": False,
-                                                   "integrated": False})
+                                                   "integrated": False, "pinned_slot": pinned, "closed": False})
                 self.store.set_status(aid, "queued", "reopened with a follow-up")
                 return "reopened"
             return f"agent is {a['status']}"
@@ -450,6 +480,9 @@ class Fleet:
                     self.store.delete_agent(a["id"])
                 elif a["status"] not in ("done", "failed"):
                     self.store.set_status(a["id"], "retired")
+                else:                               # keeps its outcome; its session and worktree are gone
+                    self.store.update_agent(a["id"], worktree=None, meta={**a["meta"], "closed": True})
+                    self.store.event(a["id"], "closed", "session and worktree closed")
 
     def fork(self, aid: str, instructions: list[str] | None = None, n: int | None = None) -> list[dict]:
         """Clone an agent's task (and transcript, if it has one) into parallel variants."""
@@ -505,14 +538,17 @@ class Fleet:
                 elif e["agent"] and e["agent"] != "manager":
                     self.prompt(e["agent"], text)
                 if pl.get("resume") == "ask":
-                    self.ask(pl["text"], clarified=pl.get("clarified", False))
+                    self.ask(pl["text"], clarified=pl.get("clarified", False), chat=pl.get("chat"))
             elif e["kind"] == "merge" and e["agent"]:
                 self._apply_merge_answer(self.get(e["agent"]), text)
             elif e["kind"] == "intake":
-                self.ask(f"{e['options'][0] if e['options'] else ''}\n\nClarification: {text}".strip(), clarified=True)
+                self.ask(f"{e['options'][0] if e['options'] else ''}\n\nClarification: {text}".strip(), clarified=True,
+                         chat=(e.get("payload") or {}).get("chat"))
             elif e["kind"] == "failure" and e["agent"]:
                 a = self.get(e["agent"])
                 if text.lower().startswith(("retry", "yes", "y")):
+                    self.store.update_agent(a["id"], meta={**a["meta"], "finalized": False, "failure_pending": False,
+                                                           "no_runtime": False, "exclude_slots": [], "resume": True})
                     self.store.set_status(a["id"], "queued", "director: retry")
                 elif text.lower().startswith(("abandon", "no", "n")):
                     self.store.set_status(a["id"], "retired", "director: abandon")
@@ -522,42 +558,204 @@ class Fleet:
     # ------------------------------------------------------------------ intake
 
     def ask(self, text: str, clarified: bool = False, cycles: int | None | str = 0,
-            categories: list[str] | None = None, on: str | None = None) -> dict:
+            categories: list[str] | None = None, on: str | None = None, chat: str | None = None,
+            mode: str | None = None, tools: list[dict] | None = None, reply_inline: bool = False) -> dict:
         """Director request -> JEV intake route -> agents.
 
+        ``chat``: the conversation it belongs to (any client's conversation id, e.g. a CLI session); follow-ups,
+        agents and the manager's replies are kept per chat. ``mode``: "team" (route each request) or "direct" (one agent per
+        chat does the work); default: the chat's mode, else ``work_mode``.
         ``cycles``: N > 0 builds a draft then runs N refinement cycles; ``"godmode"`` cycles until JEV
-        judges the work converged (godmode autonomy only)."""
-        if cycles:
-            with self.lock:
-                p = self.programs.create(text, None if cycles == "godmode" else int(cycles), categories,
-                                         draft=on is None, from_agent=None if on in (None, "HEAD") else on)
-                return {"route": "program", "program": p["id"], "agents": [p["lead"]], "probs": {}}
+        judges the work converged (godmode autonomy only). ``tools``: tools the client can run; requests they cover
+        count as ones the manager answers itself. ``reply_inline``: the caller runs that reply (``turn``)."""
         with self.lock:
+            c = self.store.ensure_chat(chat or "default", title=text)
+            mode = mode or c.get("mode") or self.cfg["work_mode"]
+            if mode != c.get("mode"):
+                c = self.store.update_chat(c["id"], mode=mode)
             m = self.manager["id"]
-            resume = {"resume": "ask", "text": text, "clarified": clarified}
-            route, probs = self.decide(m, "How should the manager handle this request?", text, INTAKE, "delegate",
-                                       payload=resume)
+            resume = {"resume": "ask", "text": text, "clarified": clarified, "chat": c["id"]}
+            if cycles:
+                p = self.programs.create(text, None if cycles == "godmode" else int(cycles), categories,
+                                         draft=on is None, from_agent=None if on in (None, "HEAD") else on,
+                                         meta=self._work_meta(c))
+                return {"route": "program", "program": p["id"], "agents": [p["lead"]], "probs": {}}
+            if mode == "direct":
+                return self._direct(c, text)
+            route, probs = self.decide(m, "How should the manager handle this request?", text,
+                                       self._intake_options(tools), "delegate", payload=resume)
             if route is None:
                 return {"route": "awaiting-director", "probs": probs}
-            self.store.event(m, "intake", f"{route}: {text[:200]}")
+            if route == "answer" and not self.planner:
+                route = "delegate"                   # no model of its own to answer with: an agent replies
+            self.store.event(m, "intake", f"{route}: {text}", chat=c["id"])
+            if route == "answer":
+                if not reply_inline:
+                    self._background(f"reply:{c['id']}:{time.time()}", self._reply, text, c["id"])
+                return {"route": route, "probs": probs}
             if route == "clarify" and not clarified:
-                eid = self.store.escalate(m, f"Please clarify the request: {text}", [text], kind="intake")
+                eid = self.store.escalate(m, f"Please clarify the request: {text}", [text], kind="intake",
+                                          payload={"chat": c["id"]})
                 return {"route": route, "escalation": eid, "probs": probs}
+            meta = self._work_meta(c)
             if route == "decompose" and self.planner:
-                return {"route": route, "probs": probs, "agents": [a["id"] for a in self.decompose(m, text)]}
+                return {"route": route, "probs": probs,
+                        "agents": [a["id"] for a in self.decompose(m, text, meta=meta)]}
             kind = "research" if route == "research" else "deliver"
-            reuse = self._reuse(text, resume)
+            reuse = self._reuse(text, resume, chat=c["id"])
             if reuse == "?":
                 return {"route": "awaiting-director", "probs": probs}
             if reuse:
                 self.prompt(reuse, text)
                 return {"route": "reuse", "probs": probs, "agents": [reuse]}
-            a = self.spawn(text, parent=m, kind=kind, role_explicit=False, meta={"size": "small"})
+            a = self.spawn(text, parent=m, kind=kind, role_explicit=False, meta={"size": "small", **meta})
             return {"route": route, "probs": probs, "agents": [a["id"]]}
 
-    def _reuse(self, text: str, payload: dict | None = None) -> str | None:
+    def _work_meta(self, chat: dict) -> dict:
+        """A chat's agents: tagged with the chat; under a general manager they start in a folder of the chat's own
+        (and find the project a task is about themselves), else in the manager's project."""
+        meta = {"chat": chat["id"]}
+        if self.cfg["general"]:
+            folder = self.cwd / "work" / re.sub(r"[^\w.-]", "_", chat["id"])
+            folder.mkdir(parents=True, exist_ok=True)
+            meta["workdir"] = str(folder)
+        return meta
+
+    def _direct(self, c: dict, text: str) -> dict:
+        """Direct mode: no hierarchy. One agent per chat does the work and takes every follow-up."""
+        m = self.manager["id"]
+        self.store.event(m, "intake", f"direct: {text}", chat=c["id"])
+        a = self.store.agent(c["agent"]) if c.get("agent") else None
+        if a and a["status"] != "retired":
+            self.prompt(a["id"], text)
+            return {"route": "direct", "probs": {}, "agents": [a["id"]]}
+        a = self.spawn(text, parent=m, kind="deliver", role="associate", role_explicit=True,
+                       meta={"size": "small", "fork_decided": True, "direct": True, **self._work_meta(c)})
+        self.store.update_chat(c["id"], agent=a["id"])
+        return {"route": "direct", "probs": {}, "agents": [a["id"]]}
+
+    REPLY_SYSTEM = ("You are the manager of a team of coding agents (Rameness){project}. "
+                    "The director (the user) sent you a message that needs no work in the project: answer it "
+                    "yourself, briefly and plainly. If they want something done, tell them to ask for it: you start "
+                    "agents on demand for each task (coding agents, researchers, testers) and report back. Agents "
+                    "running now or recently:\n{team}")
+
+    ACKS = {"delegate": "I'll have an agent do that and report back.",
+            "decompose": "That's a bigger job: I'll split it between agents and report back.",
+            "research": "I'll have an agent look into it and report back.",
+            "reuse": "I'll pass that to the agent working on it.",
+            "direct": "On it.", "program": "I'll start on that and report back after each cycle.",
+            "clarify": "Can you tell me more about what you want?",
+            "awaiting-director": "I need your decision before I start on that."}
+
+    def _intake_options(self, tools: list[dict] | None) -> list[Option]:
+        if not tools:
+            return INTAKE
+        can = " ".join(f"{t['name'].replace('_', ' ')} {t.get('description', '')}" for t in tools)
+        return [replace(o, text=f"{o.text} {can}", desc=f"{o.desc} Or something these tools of the client can do: "
+                                                           f"{', '.join(t['name'] for t in tools)}.")
+                if o.id == "answer" else o for o in INTAKE]
+
+    def turn(self, text: str, emit, chat: str | None = None, mode: str | None = None, tools: list[dict] | None = None,
+             call_tool=None, instructions: str = "") -> dict:
+        """A request whose answer streams back to the client: ``emit(event)`` gets {"t": "route"}, {"t": "text"}
+        pieces, {"t": "tool_call"} (the manager calling one of the client's ``tools``; ``call_tool(call)`` runs it
+        and returns its result), {"t": "agents"} and {"t": "done"}. ``instructions``: how the client wants
+        replies (e.g. plain spoken sentences)."""
+        r = self.ask(text, chat=chat, mode=mode, tools=tools, reply_inline=True)
+        emit({"t": "route", "route": r["route"]})
+        if r["route"] == "answer":
+            full = self._reply(text, chat or "default", tools=tools, call_tool=call_tool, instructions=instructions,
+                               on_text=lambda piece: emit({"t": "text", "text": piece}))
+        else:
+            full = self.ACKS.get(r["route"], "")
+            emit({"t": "text", "text": full})
+            if r.get("agents"):
+                emit({"t": "agents", "agents": r["agents"]})
+        emit({"t": "done", "text": full})
+        return {**r, "text": full}
+
+    def condense(self, text: str, length: str = "concise") -> str:
+        """A shorter version of a reply: concise (a sentence or two) or medium (a short paragraph)."""
+        if not self.planner:
+            return text
+        size = {"concise": "one or two sentences", "medium": "a short paragraph"}.get(length, "a short paragraph")
+        r = self.planner.chat(f"Rewrite the text in {size}, keeping what matters most. Plain prose, no lists or "
+                              "markup. Reply with the rewrite only.", [{"role": "user", "content": text}], [],
+                              effort="low", max_tokens=2000, thinking=256)
+        return (r.text or "").strip() or text
+
+    def _reply(self, text: str, chat: str | None = None, tools: list[dict] | None = None, call_tool=None,
+               instructions: str = "", on_text=None) -> str:
+        """The manager answers the director itself (the "answer" intake route): in a background thread, or
+        streamed through ``on_text`` for ``turn``, calling the client's ``tools`` through ``call_tool``."""
+        m = self.manager["id"]
+        where = " on this machine" if self.cfg["general"] else f", working in the project {self.cwd.name}"
+        system = self.REPLY_SYSTEM.format(project=where, team=self.standup())
+        if tools:
+            system += "\nThe director's client offers tools you can call; use them when the message asks for it."
+        if instructions:
+            system += f"\n\nHow the director wants your replies: {instructions}"
+        history = []
+        for e in self.store.events(limit=200, chat=chat):
+            if e["agent"] == m and e["type"] == "intake":
+                history.append({"role": "user", "content": e["message"].partition(": ")[2]})
+            elif e["agent"] == m and e["type"] == "reply":
+                history.append({"role": "assistant", "content": e["message"]})
+            elif e["type"] == "status" and e["message"].split(":")[0].endswith(("-> done", "-> failed")):
+                # work this chat asked for: what came of it, so "tell me the full report" can be answered
+                a = self.store.agent(e["agent"]) or {}
+                ok = e["message"].split(":")[0].endswith("-> done")
+                history.append({"role": "assistant", "content": f"[{a.get('title', 'an agent')} "
+                                f"{'finished' if ok else 'failed'}]\n{(a.get('result') or '').strip()[-6000:]}"})
+        history = history[-16:] or [{"role": "user", "content": text}]
+        while history and history[0]["role"] != "user":
+            history.pop(0)
+        merged: list[dict] = []                    # an agent's report next to a reply: one assistant turn
+        for h in history:
+            if merged and merged[-1]["role"] == h["role"] == "assistant":
+                merged[-1] = {"role": "assistant", "content": merged[-1]["content"] + "\n\n" + h["content"]}
+            else:
+                merged.append(h)
+        history = merged
+        said: list[str] = []
+        try:
+            for _ in range(6):                     # a few rounds of the client's tools at most
+                r = self.planner.chat(system, history, tools or [], effort="low", max_tokens=4000, thinking=1024,
+                                      on_text=on_text)
+                if r.text.strip():
+                    said.append(r.text.strip())
+                if not r.tool_calls or not call_tool:
+                    break
+                history.append({"role": "assistant", "content": r.text, "tool_calls": r.tool_calls, "raw": r.raw,
+                                "reasoning": r.reasoning})
+                for c in r.tool_calls:
+                    try:
+                        result = str(call_tool(c))
+                    except Exception as ex:
+                        result = f"ERROR: {type(ex).__name__}: {ex}"
+                    self.store.event(m, "tool", f"{c.name}({json.dumps(c.input)[:200]}) -> {result[:200]}", chat=chat)
+                    history.append({"role": "tool", "tool_call_id": c.id, "name": c.name, "content": result})
+            reply = "\n\n".join(said)
+            self.store.event(m, "reply", reply or "(no reply)", chat=chat)
+            return reply
+        except Exception as ex:
+            self.store.event(m, "error", f"reply failed: {type(ex).__name__}: {ex}", chat=chat)
+            return "Sorry, I couldn't answer that just now."
+
+    # ------------------------------------------------------------------ chats and projects
+
+    def _repo(self, a: dict, env: envs_mod.Environment) -> str:
+        """The folder an agent starts in: its chat's folder (a general manager), else the manager's own."""
+        if env.kind != "local":
+            return env.workdir
+        return a["meta"].get("workdir") or str(self.cwd)
+
+
+    def _reuse(self, text: str, payload: dict | None = None, chat: str | None = None) -> str | None:
         idle = [a for a in self.store.agents(status=("done",)) if a["role"] == "associate"
-                and a["runtime"] == "rameness" and time.time() - a["updated"] < 3600]
+                and a["runtime"] == "rameness" and time.time() - a["updated"] < 3600
+                and a["meta"].get("chat") == chat]
         if not idle:
             return None
         opts = [Option(a["id"], f"{a['title']} {a['task'][:300]}") for a in idle[-8:]] + [
@@ -576,7 +774,8 @@ class Fleet:
                                 a["task"], opts, "associate")
         return chosen
 
-    def decompose(self, parent: str, text: str) -> list[dict]:
+    def decompose(self, parent: str, text: str, meta: dict | None = None) -> list[dict]:
+        meta = meta or {}
         try:
             plan = self.planner.complete_json(DECOMPOSE_SYSTEM, (
                 f"Request: {text}\n\nReply {{\"subtasks\": [{{\"title\": str, \"task\": str, "
@@ -587,13 +786,13 @@ class Fleet:
             self.store.event(parent, "warning", f"decomposition failed ({e}); delegating whole")
             subs = []
         if not subs:
-            subs = [{"title": text[:60], "task": text, "kind": "deliver", "size": "small"}]
+            subs = [{"title": short_title(text), "task": text, "kind": "deliver", "size": "small"}]
         created: list[dict] = []
         for s in subs[:6]:
             deps = [created[i]["id"] for i in s.get("depends_on", []) if isinstance(i, int) and i < len(created)]
             a = self.spawn(s["task"], parent=parent, kind=s.get("kind", "deliver"), title=s.get("title"),
                            depends=deps, role_explicit=False,
-                           meta={"needs": s.get("needs", []), "size": s.get("size", "small")})
+                           meta={"needs": s.get("needs", []), "size": s.get("size", "small"), **meta})
             created.append(a)
         self.store.event(parent, "plan", " | ".join(f"{a['id']}:{a['title']}" for a in created))
         return created
@@ -619,6 +818,16 @@ class Fleet:
     def assign(self, a: dict) -> bool:
         by_slot, by_env = self.usage()
         needs = a["meta"].get("needs", [])
+        picks_slot = a["role"] != "lead" and (not a["meta"].get("pinned_slot") or not a["slot"])
+        if picks_slot and not self._slot_cands(a, None, by_slot):
+            # nothing free now: wait without deciding anything (re-deciding every tick is noise);
+            # nothing eligible at all: every runtime has failed this task, so the director decides
+            if not self._slot_cands(a, None, by_slot, free=False) and not a["meta"].get("no_runtime"):
+                self.store.update_agent(a["id"], meta={**a["meta"], "no_runtime": True})
+                self.store.escalate(a["id"], f"{a['title']}: no runtime is left to run it; each one available has "
+                                    f"failed it ({', '.join(a['meta'].get('exclude_slots', [])) or 'none'}). "
+                                    "Retry clears that list.", ["retry", "abandon", "<instructions>"], kind="failure")
+            return False
         # environment
         if not a["meta"].get("pinned_env") or not a["env"]:
             cands = [e for e in self.envs.values() if e.info.get("reachable", e.kind == "local")
@@ -638,11 +847,8 @@ class Fleet:
         if a["role"] == "lead":
             self.store.update_agent(a["id"], env=env, runtime="manager", slot=getattr(self.planner, "slot_id", None))
             return True
-        if not a["meta"].get("pinned_slot") or not a["slot"]:
-            cands = [s for s in self.slots if s.available and by_slot.get(s.id, 0) + s.busy_server < s.capacity
-                     and not (s.is_cli and self.envs[env].kind != "local" and s.model not in self.envs[env].tags)
-                     and not (s.is_cli and a["meta"].get("transcript_from"))
-                     and s.id not in a["meta"].get("exclude_slots", [])]
+        if picks_slot:
+            cands = self._slot_cands(a, env, by_slot)
             if not cands:
                 return False
             opts = [Option(s.id, s.text, self.store.rate(f"slot:{s.id}") * 2) for s in cands]
@@ -658,6 +864,15 @@ class Fleet:
         self.store.update_agent(a["id"], env=env, slot=slot, runtime=("cli:" + s.model) if s.is_cli else "rameness")
         return True
 
+    def _slot_cands(self, a: dict, env: str | None, by_slot: dict, free: bool = True) -> list[Slot]:
+        """Slots that may run this agent in ``env`` (None: in any environment), with room now if ``free``."""
+        envs = [self.envs[env]] if env else list(self.envs.values())
+        return [s for s in self.slots if s.available
+                and (not free or by_slot.get(s.id, 0) + s.busy_server < s.capacity)
+                and any(not (s.is_cli and e.kind != "local" and s.model not in e.tags) for e in envs)
+                and not (s.is_cli and a["meta"].get("transcript_from"))
+                and s.id not in a["meta"].get("exclude_slots", [])]
+
     # ------------------------------------------------------------------ lifecycle
 
     def start(self, a: dict) -> None:
@@ -667,8 +882,10 @@ class Fleet:
             self._start_lead(a, env)
             return
         workdir = a["worktree"]
+        if workdir and env.run(f"test -d {shlex.quote(workdir)}", str(self.cwd) if env.kind == "local" else env.workdir).code:
+            workdir = None                          # removed since (merged, or cleaned up): make a new one
         if not workdir:
-            workdir = env.workdir if env.kind != "local" else str(self.cwd)
+            workdir = self._repo(a, env)
             base = a["meta"].get("base_branch")
             if (a["kind"] == "deliver" or base) and worktree.is_repo(env, workdir):
                 parent = self.store.agent(a["parent"]) or {}
@@ -679,11 +896,11 @@ class Fleet:
                     self.store.event(a["id"], "warning", f"no worktree: {e}")
         if a["runtime"] == "rameness":
             argv = [sys.executable, "-m", "rameness.fleet.worker", "--root", str(self.cwd), "--id", a["id"]]
-            local_cwd = str(self.cwd)
+            local_cwd = workdir if env.kind == "local" else str(self.cwd)
         else:
             s = self.slot(a["slot"])
             brief = self._brief(a)                   # once: it consumes pending follow-ups
-            argv = [x.replace("{task}", brief) for x in s.argv]
+            argv = [x.replace("{task}", brief) for x in s.argv] + add_dir_args(s, self.cfg["agent_dirs"])
             if env.kind != "local":
                 argv = env.interactive_argv(argv, workdir)
                 local_cwd = str(self.cwd)
@@ -701,10 +918,11 @@ class Fleet:
         follow = self.store.inbox(a["id"])            # CLI agents can't read the inbox: fold messages into the brief
         extra = "".join(f"\n\nFollow-up from your {m['sender']}: {m['text']}" for m in follow)
         return (f"{a['task']}{extra}\n\nYou are agent {a['id']} in a rameness team. Work only in the current directory. "
-                "When finished, end with a short report: what changed, how you verified it, anything left open.")
+                "When finished, end with a short report: what changed, how you verified it, anything left open."
+                + (GENERAL_NOTE if a["meta"].get("workdir") else ""))
 
     def _start_lead(self, a: dict, env: envs_mod.Environment) -> None:
-        workdir = env.workdir if env.kind != "local" else str(self.cwd)
+        workdir = self._repo(a, env)
         if a["kind"] == "deliver" and worktree.is_repo(env, workdir):
             parent = self.store.agent(a["parent"]) or {}
             try:
@@ -813,7 +1031,7 @@ class Fleet:
                 self.store.update_agent(a["id"], result=b.read(h, 60))
                 self.store.set_status(a["id"], "failed", f"worker exited {code} without a report")
             else:
-                self.store.update_agent(a["id"], result=b.read(h, 120))
+                self.store.update_agent(a["id"], result=cli_report(a["runtime"], b.read(h, 120)))
                 self.store.set_status(a["id"], "done" if code == 0 else "failed", f"exit {code}")
             self._finished(self.get(a["id"]))
             return
@@ -967,16 +1185,18 @@ class Fleet:
 
     def _apply_merge_answer(self, a: dict, answer: str) -> None:
         env = self.envs.get(a["env"] or "local", self.envs["local"])
-        repo = env.workdir if env.kind != "local" else str(self.cwd)
+        repo = self._repo(a, env)
         ans = answer.lower()
         if ans.startswith("merge"):
             ok, msg = worktree.merge(env, repo, a["branch"])
             self.store.event(a["id"], "merged" if ok else "merge-conflict", msg[:300])
             if ok and a["worktree"]:
                 worktree.remove(env, a["worktree"])
+                self.store.update_agent(a["id"], worktree=None)   # a follow-up gets a fresh one
         elif ans.startswith("discard"):
             if a["worktree"]:
                 worktree.remove(env, a["worktree"], a["branch"], delete_branch=True)
+                self.store.update_agent(a["id"], worktree=None)
             self.store.event(a["id"], "discarded", a["branch"] or "")
 
     def _supervise_lead(self, a: dict) -> None:

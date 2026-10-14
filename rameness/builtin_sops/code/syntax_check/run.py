@@ -17,7 +17,6 @@ where an empty report means there is nothing to fix.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import re
 import shlex

@@ -21,7 +21,15 @@ def create(env: Environment, repo: str, agent_id: str, base: str | None = None) 
     top = env.run("git rev-parse --show-toplevel", repo).out.strip() or repo
     path = f"{top}/.rameness/worktrees/{agent_id}"
     base = base or env.run("git rev-parse HEAD", top).out.strip()
-    r = env.run(f"git worktree add -b {shlex.quote(branch)} {shlex.quote(path)} {shlex.quote(base)}", top)
+    q = shlex.quote
+    if env.run(f"git rev-parse --verify -q {q(branch)}", top).code == 0:
+        # a follow-up to an agent whose worktree is gone: a merged branch restarts from the base (it builds on
+        # the merged work); an unmerged one is reused as it is
+        merged = env.run(f"git merge-base --is-ancestor {q(branch)} {q(base)}", top).code == 0
+        add = f"git worktree add -B {q(branch)} {q(path)} {q(base)}" if merged else f"git worktree add {q(path)} {q(branch)}"
+    else:
+        add = f"git worktree add -b {q(branch)} {q(path)} {q(base)}"
+    r = env.run(add, top)
     if r.code:
         raise RuntimeError(f"git worktree add failed: {r.err.strip()}")
     # keep worktrees out of the main tree's status

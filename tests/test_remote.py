@@ -9,7 +9,6 @@ from rameness import config
 from rameness.harness import Harness
 from rameness.llm import FakeProvider, Response, ToolCall
 from rameness.publish import build_index
-from rameness.sops import BUILTIN_ROOT
 
 SLUG = ("import json, re, sys\na = json.load(sys.stdin)\n"
         "print(json.dumps({'slug': re.sub(r'[^a-z0-9]+', '-', a['text'].lower()).strip('-')}))\n")

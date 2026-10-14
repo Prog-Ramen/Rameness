@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import json
 import os
 from pathlib import Path
 
@@ -79,7 +78,8 @@ DEFAULTS: dict = {
         "serve": "laya",              # the local decision server `rameness up` starts: laya | kev | clef | None
         "serve_device": None,         # cuda | cpu | None (GPU if visible). cpu if the GPU is busy with a big model
         "kev_checkpoint": "jaredpalmer/kev-4b",
-        "option_text": "keywords",    # what the model reads per option: keywords | sentences (Option.desc)
+        "option_text": None,          # what the model reads per option: keywords | sentences (Option.desc);
+                                      # None: sentences for Clef, keywords for the others (rameness jev bench)
         "max_state_chars": None,      # state budget per decision; default follows the model's window
                                       # (Laya base ~1200 chars, Laya 1024-token checkpoints ~3000, Kev/TypeSafe 8000)
         "laya_url": None,             # default http://127.0.0.1:8000/v1/systemone (`rameness jev up laya`)
@@ -95,6 +95,7 @@ DEFAULTS: dict = {
         "clef_checkpoint": "Cloudflare/clef-flash",   # Hugging Face repo id or a local folder
         "clef_bits": 8,               # 8 fits a 16 GB GPU (bitsandbytes); 16 needs ~20 GB
         "clef_python": None,          # an existing Python with Clef's packages; default ~/.rameness/jev/clef/venv
+        "serve_gpu": None,            # the GPU the local decision server uses (nvidia-smi index); None: the default
         "typesafe_url": None,         # TypeSafe's hosted Jev (subscription): https://api.typesafe.ai/v1/systemone
         "typesafe_model": None,       # default "jev-latest"
         "high_effort_above": 0.10,    # use high reasoning effort when JEV gives "high" more than this probability
@@ -116,6 +117,8 @@ DEFAULTS: dict = {
         "read_chars": 100000,         # read_file output is shown whole up to this (the agent asked for the file)
         "keep_recent_turns": 4,
     },
+    # web_search: a SearXNG instance (JSON format enabled) the agent searches through; None: no web_search tool
+    "web": {"search_url": None},
     "learning": {
         "enabled": True,
         "min_repeats": 2,
@@ -180,9 +183,10 @@ def project_dir(cwd: Path | None = None) -> Path:
 
 def load(cwd: Path | None = None, overrides: dict | None = None) -> dict:
     cfg = copy.deepcopy(DEFAULTS)
+    from .settings import config_schema, read
     for p in (user_home() / "config.json", project_dir(cwd) / "config.json"):
         if p.exists():
-            _merge(cfg, json.loads(p.read_text()))
+            _merge(cfg, {k: v for k, v in read(p, config_schema()).items() if k != "$schema"})
     if overrides:
         _merge(cfg, {k: v for k, v in overrides.items() if v is not None})
     preset = PROVIDER_PRESETS.get(cfg["provider"], {})

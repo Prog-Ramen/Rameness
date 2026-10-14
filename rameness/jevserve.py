@@ -99,6 +99,9 @@ def _cpu_bf16() -> bool:
 def command(name: str, jc: dict) -> tuple[list[str], dict, Path | None]:
     env = dict(os.environ)
     device = jc.get("serve_device")               # None: GPU if one is visible, else CPU
+    if jc.get("serve_gpu") is not None and device != "cpu":
+        # one GPU of several (numbered as nvidia-smi does), e.g. when another model server fills the first
+        env.update(CUDA_DEVICE_ORDER="PCI_BUS_ID", CUDA_VISIBLE_DEVICES=str(jc["serve_gpu"]))
     if name == "laya":
         env.update(LAYA_HOST="127.0.0.1", LAYA_PORT=str(port(name, jc)), LAYA_PRELOAD="1",
                    LAYA_MODELS=jc.get("laya_model") or "typed-decisions")

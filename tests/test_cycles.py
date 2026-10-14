@@ -277,6 +277,7 @@ class TestProgressReview(unittest.TestCase):
         cfg["permissions"]["mode"] = "auto"
         cfg["learning"]["enabled"] = False
         cfg["progress_review"] = {"every": every, "min_confidence": 0.5}
+        cfg["jev"]["backend"] = "lexical"         # the router must not depend on a decision server that happens to run
         script = [Response("", [ToolCall(str(i), "write_file", {"path": f"f{i}.txt", "content": f"part {i}"})],
                            "tool_use") for i in range(turns)] + [Response("done", [], "end_turn")]
         h = Harness(cfg, llm=FakeProvider(script))
@@ -799,7 +800,6 @@ class TestClaudeCodeParity(unittest.TestCase):
 
     def test_a_kill_pattern_that_matches_the_agent_itself_is_refused(self):
         import subprocess, sys
-        from rameness.tools import Approver, Toolbox
         # a child whose command line mentions "static web server", as the agent's does when the task says so
         code = ("import sys; sys.path.insert(0, %r); from rameness.tools import Approver, Toolbox; from pathlib import Path; "
                 "tb = Toolbox(Path('.'), Approver('auto')); "

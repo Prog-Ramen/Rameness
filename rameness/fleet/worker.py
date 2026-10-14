@@ -22,7 +22,7 @@ from .. import config as config_mod
 from ..harness import Harness
 from ..llm import ToolCall
 from ..tools import Approver
-from .manager import Fleet
+from .manager import GENERAL_NOTE, Fleet
 
 
 def dump_messages(msgs: list[dict]) -> list[dict]:
@@ -71,7 +71,7 @@ def main(argv=None):
     cfg = config_mod.load(root)
     cfg["permissions"]["mode"] = fleet.cfg["worker_permissions"]
     cfg["allow_direct"] = False
-    workdir = agent["worktree"] or (env.workdir if env.kind != "local" else str(root))
+    workdir = agent["worktree"] or fleet._repo(agent, env)
 
     def ask_manager(args: dict):
         eid = store.escalate(aid, args["question"], args.get("options") or [], kind="agent-question")
@@ -100,7 +100,8 @@ def main(argv=None):
              f"{agent['branch'] or '(shared checkout: do not modify files unless the task says so)'}.\n"
              f"Teammates:\n{team or '- none'}\n"
              "Work autonomously. Use ask_manager only for decisions that are not yours. When done, reply with a "
-             "short report: what you changed, how you verified it, open issues.")
+             "short report: what you changed, how you verified it, open issues."
+             + (GENERAL_NOTE if agent["meta"].get("workdir") else ""))
     h = Harness(cfg, llm=llm, approver=Approver(cfg["permissions"]["mode"]), env=env, workdir=workdir,
                 extra_tools=extra, system_extra=brief, out=lambda s: print(s, flush=True))
     h.inbox = lambda: [f"[message from {m['sender']}] {m['text']}" for m in store.inbox(aid)]

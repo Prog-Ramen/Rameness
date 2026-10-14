@@ -1,5 +1,4 @@
 """Public SOPs must not receive ambient secrets or a different import mode from CI."""
-import json
 import os
 import subprocess
 import tempfile

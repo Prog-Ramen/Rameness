@@ -421,7 +421,9 @@ class Jev:
         return d
 
     def _telemetry(self, question: str, kind: str, d: Decision, n_opts: int, t0: float, fails0: int, state: str) -> None:
-        from . import telemetry
+        from . import metrics, telemetry
+        metrics.inc("rameness_jev_decisions_total", backend=self.backend.name, kind=kind)
+        metrics.observe("rameness_jev_decision_seconds", time.time() - t0, backend=self.backend.name)
         if not telemetry.url():
             return
         top = d.top(2)
@@ -538,7 +540,9 @@ def build(cfg: dict, llm=None, log_path: Path | None = None) -> Jev:
     """``llm`` is accepted for call-site compatibility and ignored: decisions never use an LLM."""
     jc = cfg["jev"]
     kind = resolve_backend(jc)
-    style = jc.get("option_text", "keywords")
+    # keywords measured as good or better for Laya and Kev; Clef reads sentences better (rameness jev bench:
+    # 1.00 vs 0.96 seen, intake 1.00 vs 0.71, paraphrased equal)
+    style = jc.get("option_text") or ("sentences" if kind == "clef" else "keywords")
     budget = jc.get("max_state_chars")
     if kind == "laya-local":
         fallback = SystemOneJev("typesafe", url=jc.get("typesafe_url"), model=jc.get("typesafe_model"),
