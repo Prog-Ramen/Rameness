@@ -1,13 +1,21 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "rameness"
 version = "0.1.0"
-description = "Adaptive agent harness driven by a JEV decision model: SOP learning, routing, context management"
+description = "Agent harness where a typed decision model (JEV) makes the choices: teams, SOP learning, routing, context"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Prog-Ramen" }]
 requires-python = ">=3.10"
 dependencies = ["anthropic>=1.0", "openai>=1.40"]
+
+[project.urls]
+Homepage = "https://github.com/Prog-Ramen/Rameness"
+Documentation = "https://github.com/Prog-Ramen/Rameness/tree/main/docs"
 
 [project.scripts]
 rameness = "rameness.cli:main"

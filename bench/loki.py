@@ -17,7 +17,7 @@ Sources per harness:
     rameness     events.jsonl (RAMENESS_EVENT_LOG) and work/.rameness/decisions.jsonl
 
 Live: run.py starts a Shipper per run.  Finished runs:
-    python -m bench.loki /root/bench/results/minecraft/<batch> [...]
+    python -m bench.loki <bench>/results/minecraft/<batch> [...]
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from .paths import RUNS
 
 LOKI_URL = os.environ.get("LOKI_URL", "http://127.0.0.1:3100")
 MAX_TEXT = 6000
@@ -317,7 +318,7 @@ def backfill(batch: Path) -> None:
     for res in sorted(batch.glob("*/result.json")):
         d = res.parent
         r = json.loads(res.read_text())
-        run_dir = Path("/home/bench/runs") / r["run"]
+        run_dir = RUNS / r["run"]
         if not run_dir.exists():
             run_dir = d
         work = d / "build" if (d / "build" / ".rameness").exists() else run_dir / "work"

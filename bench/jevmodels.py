@@ -22,13 +22,13 @@ import statistics
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 from rameness import jevbench
 from rameness.jev import Jev, Option, SystemOneJev, laya_running
 
 from . import vm
+from .paths import BENCH, RESULTS
 
 HOME = Path.home()
 MODELS = {
@@ -46,10 +46,10 @@ MODELS = {
     },
     "openjev": {
         "url": "http://127.0.0.1:8791/v1/systemone", "model": None, "params": "2B",   # serves one model; names are rejected
-        "cmd": ["/root/bench/openjev/.venv/bin/python", "-m", "jev.server",
-                "--checkpoint", "/root/bench/openjev-2b/package/checkpoint", "--max-length", "1024",
+        "cmd": [str(BENCH / "openjev/.venv/bin/python"), "-m", "jev.server",
+                "--checkpoint", str(BENCH / "openjev-2b/package/checkpoint"), "--max-length", "1024",
                 "--batch-size", "8", "--port", "8791"],
-        "cwd": "/root/bench/openjev", "env": {}, "cpu_env": {"CUDA_VISIBLE_DEVICES": ""}, "device_flag": True,
+        "cwd": str(BENCH / "openjev"), "env": {}, "cpu_env": {"CUDA_VISIBLE_DEVICES": ""}, "device_flag": True,
     },
 }
 
@@ -170,7 +170,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default="laya,kev,openjev")
     ap.add_argument("--device", default="cpu")
-    ap.add_argument("--out", default="/root/bench/results/jev")
+    ap.add_argument("--out", default=str(RESULTS / "jev"))
     a = ap.parse_args()
     run = time.strftime("jev-%Y%m%d-%H%M%S")
     out = Path(a.out) / run

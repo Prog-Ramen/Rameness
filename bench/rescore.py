@@ -1,6 +1,6 @@
 """Re-grade finished runs with the current scorer, from each run's saved build.
 
-    python -m bench.rescore /root/bench/results/minecraft/<batch> [...]
+    python -m bench.rescore <bench>/results/minecraft/<batch> [...]
 
 Updates result.json (score, checks, fps, ...), the screenshot and the bench_run_* metrics, and
 drops judge.json when the score or screenshot changed so `bench.minecraft.judge` grades it again.

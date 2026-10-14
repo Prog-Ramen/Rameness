@@ -1,12 +1,13 @@
 """Copy the Minecraft bench's run records into the repo, small enough to keep in git.
 
-    python3 -m bench.minecraft.archive [--results /root/bench/results/minecraft] [--bench /root/bench]
+    python3 -m bench.minecraft.archive [--results <bench>/results/minecraft]
 
-Writes ``bench/minecraft/runs/<batch>/<run>/`` and ``bench/minecraft/launchers/``. Per run it keeps the scores
+Writes ``bench/minecraft/runs/<batch>/<run>/``. Per run it keeps the scores
 (``result.json``), the judge's verdict (``judge.json``), the event log with long fields cut
 (``events.jsonl.gz``), the per-request model log (``llm.jsonl.gz``) and the generated game's ``index.html``. It
 leaves out what is large and either reproducible or recorded elsewhere: the rest of the generated game
-(``build/``, including any ``node_modules``), screenshots, raw console streams and full tool inputs. LAN addresses and the host name are replaced, so the copy can be published.
+(``build/``, including any ``node_modules``), screenshots, raw console streams and full tool inputs. LAN addresses,
+home folders and the host name are replaced, so the copy can be published.
 
 Re-running is safe: every file is rewritten from the source.
 """
@@ -18,11 +19,13 @@ import json
 import re
 import socket
 from pathlib import Path
+from ..paths import RESULTS
 
 HERE = Path(__file__).resolve().parent
 FIELD_CHARS = 300          # a string field longer than this keeps its start and says how much was cut
-# Private-network addresses and this machine's name (read at run time, so the name is not in the source).
+# Private-network addresses, home folders and this machine's name (read at run time, so it is not in the source).
 SCRUB = [(re.compile(r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"), "<lan-host>"),
+         (re.compile(r"/(?:root|home/[A-Za-z0-9._-]+)(?=/|\b)"), "~"),
          (re.compile(re.escape(socket.gethostname())), "<host>")]
 
 
@@ -71,10 +74,9 @@ def archive_run(src: Path, dst: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--results", default="/root/bench/results/minecraft")
-    ap.add_argument("--bench", default="/root/bench", help="where the launcher scripts and their logs live")
+    ap.add_argument("--results", default=str(RESULTS / "minecraft"))
     a = ap.parse_args()
-    results, bench = Path(a.results), Path(a.bench)
+    results = Path(a.results)
 
     runs = HERE / "runs"
     for batch in sorted(p for p in results.iterdir() if p.is_dir()):
@@ -84,24 +86,6 @@ def main() -> None:
         if (batch / "results.json").exists():
             (runs / batch.name).mkdir(parents=True, exist_ok=True)
             (runs / batch.name / "results.json").write_text(scrub((batch / "results.json").read_text()))
-
-    # The scripts that queued the runs, and their logs (only those that ran this benchmark).
-    launchers = HERE / "launchers"
-    launchers.mkdir(exist_ok=True)
-    candidates = list(bench.glob("chain-*.sh")) + list(bench.glob("chain-*.log")) + \
-        list((bench / "results").glob("mc-*.log")) + list((bench / "compare").glob("*.sh")) + \
-        list((bench / "compare").glob("*.py"))
-    for f in sorted(candidates):
-        text = f.read_text(errors="replace")
-        if not re.search(r"bench\.minecraft|bench/minecraft|\bmc-", text):
-            continue
-        sub = "compare" if f.parent.name == "compare" else ("batch-logs" if f.parent.name == "results" else "")
-        (launchers / sub).mkdir(exist_ok=True)
-        (launchers / sub / f.name).write_text(scrub(text))
-    for report in (bench / "overnight-report.md", bench / "compare" / "speed-summary.md"):
-        if report.exists():
-            (HERE / "reports").mkdir(exist_ok=True)
-            (HERE / "reports" / report.name).write_text(scrub(report.read_text()))
 
 
 if __name__ == "__main__":

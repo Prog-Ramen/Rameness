@@ -1,6 +1,6 @@
 """Score a Minecraft build black-box: load it in headless Chromium and check it behaves like one.
 
-    /root/bench/venv/bin/python -m bench.minecraft.score <workdir> [--screenshot out.png]
+    python -m bench.minecraft.score <workdir> [--screenshot out.png]
 
 The task prompt is minimal, so builds expose no test API. Each behaviour check compares
 screenshots around an input against the scene's own idle change over the same time (animated

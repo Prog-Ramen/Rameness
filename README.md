@@ -33,6 +33,18 @@ rameness up                                                   # manager + UI on 
 rameness fleet ask "build a habit tracker web app" --cycles 4  # a first build, then 4 rounds of improvement
 ```
 
+**Ask it anything, from anywhere.** One general manager takes every kind of request: it answers simple
+questions itself, researches with web search, and starts agents for real work, which find the project the task is
+about on their own. Each conversation is a chat with its own history; in *direct* mode one agent takes a whole chat,
+like a single coding assistant. Chat apps and voice devices talk to it over a small streaming API, and can offer
+their own tools (a speaker's volume, the lights) for the manager to call.
+
+```bash
+rameness fleet up --home                                     # the general manager on http://127.0.0.1:7788
+rameness fleet ask "what does HTTP 429 mean?" --home --chat c1
+rameness fleet ask "fix the flaky upload test in the shop project" --home --chat c1
+```
+
 **Stop paying for the same work twice.** After each run, Rameness looks at what it did over its last few
 runs. A multi-step procedure it keeps repeating, such as "start a local server and check the page in a
 browser" or "run the package's tests plus a check per reported issue", becomes a tested script (an SOP)
@@ -45,7 +57,7 @@ anything specific to you stays on your machine.
 Other harnesses (Claude Code, Codex, pi) hard-code their choices: whether a task needs reasoning, which
 procedure applies, which model and machine should do the work, what to do when something fails.
 Rameness hands each of those choices to a small decision model (JEV: Clef-Flash, Kev or Laya running
-locally, swappable with one setting, or TypeSafe AI's hosted Jev) that scores the options in about a second or less. Routine choices it makes
+locally, swappable with one setting, or TypeSafe AI's hosted Jev) that scores the options in well under a second. Routine choices it makes
 alone; significant or uncertain ones come to you. You can watch every decision live, and your
 corrections make the next ones better.
 
@@ -62,8 +74,12 @@ rameness run "fix the failing test"      # one agent
 every command.
 
 > **Safety:** tools act on your machine as you, and ask before each action by default. Use `-y` (approve
-> everything) only somewhere disposable. The UI has no authentication and binds to 127.0.0.1.
-> [More](docs/getting-started.md#safety).
+> everything) only somewhere disposable. The manager's API and UI have no authentication and bind to 127.0.0.1;
+> put an authenticating proxy in front before exposing them. [More](docs/getting-started.md#safety).
+
+Settings are JSON (`~/.rameness/config.json`, `fleet.json`, per-project overrides), checked against a schema when
+they load: a misspelt or mistyped setting is an error, not silently ignored. `rameness config schema` gives editors
+autocomplete.
 
 ## How it works
 
@@ -77,6 +93,7 @@ Each piece in a sentence; follow the link for the details.
 | [**SOPs**](docs/sops.md) | Tested procedures the agent calls like tools; only tested ones are offered, so the agent can trust them. |
 | [**Learning**](docs/learning.md) | After each run, repeated multi-step work becomes a new SOP, if it saves more than it costs. |
 | [**Sharing SOPs**](docs/sharing.md) | Private, public registry or built-in: each SOP goes where it belongs, with its tests, past secret and privacy checks. |
+| [**API and monitoring**](docs/api.md) | Chats over a streaming HTTP API with client tools; Prometheus metrics and a Grafana dashboard. |
 
 ## Results
 
@@ -106,6 +123,7 @@ On a series that repeats one procedure, learned SOPs cut task time by a third an
 | [Sharing SOPs](docs/sharing.md) | The three tiers, where tests go, safety checks, pulling from the registry. |
 | [Experiments](docs/experiments.md) | Features behind flags, and the A/B evidence for each. |
 | [Benchmarks](docs/benchmarks.md) | The tasks Rameness is measured on, and the results. |
+| [API and monitoring](docs/api.md) | The manager's HTTP API (chats, turns, client tools, events), metrics and the dashboard. |
 | [Architecture](docs/architecture.md) | Diagrams of how it all works, and where everything lives in the code. |
 | [Iterations](docs/iterations.md) | What changed between versions, and whether each change reached its runs. |
 
@@ -114,3 +132,14 @@ On a series that repeats one procedure, learned SOPs cut task time by a third an
 The team orchestration took inspiration from firstmate. Decision models:
 [Kev](https://github.com/jaredpalmer/kev) (Jared Palmer), [Laya](https://github.com/NandhaKishorM/laya)
 (Convai Innovations) and [TypeSafe AI's Jev](https://docs.typesafe.ai/api).
+
+## License and disclaimer
+
+Rameness is licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Prog-Ramen.
+
+Rameness is provided **as is, without warranty of any kind**. It runs AI agents that execute commands, edit files
+and use the network on the machines you give it. You are solely responsible for how you configure and use it, for
+reviewing what its agents and SOPs do, and for the consequences of their actions, including data loss, security
+incidents and charges from model providers. To the maximum extent permitted by law, the authors, contributors and
+Prog-Ramen are not liable for any damages arising from its use. See [NOTICE](NOTICE) and sections 7 and 8 of the
+license.

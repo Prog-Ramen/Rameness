@@ -3,7 +3,7 @@ interleaved, same code, same model server, one run at a time.
 
     python3 -m bench.ab --name edit-fuzzy --config '{"edit_fuzzy": true}' [--tasks bugfix,research,data] [--n 2]
 
-Writes /root/bench/ab/<name>.json and <name>.md with per-task means, spread and wall time.
+Writes <bench>/ab/<name>.json and <name>.md with per-task means, spread and wall time.
 Keep rule: treatment mean score >= control overall, no task worse than the control's own spread,
 no more than 20% slower, and no loss of research quality. Missing scores, times or research grades
 make the evidence incomplete. An eligible assessment still needs review before changing defaults.
@@ -17,9 +17,10 @@ import statistics as st
 import subprocess
 import sys
 from pathlib import Path
+from .paths import BENCH
 
-OUT = Path("/root/bench/ab")
-RESULTS = Path("/root/bench/results")
+OUT = BENCH / "ab"
+RESULTS = BENCH / "results"
 
 
 def assess(rows: list[dict], tasks: list[str], n: int) -> dict:

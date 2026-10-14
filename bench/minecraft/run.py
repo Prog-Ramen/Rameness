@@ -25,10 +25,11 @@ from pathlib import Path
 
 from .. import loki, vm
 from ..llmproxy import Proxy
+from ..paths import CLAUDE, PUBLISH, PYTHON, RESULTS, RUNS
 
 TASK = (Path(__file__).parent / "task.md").read_text()
 TASK_DIR: Path | None = None        # --task NAME: bench/tasks/NAME (task.md, seed/, score.py); None = Minecraft
-SCORER = ["/root/bench/venv/bin/python", "-m", "bench.minecraft.score"]
+SCORER = [PYTHON, "-m", "bench.minecraft.score"]
 REPO = Path(__file__).resolve().parents[2]
 
 MODELS = {
@@ -218,7 +219,7 @@ def harness_cmd(h: str, m: dict, proxy: str, run_dir: Path, work: Path, labels: 
                    DISABLE_AUTOUPDATER="1")
         if m.get("hosted"):                   # Claude itself: root, with the user's own Claude Code login
             env["HOME"] = "/root"
-            return ["/root/.local/bin/claude", "-p", "--output-format", "stream-json", "--verbose", ALLOWED, TASK], env
+            return [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", ALLOWED, TASK], env
         env.update(HOME=str(run_dir / "home"), ANTHROPIC_AUTH_TOKEN="bench", ANTHROPIC_MODEL=m["id"],
                    ANTHROPIC_SMALL_FAST_MODEL=m["id"],
                    # a model Claude Code doesn't know: tell it the server's real window so it compacts in time
@@ -437,7 +438,7 @@ def run_one(h: str, mkey: str, batch: str, out: Path, timeout: int, reasoning_bu
     # thinking tokens per reply, llama-server only (Claude's thinking is its own setting): --reasoning-budget,
     # else the model's default
     budget = (reasoning_budget if reasoning_budget is not None else m.get("reasoning_budget")) if local else None
-    run_dir = (Path("/home/bench/runs") if local else out) / run
+    run_dir = (RUNS if local else out) / run
     if local:
         sweep_tmp()
     stamp = time.strftime("%H%M%S")
@@ -539,7 +540,8 @@ def run_one(h: str, mkey: str, batch: str, out: Path, timeout: int, reasoning_bu
             shutil.copy(run_dir / log, rec_dir / log)
                                                    # keep the build with its results, and publish a readable copy
     shutil.copytree(work, rec_dir / "build", dirs_exist_ok=True, ignore=shutil.ignore_patterns("node_modules", ".git"))
-    subprocess.run(["rsync", "-a", "--chmod=a+rX", f"{out.parent.parent}/", "/srv/bench/results/"], check=False)
+    if PUBLISH:
+        subprocess.run(["rsync", "-a", "--chmod=a+rX", f"{out.parent.parent}/", f"{PUBLISH}/"], check=False)
     s = [(f"bench_run_{k}", result[k], labels) for k in (
         "wall_seconds", "score", "passed", "fps", "loc", "files", "cost_usd", "page_errors", "context_window",
         "context_utilization", "compactions_logged", "reasoning_budget")]
@@ -561,7 +563,7 @@ def main():
     ap.add_argument("--harnesses", default="rameness,pi,dsh,claude-code")
     ap.add_argument("--models", default="qwen,occamy,claude")
     ap.add_argument("--timeout", type=int, default=150 * 60)
-    ap.add_argument("--out", default="/root/bench/results/minecraft")
+    ap.add_argument("--out", default=str(RESULTS / "minecraft"))
     ap.add_argument("--task", help="a task in bench/tasks (task.md, seed/, score.py) instead of the Minecraft build")
     ap.add_argument("--batch")
     ap.add_argument("--runs", help="explicit harness:model pairs, e.g. dsh:occamy,claude-code:qwen")
@@ -579,8 +581,8 @@ def main():
     if a.task:
         TASK_DIR = REPO / "bench" / "tasks" / a.task
         TASK = (TASK_DIR / "task.md").read_text()
-        if a.out == "/root/bench/results/minecraft":
-            a.out = f"/root/bench/results/{a.task}"
+        if a.out == str(RESULTS / "minecraft"):
+            a.out = str(RESULTS / a.task)
     if a.smoke:
         TASK = "Create a file index.html in the current directory containing <h1>ok</h1>. Then stop."
     batch = a.batch or time.strftime("mc-%Y%m%d-%H%M%S")

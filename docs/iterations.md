@@ -7,9 +7,7 @@ each change actually reached them.
 How Rameness changed between 2026-09-25 and 2026-10-07, what each change was meant to fix, how the runs that
 followed scored, and whether each change actually reached those runs. Everything here comes from the run records
 (copied into [`bench/minecraft/runs/`](../bench/minecraft/runs/README.md): scores, judge verdicts, event and request
-logs), the launcher scripts and logs ([`bench/minecraft/launchers/`](../bench/minecraft/launchers/)), the reports
-written during the runs ([`bench/minecraft/reports/`](../bench/minecraft/reports/)), and the Claude Code session
-transcript that made the edits.
+logs) and the development history behind each change.
 
 ## The benchmark
 
@@ -23,7 +21,7 @@ transcript that made the edits.
   v24offb). Treat a single run as a sample, not a verdict.
 
 Models over time:
-- 09-25 to 09-30: **occamy-1.0** (the user's server) and **Qwen3.8-27B** on llama.cpp (`:8033`; from v16 on a
+- 09-25 to 09-30: **occamy-1.0** (a self-hosted model server) and **Qwen3.8-27B** on llama.cpp (`:8033`; from v16 on a
   TurboQuant `turbo4` KV build with a 150k window).
 - 10-02 to 10-05: a model and runtime comparison with the harness frozen (section 3).
 - 10-06 on: mostly Qwen3.8-27B (several quantisations and runtimes) and Qwen3.8-Flash-Next.

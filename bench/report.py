@@ -1,6 +1,6 @@
 """Summarise benchmark results as Markdown tables.
 
-    python -m bench.report --minecraft /root/bench/results/minecraft/<batch> [--jev /root/bench/results/jev]
+    python -m bench.report --minecraft <bench>/results/minecraft/<batch> [--jev <bench>/results/jev]
 """
 
 from __future__ import annotations

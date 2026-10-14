@@ -18,6 +18,23 @@ ones to you, the director.
             └───────┘ └───────┘
 ```
 
+## The general manager
+
+One manager for every request, not tied to a project: `rameness fleet up --home` (its database and logs live in
+`~/.rameness/home`).
+
+* **Simple requests are answered directly.** JEV routes each message: small talk, a fact or a definition is answered
+  by the manager's own model (the strongest non-CLI slot, e.g. a local server); questions that need looking things
+  up go to a research agent with `web_search` (a SearXNG instance, `web.search_url`) and `web_fetch`; changes go to
+  agents, and large builds are split between them.
+* **Agents find the project themselves.** There is no list of projects: each chat's agents start in a scratch
+  folder of their own (`~/.rameness/home/work/<chat>`) and locate the project a task names, as a person would.
+  CLI agents (Claude Code, Codex) are allowed into `agent_dirs` (default: your home folder) with `--add-dir`.
+* **Chats.** Every request belongs to a chat (`--chat`, or the client's conversation id over the
+  [API](api.md)); follow-ups, the manager's replies and the agents' reports stay in it.
+* **Direct mode.** `work_mode: "direct"` (or `--mode direct` per chat): no hierarchy, one agent takes the whole chat
+  and every follow-up, like a single coding assistant.
+
 ## Roles
 
 Managerial roles: **director** (you), **manager** (root coordinator), **leads** (sub-managers that own a
@@ -41,10 +58,10 @@ tools on a remote GPU box over ssh. Configure in `~/.rameness/fleet.json` or `.r
 {
   "backend": "auto",
   "mode": "review",
-  "slots": [{"id": "gpu-llama", "kind": "llama-server", "url": "http://10.0.0.7:8080", "traits": "local private"}],
+  "slots": [{"id": "gpu-llama", "kind": "llama-server", "url": "http://192.0.2.10:8080", "traits": "local private"}],
   "scan_ports": [8090],
   "environments": [
-    {"id": "gpu-box", "kind": "ssh", "host": "me@10.0.0.7", "workdir": "/srv/repo", "max_agents": 4},
+    {"id": "gpu-box", "kind": "ssh", "host": "me@192.0.2.10", "workdir": "/srv/repo", "max_agents": 4},
     {"id": "sandbox", "kind": "container", "engine": "docker", "container": "dev", "workdir": "/work"}
   ],
   "decision_policy": {"*": "auto", "Which parallel attempt produced the best result (tests pass, complete, simplest)?": "director"}
@@ -63,6 +80,11 @@ Every agent can be watched or taken over, the team survives restarts, and work m
 * **Merging.** Deliver agents work on `rameness/<id>` branches in their own worktrees; children merge into
   their lead's branch; top-level work is merged per `mode`: `review` (you approve), `local`, or `review` +
   `autonomous`.
+* **Follow-ups and closing.** A message to a finished agent reopens it on the runtime that did the work, in
+  a fresh worktree built on the merged result, and its report covers only the new run. A CLI agent's
+  report is its final answer, not its transcript. An agent's session stays open after it finishes, for
+  inspection, until you retire it; retiring a finished agent closes its session and worktree and keeps its
+  outcome. An agent that every available runtime has failed asks you instead of waiting.
 
 ## Autonomy modes
 

@@ -12,6 +12,7 @@ brief, then an overview, then the details: read as far as you need.
 | [SOPs](sops.md) | Tested procedures that run as code instead of model turns: format, layers, private folders. |
 | [Learning](learning.md) | How repeated work becomes a new SOP, and when it is worth one. |
 | [Sharing SOPs](sharing.md) | Private, RamenSOPs or built-in: where an SOP and its tests go, the safety checks, pulling. |
+| [API and monitoring](api.md) | Chats over a streaming HTTP API with client tools; Prometheus metrics and a Grafana dashboard. |
 | [Experiments](experiments.md) | Workflow features behind flags, and the A/B evidence for each. |
 | [Benchmarks](benchmarks.md) | The tasks Rameness is measured on, and the results so far. |
 | [Architecture](architecture.md) | Diagrams of how it all works, from the whole system down to each mechanism, and the code map. |

@@ -1,6 +1,6 @@
 """Recompute derived per-run fields for finished runs and push them to VictoriaMetrics.
 
-    python -m bench.backfill /root/bench/results/minecraft/<batch> [...]
+    python -m bench.backfill <bench>/results/minecraft/<batch> [...]
 
 Adds compactions (from the recorded requests), harness-logged compactions, the model's context
 window and the run's context utilisation to runs recorded before those fields existed.
@@ -15,6 +15,7 @@ from pathlib import Path
 from . import vm
 from .llmproxy import mark_compactions
 from .minecraft.run import MODELS, context_window, logged_compactions
+from .paths import RUNS
 
 
 def backfill(batch: Path) -> None:
@@ -25,7 +26,7 @@ def backfill(batch: Path) -> None:
             if (res.parent / "llm.jsonl").exists() else []
         m = by_id.get(r["model"], {})
         window, slots = context_window(m) if m else (None, None)
-        run_dir = (Path("/home/bench/runs") if not m.get("hosted") else batch) / r["run"]
+        run_dir = (RUNS if not m.get("hosted") else batch) / r["run"]
         r.update(compactions=mark_compactions(recs), context_window=window, slots=slots,
                  context_utilization=round(r["context_tokens_max"] / window, 3) if window and r.get("context_tokens_max") else None,
                  compactions_logged=logged_compactions(r["harness"], run_dir, res.parent))

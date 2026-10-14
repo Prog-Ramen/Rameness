@@ -1,0 +1,15 @@
+Rameness
+Copyright 2026 Prog-Ramen
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this software except in
+compliance with the License. A copy is in the LICENSE file and at http://www.apache.org/licenses/LICENSE-2.0.
+
+DISCLAIMER
+
+Rameness is provided "AS IS", without warranties or conditions of any kind, as set out in sections 7 and 8 of the
+License. Rameness runs AI agents that execute commands, edit files, install software and use the network on the
+machines and environments you give it. You alone are responsible for how you configure and use it, for reviewing
+what its agents and SOPs do before trusting their results, and for every consequence of their actions, including
+data loss, security incidents, service interruptions, charges from model providers, and compliance with the terms
+of the models and services you connect it to. To the maximum extent permitted by law, the authors, contributors and
+Prog-Ramen shall not be liable for any claim, damages or other liability arising from the use of this software.

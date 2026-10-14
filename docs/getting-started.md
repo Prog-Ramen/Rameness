@@ -95,6 +95,22 @@ rameness fleet ask "add rate limiting to the API and benchmark two approaches"
 rameness fleet shadow -f           # follow the decisions in the terminal
 ```
 
+## Configuration
+
+Settings are JSON, layered: built-in defaults, then `~/.rameness/config.json`, then the project's
+`.rameness/config.json`, then command-line flags. The team's settings follow the same layers in `fleet.json`.
+
+Every file is checked when it loads. A wrong type, a value that isn't one of a setting's choices, or an unknown
+(e.g. misspelt) key is an error naming the file and the setting, so nothing is silently ignored.
+
+```bash
+rameness config check                                  # check your config files
+rameness config schema > ~/.rameness/config.schema.json            # JSON Schema of config.json
+rameness config schema fleet > ~/.rameness/fleet.schema.json       # ...and of fleet.json
+```
+
+Add `"$schema": "./config.schema.json"` to a file and editors such as VS Code autocomplete and check it as you type.
+
 ## Everyday commands
 
 The CLI covers single runs, planning, SOPs and the decision model.

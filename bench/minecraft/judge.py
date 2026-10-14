@@ -3,7 +3,7 @@
 The black-box checks test behaviour (does it walk, break blocks, render something) but not how
 it looks: a world full of missing faces still passes them. This adds a separate score.
 
-    python -m bench.minecraft.judge /root/bench/results/minecraft/<batch> [--model sonnet]
+    python -m bench.minecraft.judge <bench>/results/minecraft/<batch> [--model sonnet]
 
 Writes judge.json next to each run's result.json and pushes bench_run_judge_* to VictoriaMetrics.
 """
