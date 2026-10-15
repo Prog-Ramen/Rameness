@@ -51,7 +51,7 @@ MODELS = {
                 "vision": True,    # vLLM + MTP 3; BF16 leaves room for only ~80k tokens of KV on the 64 GB card
                 "props": {"default_generation_settings": {"n_ctx": 80000}, "total_slots": 1, "modalities": {"vision": True}}},
     "q27bf16gg": {"upstream": "http://127.0.0.1:8033", "id": "qwen3.8-27b-bf16", "ctx": 262144, "server": "local-8033-5070ti",
-                  "label": "qwen3.8-27b-bf16-gguf", "reasoning_budget": 5000},   # llama.cpp master + built-in MTP, GPU + 5070 Ti
+                  "label": "qwen3.8-27b-bf16-gguf", "reasoning_budget": 5000},   # llama.cpp master + built-in MTP, two GPUs
     "q27q4": {"upstream": "http://127.0.0.1:8033", "id": "qwen3.8-27b-ud-q4_k_m", "ctx": 262144, "server": "local-8033",
               "label": "qwen3.8-27b-unsloth-ud-q4_k_m", "reasoning_budget": 5000},     # llama.cpp master + MTP
     "flashq4": {"upstream": "http://127.0.0.1:8033", "id": "qwen3.8-flash-next-ud-q4_k_xl", "ctx": 262144,

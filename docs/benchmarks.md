@@ -79,7 +79,7 @@ xychart-beta
 
 The same model and server with Kev (2026-10-07) and with Clef-Flash (2026-10-09) as the decision model.
 
-Flash-Next AutoRound 3bpw on vLLM (MTP 3, local GPU), 150 minutes each. Both builds pass all 14 checks. The
+Flash-Next AutoRound 3bpw on vLLM (MTP 3), 150 minutes each. Both builds pass all 14 checks. The
 decision models differed most in how hard they let the model think: Kev chose *minimal* on half the turns,
 Clef chose *maximum* on a third of them; Clef also decided in 0.18 s against Kev's 1.5 s
 ([decision-level data](decisions.md#kev-vs-clef)).

@@ -108,7 +108,7 @@ repeated "file not found"; "security" instead of "security_testing". Clef's two 
 "migrate the whole monolith to microservices" (decompose, not research) and "make it better" (clarify, not
 research).
 
-**In a real run** (the Minecraft build, Flash-Next AutoRound on the local GPU, 2026-10-07 with Kev and
+**In a real run** (the Minecraft build, Flash-Next AutoRound on one local GPU, 2026-10-07 with Kev and
 2026-10-09 with Clef; [Benchmarks](benchmarks.md#minecraft-kev-vs-clef)):
 
 | | Kev-4B (CPU, bf16) | Clef-Flash (5070 Ti, 8-bit) |
