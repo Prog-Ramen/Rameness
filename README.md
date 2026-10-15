@@ -7,8 +7,8 @@
   <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="Python">
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/advantage__tradeoffs-typed%20decisions%20over%20LLM%20judgement%2C%20local%20models%20first%2C%20learns%20tested%20SOPs%2C%20swappable%20decision%20model-2ea44f" alt="advantage_tradeoffs: typed decisions over LLM judgement, local models first, learns tested SOPs, swappable decision model">
-  <img src="https://img.shields.io/badge/disadvantage__tradeoffs-runs%20a%20decision%20model%20too%2C%20learning%20overhead%20per%20run%2C%20slower%20than%20hosted%20models%2C%20API%20is%20localhost%20only-d97706" alt="disadvantage_tradeoffs: runs a decision model too, learning overhead per run, slower than hosted models, API is localhost only">
+  <a href="#trade-offs"><img src="https://img.shields.io/badge/advantage__tradeoffs-Separation%20of%20concerns%2C%20Strategy%20pattern%2C%20Graceful%20degradation%2C%20Local--first%2C%20Memoization-2ea44f" alt="advantage_tradeoffs: Separation of concerns, Strategy pattern, Graceful degradation, Local-first, Memoization"></a>
+  <a href="#trade-offs"><img src="https://img.shields.io/badge/disadvantage__tradeoffs-Operational%20complexity%2C%20Amortized%20cost%2C%20Latency%20for%20cost%2C%20Implicit%20trust%20boundary-d97706" alt="disadvantage_tradeoffs: Operational complexity, Amortized cost, Latency for cost, Implicit trust boundary"></a>
 </p>
 
 
@@ -142,6 +142,22 @@ On a series that repeats one procedure, learned SOPs cut task time by a third an
 The team orchestration took inspiration from firstmate. Decision models:
 [Kev](https://github.com/jaredpalmer/kev) (Jared Palmer), [Laya](https://github.com/NandhaKishorM/laya)
 (Convai Innovations) and [TypeSafe AI's Jev](https://docs.typesafe.ai/api).
+
+## Trade-offs
+
+The design choices behind the badges at the top, named after the patterns and trade-offs they are.
+
+| | Trade-off | What it means here |
+|---|---|---|
+| Advantage | **Separation of concerns** | Judgement calls (route, effort, thinking level, recovery, "ask a person?") go to a small typed decision model; the LLM only generates. Decisions are fast, calibrated and logged. |
+| Advantage | **Strategy pattern** | The decision model (Clef-Flash, Kev, Laya, lexical) and the LLM provider are chosen by configuration, behind one interface. |
+| Advantage | **Graceful degradation** | If the chosen decision model is unreachable, Rameness falls back down the chain to a lexical scorer and warns, instead of stopping. |
+| Advantage | **Local-first** | Runs entirely on models you host (vLLM, llama.cpp); hosted APIs are optional. |
+| Advantage | **Memoization** | Repeated multi-step jobs are learned as tested SOPs and called as tools, so known work isn't re-derived (44% less task time in the projreport benchmark). |
+| Disadvantage | **Operational complexity** | A second model service, the decision model, has to run alongside the LLM; Clef-Flash needs a GPU with 16 GB. |
+| Disadvantage | **Amortized cost** | Learning runs after every successful run and pays back only through repetition; over eight tasks it cost about as much time as SOPs saved. |
+| Disadvantage | **Latency for cost** | Local models trade speed for zero per-token cost: the Minecraft build took most of 150 minutes locally, 14 minutes with Claude Opus. |
+| Disadvantage | **Implicit trust boundary** | The HTTP API has no authentication and relies on binding to 127.0.0.1; put an authenticating proxy in front before exposing it. |
 
 ## License and disclaimer
 
