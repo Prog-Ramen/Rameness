@@ -152,16 +152,21 @@ times per task and again in every task, which makes it an ideal test of learning
 reusing it. `bench/tasks/projreport/make.py` generates `projreport1`…`8` from fixed seeds; each has a
 hidden answer and a 25-check scorer. Synthetic and easy: it measures SOP reuse, not general quality.
 
-Flash-Next AutoRound, 8 tasks per arm:
+Flash-Next AutoRound, 8 tasks per arm, 2026-10-08. Each run is split at the agent's last turn: everything
+before is task time, everything after is end-of-run learning (reviewing recent runs, writing and testing SOPs).
 
-| Arm | Score | Task time | Task tokens | End-of-run learning |
-|---|---|---|---|---|
-| Control (no learning) | 100% | 62.5 min | 300k | — |
-| SOP pipeline | 100% | 50.4 min | 166k | 31.6 min |
-| SOP pipeline, trusted SOPs | 100% | 42.4 min | 155k | 23.4 min |
+| Arm | Score | Task time | Task tokens | Learning time | Learning tokens | Total time |
+|---|---|---|---|---|---|---|
+| Control (no learning) | 100% | 61.3 min | 299k | — | — | 61.3 min |
+| SOP pipeline | 100% | 36.4 min | 169k | 44.0 min | 243k | 80.4 min |
+| SOP pipeline, trusted SOPs | 100% | 34.5 min | 155k | 29.9 min | 186k | 64.4 min |
 
-SOPs cut task time by a third and tokens by half; the end-of-run learning still costs about as much time
-as they save over eight tasks.
+Trusted SOPs cut task time by 44% and generated tokens by 48%, but over eight tasks the learning cost as much
+time as they saved. Almost all of it came after the useful SOP existed: learning after tasks 2 and 3 took 6.2 min
+and produced the validated `dev.python_project_inventory_report`; after tasks 4-8 it took 23.3 min and 146k tokens
+and learned nothing, because the review kept proposing renamed variants of that procedure, which were sent to
+extend it and failed their tests (or failed to generate). The first pipeline learned 11 near-copies of the same
+procedure (1 validated); trusted mode learned 2 (1 validated).
 
 ## Shorter tasks and A/B runs
 
