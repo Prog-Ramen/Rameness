@@ -1,5 +1,15 @@
 <div align="center"><img src="rameness_logo.png" alt="Rameness Logo" width="28%"></div>
 <div align="center"><img src="rameness_txt1.png" alt="Rameness Text" width="75%"></div>
+<p align="center">
+  <a href="https://github.com/Prog-Ramen/Rameness/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Prog-Ramen/Rameness" alt="License"></a>
+  <a href="https://github.com/Prog-Ramen/Rameness/releases"><img src="https://img.shields.io/github/v/release/Prog-Ramen/Rameness" alt="Release"></a>
+  <a href="https://github.com/Prog-Ramen/Rameness/actions/workflows/tests.yml"><img src="https://github.com/Prog-Ramen/Rameness/actions/workflows/tests.yml/badge.svg" alt="tests.yml"></a>
+  <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="Python">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/advantage__tradeoffs-typed%20decisions%20over%20LLM%20judgement%2C%20local%20models%20first%2C%20learns%20tested%20SOPs%2C%20swappable%20decision%20model-2ea44f" alt="advantage_tradeoffs: typed decisions over LLM judgement, local models first, learns tested SOPs, swappable decision model">
+  <img src="https://img.shields.io/badge/disadvantage__tradeoffs-runs%20a%20decision%20model%20too%2C%20learning%20overhead%20per%20run%2C%20slower%20than%20hosted%20models%2C%20API%20is%20localhost%20only-d97706" alt="disadvantage_tradeoffs: runs a decision model too, learning overhead per run, slower than hosted models, API is localhost only">
+</p>
 
 
 **Rameness runs coding and research tasks with AI models from your terminal, works well with local
