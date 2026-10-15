@@ -4,6 +4,11 @@
 tasks (bugfix, research, data), and an SOP-reuse series (projreport). Run-to-run variance is large, so
 treat these as indications, not a leaderboard.
 
+**No web search in the Rameness runs.** Every Rameness result below was run without a working web search: the
+SearXNG instance behind `web_search` was not set up, so the agents worked from the model's own knowledge (of
+Minecraft, its libraries and its APIs) plus what they could read and run locally. The results measure what the
+model knows, not what it can look up.
+
 ## Minecraft: a long, open-ended build
 
 "A Minecraft clone in the browser" in 150 minutes, scored by 14 behaviour checks in a real browser plus a
