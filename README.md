@@ -64,9 +64,9 @@ anything specific to you stays on your machine.
 
 ## What makes it different
 
-Other harnesses (Claude Code, Codex, pi) hard-code their choices: whether a task needs reasoning, which
-procedure applies, which model and machine should do the work, what to do when something fails.
-Rameness hands each of those choices to a small decision model (JEV: Clef-Flash, Kev or Laya running
+Other harnesses (Claude Code, Codex, pi) leave these choices to fixed settings or to the main model itself:
+how hard to think, which procedure applies, which model and machine should do the work, what to do when
+something fails. Rameness hands each of them to a small decision model (JEV: Clef-Flash, Kev or Laya running
 locally, swappable with one setting, or TypeSafe AI's hosted Jev) that scores the options in well under a second. Routine choices it makes
 alone; significant or uncertain ones come to you. You can watch every decision live, and your
 corrections make the next ones better.
@@ -140,8 +140,9 @@ On a series that repeats one procedure, learned SOPs cut task time by a third an
 ## Acknowledgements
 
 The team orchestration took inspiration from firstmate. Decision models:
-[Kev](https://github.com/jaredpalmer/kev) (Jared Palmer), [Laya](https://github.com/NandhaKishorM/laya)
-(Convai Innovations) and [TypeSafe AI's Jev](https://docs.typesafe.ai/api).
+[Clef-Flash](https://huggingface.co/Cloudflare/clef-flash) (Cloudflare), [Kev](https://github.com/jaredpalmer/kev)
+(Jared Palmer), [Laya](https://github.com/NandhaKishorM/laya) (Convai Innovations) and
+[TypeSafe AI's Jev](https://docs.typesafe.ai/api).
 
 ## Trade-offs
 
