@@ -8,7 +8,7 @@
 </p>
 <p align="center">
   <a href="#trade-offs"><img src="https://img.shields.io/badge/%2B%20tradeoffs-Separation%20of%20concerns%2C%20Strategy%20pattern%2C%20Graceful%20degradation%2C%20Local--first%2C%20Memoization-2ea44f" alt="+ tradeoffs: Separation of concerns, Strategy pattern, Graceful degradation, Local-first, Memoization"></a>
-  <a href="#trade-offs"><img src="https://img.shields.io/badge/--%20tradeoffs-Operational%20complexity%2C%20Amortized%20cost%2C%20Latency%20for%20cost%2C%20Implicit%20trust%20boundary-d97706" alt="- tradeoffs: Operational complexity, Amortized cost, Latency for cost, Implicit trust boundary"></a>
+  <a href="#trade-offs"><img src="https://img.shields.io/badge/--%20tradeoffs-Operational%20complexity%2C%20Amortized%20cost%2C%20Implicit%20trust%20boundary-d97706" alt="- tradeoffs: Operational complexity, Amortized cost, Implicit trust boundary"></a>
 </p>
 
 
@@ -156,8 +156,7 @@ The design choices behind the badges at the top, named after the patterns and tr
 | Advantage | **Local-first** | Runs entirely on models you host (vLLM, llama.cpp); hosted APIs are optional. |
 | Advantage | **Memoization** | Repeated multi-step jobs are learned as tested SOPs and called as tools, so known work isn't re-derived (44% less task time in the projreport benchmark). |
 | Disadvantage | **Operational complexity** | A second model service, the decision model, has to run alongside the LLM; Clef-Flash needs a GPU with 16 GB. |
-| Disadvantage | **Amortized cost** | Learning runs after every successful run and pays back only through repetition; over eight tasks it cost about as much time as SOPs saved. |
-| Disadvantage | **Latency for cost** | Local models trade speed for zero per-token cost: the Minecraft build took most of 150 minutes locally, 14 minutes with Claude Opus. |
+| Disadvantage | **Amortized cost** | An SOP costs time and tokens up front (spotting the repeat, writing and testing it) and pays back only on work that repeats: once learned, a repeated task took 44% less time, while one-off work never earns the cost back. |
 | Disadvantage | **Implicit trust boundary** | The HTTP API has no authentication and relies on binding to 127.0.0.1; put an authenticating proxy in front before exposing it. |
 
 ## License and disclaimer
