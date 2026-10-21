@@ -7,8 +7,8 @@
   <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="Python">
 </p>
 <p align="center">
-  <a href="#trade-offs"><img src="https://img.shields.io/badge/advantage__tradeoffs-Separation%20of%20concerns%2C%20Strategy%20pattern%2C%20Graceful%20degradation%2C%20Local--first%2C%20Memoization-2ea44f" alt="advantage_tradeoffs: Separation of concerns, Strategy pattern, Graceful degradation, Local-first, Memoization"></a>
-  <a href="#trade-offs"><img src="https://img.shields.io/badge/disadvantage__tradeoffs-Operational%20complexity%2C%20Amortized%20cost%2C%20Latency%20for%20cost%2C%20Implicit%20trust%20boundary-d97706" alt="disadvantage_tradeoffs: Operational complexity, Amortized cost, Latency for cost, Implicit trust boundary"></a>
+  <a href="#trade-offs"><img src="https://img.shields.io/badge/%2B%20tradeoffs-Separation%20of%20concerns%2C%20Strategy%20pattern%2C%20Graceful%20degradation%2C%20Local--first%2C%20Memoization-2ea44f" alt="+ tradeoffs: Separation of concerns, Strategy pattern, Graceful degradation, Local-first, Memoization"></a>
+  <a href="#trade-offs"><img src="https://img.shields.io/badge/--%20tradeoffs-Operational%20complexity%2C%20Amortized%20cost%2C%20Latency%20for%20cost%2C%20Implicit%20trust%20boundary-d97706" alt="- tradeoffs: Operational complexity, Amortized cost, Latency for cost, Implicit trust boundary"></a>
 </p>
 
 
